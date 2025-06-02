@@ -24,11 +24,13 @@ class _NewsScreenState extends State<NewsScreen> {
 
   // 뉴스 데이터
   late List<News> _filteredNews;
+  late List<News> _popularNews;
 
   @override
   void initState() {
     super.initState();
     _filteredNews = DummyNews.newsList;
+    _popularNews = DummyNews.getPopularNews();
   }
 
   @override
@@ -83,6 +85,8 @@ class _NewsScreenState extends State<NewsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('뉴스'),
@@ -109,7 +113,7 @@ class _NewsScreenState extends State<NewsScreen> {
                   borderSide: BorderSide.none,
                 ),
                 filled: true,
-                fillColor: Theme.of(context).colorScheme.surface,
+                fillColor: theme.colorScheme.surface,
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
               ),
               onChanged: _performSearch,
@@ -119,35 +123,296 @@ class _NewsScreenState extends State<NewsScreen> {
         actions: [
           // 필터 버튼
           PopupMenuButton<String>(
-            icon: const Icon(Icons.filter_list),
             tooltip: '코인별 필터링',
+            offset: const Offset(0, 56),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    _selectedFilter == '전체'
+                        ? '전체'
+                        : DummyCoins.getCoinById(_selectedFilter)?.symbol ??
+                              _selectedFilter,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.filter_list,
+                    size: 18,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ],
+              ),
+            ),
             onSelected: _applyFilter,
             itemBuilder: (context) {
               // 코인 목록으로 필터 메뉴 아이템 생성
-              final coins = [
-                '전체',
-                'bitcoin',
-                'ethereum',
-                'binancecoin',
-                'ripple',
-                'cardano',
-                'solana',
-                'dogecoin',
+              final allCoins = [
+                {'id': '전체', 'name': '전체', 'imageUrl': null},
+                ...DummyCoins.popularCoins
+                    .map(
+                      (coin) => {
+                        'id': coin.id,
+                        'name': coin.symbol,
+                        'imageUrl': coin.imageUrl,
+                      },
+                    )
+                    .toList(),
               ];
-              return coins.map((coin) {
-                final displayName = coin == '전체'
-                    ? '전체'
-                    : DummyCoins.getCoinById(coin)?.symbol ?? coin;
+
+              return allCoins.map((coin) {
+                final bool isSelected = _selectedFilter == coin['id'];
+
                 return PopupMenuItem<String>(
-                  value: coin,
-                  child: Text(displayName),
+                  value: coin['id'] as String,
+                  child: Row(
+                    children: [
+                      // 선택 표시
+                      if (isSelected)
+                        Icon(
+                          Icons.check_circle,
+                          color: theme.colorScheme.primary,
+                          size: 18,
+                        )
+                      else
+                        const SizedBox(width: 18),
+                      const SizedBox(width: 8),
+
+                      // 코인 아이콘
+                      if (coin['imageUrl'] != null) ...[
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              coin['imageUrl'] as String,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(Icons.currency_bitcoin, size: 16),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ] else if (coin['id'] != '전체') ...[
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.currency_bitcoin,
+                            size: 16,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ] else ...[
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.secondaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.filter_alt,
+                            size: 16,
+                            color: theme.colorScheme.secondary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+
+                      // 코인 이름
+                      Text(
+                        coin['name'] as String,
+                        style: TextStyle(
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               }).toList();
             },
           ),
         ],
       ),
-      body: _buildNewsList(),
+      body: _searchQuery.isNotEmpty || _selectedFilter != '전체'
+          ? _buildNewsList()
+          : _buildNewsPageWithSections(),
+    );
+  }
+
+  // 섹션으로 구분된 뉴스 페이지
+  Widget _buildNewsPageWithSections() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 인기 뉴스 섹션
+          const Text(
+            '인기 뉴스',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+
+          // 인기 뉴스 가로 스크롤
+          SizedBox(
+            height: 300,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _popularNews.length,
+              itemBuilder: (context, index) {
+                final news = _popularNews[index];
+                return _buildFeaturedNewsItem(news);
+              },
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // 최신 뉴스 섹션
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '최신 뉴스',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              TextButton(onPressed: () {}, child: const Text('전체 보기')),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // 최신 뉴스 목록
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _filteredNews.length,
+            itemBuilder: (context, index) {
+              final news = _filteredNews[index];
+              return _buildNewsItem(news);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 인기 뉴스 아이템 (가로 스크롤용)
+  Widget _buildFeaturedNewsItem(News news) {
+    return Container(
+      width: 280,
+      margin: const EdgeInsets.only(right: 16),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 4,
+        child: InkWell(
+          onTap: () => _showNewsDetailDialog(news),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 뉴스 이미지
+              SizedBox(
+                height: 160,
+                width: double.infinity,
+                child: news.imageUrl != null
+                    ? Image.network(
+                        news.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey[300],
+                          child: const Icon(
+                            Icons.image_not_supported,
+                            size: 48,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.grey[300],
+                        child: const Icon(
+                          Icons.article,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 제목
+                    Text(
+                      news.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+
+                    // 시간 및 소스
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: Theme.of(context).hintColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          news.getTimeAgo(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).hintColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            news.source,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryColor,
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -202,7 +467,7 @@ class _NewsScreenState extends State<NewsScreen> {
   Widget _buildNewsItem(News news) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
-      clipBehavior: Clip.antiAlias, // 이미지가 카드 경계를 넘어가지 않도록
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () => _showNewsDetailDialog(news),

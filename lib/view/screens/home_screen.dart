@@ -8,6 +8,7 @@ import '../../model/coin_model.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
 import 'alerts_screen.dart';
+import 'news_screen.dart';
 
 // 홈 화면
 class HomeScreen extends StatefulWidget {
@@ -85,8 +86,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // 알림 페이지
           const AlertsScreen(),
 
-          // 뉴스 페이지 (TODO: 뉴스 페이지 구현)
-          const Center(child: Text('뉴스 페이지 - 준비 중입니다.')),
+          // 뉴스 페이지
+          const NewsScreen(),
 
           // 설정 페이지
           const SettingsScreen(),
