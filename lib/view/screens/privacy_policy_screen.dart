@@ -4,53 +4,134 @@ import '../../viewmodel/settings_viewmodel.dart';
 import 'package:provider/provider.dart';
 
 // 개인정보 처리방침 화면
-class PrivacyPolicyScreen extends StatelessWidget {
+class PrivacyPolicyScreen extends StatefulWidget {
   const PrivacyPolicyScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // 언어 설정 가져오기
-    final language = Provider.of<SettingsViewModel>(context).language;
-    final isKorean = language == '한국어';
+  State<PrivacyPolicyScreen> createState() => _PrivacyPolicyScreenState();
+}
 
+class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
+  // 언어 상태 (true: 한국어, false: 영어)
+  bool _isKorean = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // 초기 언어 설정은 앱 전체 설정을 따름
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final language = Provider.of<SettingsViewModel>(
+        context,
+        listen: false,
+      ).language;
+      setState(() {
+        _isKorean = language == '한국어';
+      });
+    });
+  }
+
+  // 언어 변경 처리
+  void _toggleLanguage() {
+    setState(() {
+      _isKorean = !_isKorean;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(isKorean ? '개인정보 처리방침' : 'Privacy Policy')),
+      appBar: AppBar(title: Text(_isKorean ? '개인정보 처리방침' : 'Privacy Policy')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 헤더
-                Text(
-                  isKorean ? '개인정보 처리방침' : 'Privacy Policy',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 언어 전환 스위치
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _isKorean ? '언어 / Language' : 'Language / 언어',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        'English',
+                        style: TextStyle(
+                          fontWeight: !_isKorean
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: !_isKorean
+                              ? AppTheme.primaryColor
+                              : Theme.of(context).hintColor,
+                        ),
+                      ),
+                      Switch(
+                        value: _isKorean,
+                        onChanged: (value) => _toggleLanguage(),
+                        activeColor: AppTheme.primaryColor,
+                      ),
+                      Text(
+                        '한국어',
+                        style: TextStyle(
+                          fontWeight: _isKorean
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: _isKorean
+                              ? AppTheme.primaryColor
+                              : Theme.of(context).hintColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const Divider(height: 24),
+
+              // 문서 내용
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 헤더
+                      Text(
+                        _isKorean ? '개인정보 처리방침' : 'Privacy Policy',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      Text(
+                        _isKorean
+                            ? '최종 업데이트: 2024년 6월 12일'
+                            : 'Last Updated: June 12, 2024',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).hintColor,
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // 내용
+                      _isKorean
+                          ? _buildKoreanPrivacyPolicy()
+                          : _buildEnglishPrivacyPolicy(),
+                    ],
                   ),
                 ),
-
-                const SizedBox(height: 8),
-
-                Text(
-                  isKorean
-                      ? '최종 업데이트: 2024년 6월 12일'
-                      : 'Last Updated: June 12, 2024',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(context).hintColor,
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // 내용
-                isKorean
-                    ? _buildKoreanPrivacyPolicy()
-                    : _buildEnglishPrivacyPolicy(),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

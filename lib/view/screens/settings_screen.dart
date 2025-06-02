@@ -883,55 +883,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             title: const Text('개인정보 처리방침'),
             leading: const Icon(Icons.privacy_tip_outlined),
-            trailing: Consumer<SettingsViewModel>(
-              builder: (context, viewModel, child) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 언어 선택 스위치
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'KR',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: viewModel.language == '한국어'
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: viewModel.language == '한국어'
-                                ? AppTheme.primaryColor
-                                : Theme.of(context).hintColor,
-                          ),
-                        ),
-                        Switch(
-                          value: viewModel.language != '한국어',
-                          onChanged: (value) {
-                            viewModel.setLanguage(value ? 'English' : '한국어');
-                          },
-                          activeColor: AppTheme.primaryColor,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        Text(
-                          'EN',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: viewModel.language != '한국어'
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: viewModel.language != '한국어'
-                                ? AppTheme.primaryColor
-                                : Theme.of(context).hintColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Icon(Icons.chevron_right),
-                  ],
-                );
-              },
-            ),
+            trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -944,55 +896,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             title: const Text('이용약관'),
             leading: const Icon(Icons.description_outlined),
-            trailing: Consumer<SettingsViewModel>(
-              builder: (context, viewModel, child) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 언어 선택 스위치
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'KR',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: viewModel.language == '한국어'
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: viewModel.language == '한국어'
-                                ? AppTheme.primaryColor
-                                : Theme.of(context).hintColor,
-                          ),
-                        ),
-                        Switch(
-                          value: viewModel.language != '한국어',
-                          onChanged: (value) {
-                            viewModel.setLanguage(value ? 'English' : '한국어');
-                          },
-                          activeColor: AppTheme.primaryColor,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        Text(
-                          'EN',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: viewModel.language != '한국어'
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: viewModel.language != '한국어'
-                                ? AppTheme.primaryColor
-                                : Theme.of(context).hintColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Icon(Icons.chevron_right),
-                  ],
-                );
-              },
-            ),
+            trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -1093,6 +997,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         content: StatefulBuilder(
           builder: (context, setState) {
+            bool _isKorean = viewModel.language == '한국어';
+
             return Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1108,15 +1014,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       '한국어',
                       style: TextStyle(
-                        fontWeight: isKorean
+                        fontWeight: _isKorean
                             ? FontWeight.bold
                             : FontWeight.normal,
                       ),
                     ),
                     Switch(
-                      value: !isKorean,
+                      value: !_isKorean,
                       onChanged: (value) {
                         setState(() {
+                          _isKorean = !_isKorean;
                           viewModel.setLanguage(value ? 'English' : '한국어');
                         });
                       },
@@ -1125,7 +1032,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       'English',
                       style: TextStyle(
-                        fontWeight: !isKorean
+                        fontWeight: !_isKorean
                             ? FontWeight.bold
                             : FontWeight.normal,
                       ),
@@ -1137,13 +1044,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 // 설명
                 Text(
-                  isKorean
+                  _isKorean
                       ? '코인 알람은 가상화폐 가격 모니터링 및 알림 서비스를 제공합니다.'
                       : 'Coin Alarm provides cryptocurrency price monitoring and notification services.',
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  isKorean
+                  _isKorean
                       ? '개발: Flutter, Supabase'
                       : 'Developed with: Flutter, Supabase',
                 ),
@@ -1151,9 +1058,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 // 저작권
                 Text(
-                  isKorean
-                      ? '© 2024 코인알람. 모든 권리 보유.'
-                      : '© 2024 CoinAlarm. All rights reserved.',
+                  _isKorean
+                      ? '© 2025 코인알람. 모든 권리 보유.'
+                      : '© 2025 CoinAlarm. All rights reserved.',
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(context).hintColor,
