@@ -5,6 +5,8 @@ import '../../core/constants.dart';
 import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/settings_viewmodel.dart';
 import 'login_screen.dart';
+import 'privacy_policy_screen.dart';
+import 'terms_of_service_screen.dart';
 
 // 설정 화면
 class SettingsScreen extends StatefulWidget {
@@ -73,15 +75,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               // 로그인 관련 설정
               if (authViewModel.isLoggedIn)
-                _buildLoginSettings(settingsViewModel),
+                Card(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: _buildLoginSettings(settingsViewModel),
+                ),
 
               // 앱 설정 섹션
               _buildSectionHeader('앱 설정'),
-              _buildThemeSettings(settingsViewModel),
-              _buildRefreshIntervalSettings(settingsViewModel),
-              _buildNotificationSettings(settingsViewModel),
-              _buildSecuritySettings(settingsViewModel),
-              _buildLanguageSettings(settingsViewModel),
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: _buildThemeSettings(settingsViewModel),
+              ),
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: _buildRefreshIntervalSettings(settingsViewModel),
+              ),
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: _buildNotificationSettings(settingsViewModel),
+                ),
+              ),
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: _buildSecuritySettings(settingsViewModel),
+                ),
+              ),
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: _buildLanguageSettings(settingsViewModel),
+              ),
+
+              // API 키 설정 섹션
+              _buildSectionHeader('API 키 설정'),
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: _buildApiKeySettings(settingsViewModel),
+              ),
 
               // 기타 섹션
               _buildSectionHeader('기타'),
@@ -96,29 +132,216 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // 로그인 설정 위젯
-  Widget _buildLoginSettings(SettingsViewModel viewModel) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        children: [
-          SwitchListTile(
-            title: const Text('로그인 정보 저장'),
-            subtitle: const Text('이메일과 비밀번호를 기기에 저장합니다'),
-            value: viewModel.saveLoginInfo,
-            onChanged: (value) => viewModel.setSaveLoginInfo(value),
-            secondary: const Icon(Icons.login),
+  // API 키 설정 위젯
+  Widget _buildApiKeySettings(SettingsViewModel viewModel) {
+    return ExpansionTile(
+      title: const Text('API 키 설정'),
+      leading: const Icon(Icons.vpn_key_outlined),
+      subtitle: Text(
+        '${viewModel.hasUpbitApiKeys ? 'Upbit: 설정됨' : 'Upbit: 미설정'}, '
+        '${viewModel.hasBinanceApiKeys ? 'Binance: 설정됨' : 'Binance: 미설정'}',
+        style: TextStyle(fontSize: 12),
+      ),
+      children: [
+        // Upbit API 키 설정
+        ListTile(
+          title: const Text('Upbit API 키 설정'),
+          subtitle: Text(viewModel.hasUpbitApiKeys ? '설정됨' : '미설정'),
+          leading: const Padding(
+            padding: EdgeInsets.only(left: 16.0),
+            child: Icon(Icons.vpn_key_outlined, size: 20),
           ),
-          if (viewModel.saveLoginInfo)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                '주의: 개인 기기가 아닌 경우 사용하지 마세요',
-                style: TextStyle(color: Colors.orange.shade800, fontSize: 12),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: viewModel.isLoading
+              ? null
+              : () => _showApiKeyInputDialog(
+                  context: context,
+                  exchange: 'Upbit',
+                  accessKey: viewModel.upbitAccessKey,
+                  secretKey: viewModel.upbitSecretKey,
+                  onSave: (accessKey, secretKey) {
+                    viewModel.setUpbitApiKeys(accessKey, secretKey);
+                  },
+                ),
+        ),
+
+        const Divider(height: 1, indent: 16, endIndent: 16),
+
+        // Binance API 키 설정
+        ListTile(
+          title: const Text('Binance API 키 설정'),
+          subtitle: Text(viewModel.hasBinanceApiKeys ? '설정됨' : '미설정'),
+          leading: const Padding(
+            padding: EdgeInsets.only(left: 16.0),
+            child: Icon(Icons.vpn_key_outlined, size: 20),
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: viewModel.isLoading
+              ? null
+              : () => _showApiKeyInputDialog(
+                  context: context,
+                  exchange: 'Binance',
+                  accessKey: viewModel.binanceApiKey,
+                  secretKey: viewModel.binanceSecretKey,
+                  onSave: (accessKey, secretKey) {
+                    viewModel.setBinanceApiKeys(accessKey, secretKey);
+                  },
+                ),
+        ),
+
+        const Divider(height: 1, indent: 16, endIndent: 16),
+
+        // API 키 초기화 버튼
+        ListTile(
+          title: Text(
+            'API 키 초기화',
+            style: TextStyle(color: Colors.orange.shade800),
+          ),
+          subtitle: const Text('저장된 모든 API 키를 삭제합니다'),
+          leading: const Padding(
+            padding: EdgeInsets.only(left: 16.0),
+            child: Icon(Icons.delete_outline, color: Colors.orange),
+          ),
+          onTap: viewModel.isLoading
+              ? null
+              : () => _showClearApiKeysDialog(context, viewModel),
+        ),
+      ],
+    );
+  }
+
+  // API 키 입력 다이얼로그
+  Future<void> _showApiKeyInputDialog({
+    required BuildContext context,
+    required String exchange,
+    String? accessKey,
+    String? secretKey,
+    required Function(String, String) onSave,
+  }) async {
+    final accessKeyController = TextEditingController(text: accessKey ?? '');
+    final secretKeyController = TextEditingController(text: secretKey ?? '');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$exchange API 키 설정'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${exchange}에서 발급받은 API 키를 입력하세요.\n해당 키는 로컬에만 저장되며, 서버로 전송되지 않습니다.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).hintColor,
+                ),
               ),
-            ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: accessKeyController,
+                decoration: const InputDecoration(
+                  labelText: 'Access Key',
+                  hintText: 'API 액세스 키 입력',
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: secretKeyController,
+                decoration: const InputDecoration(
+                  labelText: 'Secret Key',
+                  hintText: 'API 시크릿 키 입력',
+                ),
+                obscureText: true,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (accessKeyController.text.trim().isEmpty ||
+                  secretKeyController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('모든 필드를 입력해주세요')));
+                return;
+              }
+              Navigator.pop(context, true);
+            },
+            child: const Text('저장'),
+          ),
         ],
       ),
+    );
+
+    if (saved == true) {
+      onSave(accessKeyController.text.trim(), secretKeyController.text.trim());
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$exchange API 키가 저장되었습니다')));
+      }
+    }
+  }
+
+  // API 키 초기화 확인 다이얼로그
+  Future<void> _showClearApiKeysDialog(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('API 키 초기화'),
+        content: const Text('저장된 모든 API 키를 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('초기화'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await viewModel.clearApiKeys();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('모든 API 키가 삭제되었습니다')));
+      }
+    }
+  }
+
+  // 로그인 설정 위젯
+  Widget _buildLoginSettings(SettingsViewModel viewModel) {
+    return Column(
+      children: [
+        SwitchListTile(
+          title: const Text('로그인 정보 저장'),
+          subtitle: const Text('이메일과 비밀번호를 기기에 저장합니다'),
+          value: viewModel.saveLoginInfo,
+          onChanged: (value) => viewModel.setSaveLoginInfo(value),
+          secondary: const Icon(Icons.login),
+        ),
+        if (viewModel.saveLoginInfo)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              '주의: 개인 기기가 아닌 경우 사용하지 마세요',
+              style: TextStyle(color: Colors.orange.shade800, fontSize: 12),
+            ),
+          ),
+      ],
     );
   }
 
@@ -233,72 +456,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // 테마 설정 위젯
   Widget _buildThemeSettings(SettingsViewModel viewModel) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.palette_outlined),
-                const SizedBox(width: 16),
-                const Text(
-                  '테마',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                Text(
-                  AppTheme.getThemeModeName(viewModel.themeMode),
-                  style: TextStyle(color: Theme.of(context).hintColor),
-                ),
-              ],
-            ),
+    return ExpansionTile(
+      title: const Text('테마'),
+      leading: const Icon(Icons.palette_outlined),
+      subtitle: Text(AppTheme.getThemeModeName(viewModel.themeMode)),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 시스템 설정 사용
+              _buildThemeTile(
+                title: '시스템 설정 사용',
+                subtitle: '기기의 테마 설정을 따릅니다',
+                icon: Icons.settings_brightness,
+                selected: viewModel.themeMode == ThemeMode.system,
+                onTap: viewModel.isLoading
+                    ? null
+                    : () => viewModel.setThemeMode(ThemeMode.system),
+              ),
+
+              const Divider(),
+
+              // 라이트 모드
+              _buildThemeTile(
+                title: '라이트 모드',
+                subtitle: '밝은 색상의 테마를 사용합니다',
+                icon: Icons.wb_sunny_outlined,
+                selected: viewModel.themeMode == ThemeMode.light,
+                onTap: viewModel.isLoading
+                    ? null
+                    : () => viewModel.setThemeMode(ThemeMode.light),
+                color: AppTheme.lightBackgroundColor,
+                textColor: AppTheme.lightTextColor,
+              ),
+
+              const Divider(),
+
+              // 다크 모드
+              _buildThemeTile(
+                title: '다크 모드',
+                subtitle: '어두운 색상의 테마를 사용합니다',
+                icon: Icons.nightlight_round,
+                selected: viewModel.themeMode == ThemeMode.dark,
+                onTap: viewModel.isLoading
+                    ? null
+                    : () => viewModel.setThemeMode(ThemeMode.dark),
+                color: AppTheme.darkBackgroundColor,
+                textColor: AppTheme.darkTextColor,
+              ),
+            ],
           ),
-
-          const Divider(),
-
-          // 시스템 설정 사용
-          _buildThemeTile(
-            title: '시스템 설정 사용',
-            subtitle: '기기의 테마 설정을 따릅니다',
-            icon: Icons.settings_brightness,
-            selected: viewModel.themeMode == ThemeMode.system,
-            onTap: viewModel.isLoading
-                ? null
-                : () => viewModel.setThemeMode(ThemeMode.system),
-          ),
-
-          // 라이트 모드
-          _buildThemeTile(
-            title: '라이트 모드',
-            subtitle: '밝은 색상의 테마를 사용합니다',
-            icon: Icons.wb_sunny_outlined,
-            selected: viewModel.themeMode == ThemeMode.light,
-            onTap: viewModel.isLoading
-                ? null
-                : () => viewModel.setThemeMode(ThemeMode.light),
-            color: AppTheme.lightBackgroundColor,
-            textColor: AppTheme.lightTextColor,
-          ),
-
-          // 다크 모드
-          _buildThemeTile(
-            title: '다크 모드',
-            subtitle: '어두운 색상의 테마를 사용합니다',
-            icon: Icons.nightlight_round,
-            selected: viewModel.themeMode == ThemeMode.dark,
-            onTap: viewModel.isLoading
-                ? null
-                : () => viewModel.setThemeMode(ThemeMode.dark),
-            color: AppTheme.darkBackgroundColor,
-            textColor: AppTheme.darkTextColor,
-          ),
-
-          const SizedBox(height: 8),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -379,160 +590,138 @@ class _SettingsScreenState extends State<SettingsScreen> {
       300: {'text': '5분', 'description': '최대 배터리 절약 모드'},
     };
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.refresh),
-                const SizedBox(width: 16),
-                const Text(
-                  '데이터 새로고침 간격',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                Text(
-                  intervalInfo[viewModel.refreshInterval]?['text'] ??
-                      '${viewModel.refreshInterval}초',
-                  style: TextStyle(color: Theme.of(context).hintColor),
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(),
-
-          // 간격 선택 슬라이더
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-            child: Column(
-              children: [
-                // 현재 선택된 간격 표시
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primaryContainer.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        intervalInfo[viewModel.refreshInterval]?['text'] ??
-                            '${viewModel.refreshInterval}초',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        intervalInfo[viewModel
-                                .refreshInterval]?['description'] ??
-                            '사용자 지정 간격',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).hintColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 슬라이더
-                SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 8,
-                    ),
-                    overlayShape: const RoundSliderOverlayShape(
-                      overlayRadius: 16,
-                    ),
-                    trackHeight: 4,
-                    tickMarkShape: const RoundSliderTickMarkShape(
-                      tickMarkRadius: 2,
-                    ),
-                  ),
-                  child: Slider(
-                    value: _getSliderValue(viewModel.refreshInterval),
-                    min: 0,
-                    max: 3,
-                    divisions: 3,
-                    onChanged: viewModel.isLoading
-                        ? null
-                        : (value) {
-                            final interval = _getIntervalFromSlider(value);
-                            viewModel.setRefreshInterval(interval);
-                          },
-                  ),
-                ),
-
-                // 간격 라벨
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '10초',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).hintColor,
-                        ),
-                      ),
-                      Text(
-                        '30초',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).hintColor,
-                        ),
-                      ),
-                      Text(
-                        '1분',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).hintColor,
-                        ),
-                      ),
-                      Text(
-                        '5분',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).hintColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 설명
-                Text(
-                  '새로고침 간격이 짧을수록 배터리 소모가 증가합니다',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.error.withOpacity(0.7),
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return ExpansionTile(
+      title: const Text('데이터 새로고침 간격'),
+      leading: const Icon(Icons.refresh),
+      subtitle: Text(
+        intervalInfo[viewModel.refreshInterval]?['text'] ??
+            '${viewModel.refreshInterval}초',
       ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+          child: Column(
+            children: [
+              // 현재 선택된 간격 표시
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      intervalInfo[viewModel.refreshInterval]?['text'] ??
+                          '${viewModel.refreshInterval}초',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      intervalInfo[viewModel.refreshInterval]?['description'] ??
+                          '사용자 지정 간격',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // 슬라이더
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 8,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 16,
+                  ),
+                  trackHeight: 4,
+                  tickMarkShape: const RoundSliderTickMarkShape(
+                    tickMarkRadius: 2,
+                  ),
+                ),
+                child: Slider(
+                  value: _getSliderValue(viewModel.refreshInterval),
+                  min: 0,
+                  max: 3,
+                  divisions: 3,
+                  onChanged: viewModel.isLoading
+                      ? null
+                      : (value) {
+                          final interval = _getIntervalFromSlider(value);
+                          viewModel.setRefreshInterval(interval);
+                        },
+                ),
+              ),
+
+              // 간격 라벨
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '10초',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
+                    Text(
+                      '30초',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
+                    Text(
+                      '1분',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
+                    Text(
+                      '5분',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // 설명
+              Text(
+                '새로고침 간격이 짧을수록 배터리 소모가 증가합니다',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.error.withOpacity(0.7),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -694,18 +883,122 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             title: const Text('개인정보 처리방침'),
             leading: const Icon(Icons.privacy_tip_outlined),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: Consumer<SettingsViewModel>(
+              builder: (context, viewModel, child) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 언어 선택 스위치
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'KR',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: viewModel.language == '한국어'
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: viewModel.language == '한국어'
+                                ? AppTheme.primaryColor
+                                : Theme.of(context).hintColor,
+                          ),
+                        ),
+                        Switch(
+                          value: viewModel.language != '한국어',
+                          onChanged: (value) {
+                            viewModel.setLanguage(value ? 'English' : '한국어');
+                          },
+                          activeColor: AppTheme.primaryColor,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        Text(
+                          'EN',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: viewModel.language != '한국어'
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: viewModel.language != '한국어'
+                                ? AppTheme.primaryColor
+                                : Theme.of(context).hintColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ],
+                );
+              },
+            ),
             onTap: () {
-              // TODO: 개인정보 처리방침 화면으로 이동
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const PrivacyPolicyScreen(),
+                ),
+              );
             },
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           ListTile(
             title: const Text('이용약관'),
             leading: const Icon(Icons.description_outlined),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: Consumer<SettingsViewModel>(
+              builder: (context, viewModel, child) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 언어 선택 스위치
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'KR',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: viewModel.language == '한국어'
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: viewModel.language == '한국어'
+                                ? AppTheme.primaryColor
+                                : Theme.of(context).hintColor,
+                          ),
+                        ),
+                        Switch(
+                          value: viewModel.language != '한국어',
+                          onChanged: (value) {
+                            viewModel.setLanguage(value ? 'English' : '한국어');
+                          },
+                          activeColor: AppTheme.primaryColor,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        Text(
+                          'EN',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: viewModel.language != '한국어'
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: viewModel.language != '한국어'
+                                ? AppTheme.primaryColor
+                                : Theme.of(context).hintColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ],
+                );
+              },
+            ),
             onTap: () {
-              // TODO: 이용약관 화면으로 이동
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const TermsOfServiceScreen(),
+                ),
+              );
             },
           ),
         ],
@@ -781,22 +1074,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // 앱 정보 다이얼로그 표시
   void _showAppInfo() {
-    showAboutDialog(
+    final viewModel = Provider.of<SettingsViewModel>(context, listen: false);
+    final isKorean = viewModel.language == '한국어';
+
+    showDialog(
       context: context,
-      applicationName: AppConstants.appName,
-      applicationVersion: '1.0.0 (개발 버전)',
-      applicationIcon: Icon(
-        Icons.currency_bitcoin,
-        size: 48,
-        color: AppTheme.primaryColor,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.currency_bitcoin,
+              size: 28,
+              color: AppTheme.primaryColor,
+            ),
+            const SizedBox(width: 8),
+            Text(AppConstants.appName),
+          ],
+        ),
+        content: StatefulBuilder(
+          builder: (context, setState) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 버전 정보
+                Text('버전: 1.0.0 (개발 버전)'),
+                const SizedBox(height: 16),
+
+                // 언어 전환 스위치
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '한국어',
+                      style: TextStyle(
+                        fontWeight: isKorean
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    Switch(
+                      value: !isKorean,
+                      onChanged: (value) {
+                        setState(() {
+                          viewModel.setLanguage(value ? 'English' : '한국어');
+                        });
+                      },
+                      activeColor: AppTheme.primaryColor,
+                    ),
+                    Text(
+                      'English',
+                      style: TextStyle(
+                        fontWeight: !isKorean
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // 설명
+                Text(
+                  isKorean
+                      ? '코인 알람은 가상화폐 가격 모니터링 및 알림 서비스를 제공합니다.'
+                      : 'Coin Alarm provides cryptocurrency price monitoring and notification services.',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isKorean
+                      ? '개발: Flutter, Supabase'
+                      : 'Developed with: Flutter, Supabase',
+                ),
+                const SizedBox(height: 16),
+
+                // 저작권
+                Text(
+                  isKorean
+                      ? '© 2024 코인알람. 모든 권리 보유.'
+                      : '© 2024 CoinAlarm. All rights reserved.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).hintColor,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(isKorean ? '닫기' : 'Close'),
+          ),
+        ],
       ),
-      applicationLegalese: '© 2024 CoinAlarm, Inc. All rights reserved.',
-      children: [
-        const SizedBox(height: 16),
-        const Text('코인 알람은 가상화폐 가격 모니터링 및 알림 서비스를 제공합니다.'),
-        const SizedBox(height: 8),
-        const Text('개발: Flutter, Supabase'),
-      ],
     );
   }
 }

@@ -28,6 +28,12 @@ class SettingsService {
   static const String _keySaveLoginInfo = 'save_login_info';
   static const String _keyPassword = 'saved_password'; // 참고: 실제 앱에서는 안전하게 저장 필요
 
+  // API 키 저장 상수
+  static const String _keyUpbitAccessKey = 'upbit_access_key';
+  static const String _keyUpbitSecretKey = 'upbit_secret_key';
+  static const String _keyBinanceApiKey = 'binance_api_key';
+  static const String _keyBinanceSecretKey = 'binance_secret_key';
+
   // 초기화
   Future<void> initialize() async {
     try {
@@ -135,13 +141,87 @@ class SettingsService {
     await _prefs.remove(_keySaveLoginInfo);
   }
 
+  // Upbit API 키 저장
+  Future<bool> setUpbitApiKeys(String accessKey, String secretKey) async {
+    final accessKeySaved = await _prefs.setString(
+      _keyUpbitAccessKey,
+      accessKey,
+    );
+    final secretKeySaved = await _prefs.setString(
+      _keyUpbitSecretKey,
+      secretKey,
+    );
+    return accessKeySaved && secretKeySaved;
+  }
+
+  // Upbit Access Key 가져오기
+  String? getUpbitAccessKey() {
+    return _prefs.getString(_keyUpbitAccessKey);
+  }
+
+  // Upbit Secret Key 가져오기
+  String? getUpbitSecretKey() {
+    return _prefs.getString(_keyUpbitSecretKey);
+  }
+
+  // Binance API 키 저장
+  Future<bool> setBinanceApiKeys(String apiKey, String secretKey) async {
+    final apiKeySaved = await _prefs.setString(_keyBinanceApiKey, apiKey);
+    final secretKeySaved = await _prefs.setString(
+      _keyBinanceSecretKey,
+      secretKey,
+    );
+    return apiKeySaved && secretKeySaved;
+  }
+
+  // Binance API Key 가져오기
+  String? getBinanceApiKey() {
+    return _prefs.getString(_keyBinanceApiKey);
+  }
+
+  // Binance Secret Key 가져오기
+  String? getBinanceSecretKey() {
+    return _prefs.getString(_keyBinanceSecretKey);
+  }
+
+  // API 키 초기화
+  Future<void> clearApiKeys() async {
+    await _prefs.remove(_keyUpbitAccessKey);
+    await _prefs.remove(_keyUpbitSecretKey);
+    await _prefs.remove(_keyBinanceApiKey);
+    await _prefs.remove(_keyBinanceSecretKey);
+  }
+
   // 모든 설정 기본값으로 초기화
   Future<void> resetToDefaults() async {
-    await _prefs.remove(_keyThemeMode);
-    await _prefs.remove(_keyRefreshInterval);
-    await _prefs.remove(_keyPushNotifications);
-    await _prefs.remove(_keyBiometricAuth);
-    await _prefs.remove(_keyLanguage);
-    // 로그인 정보는 유지 (사용자 편의를 위해)
+    // 로그인 정보 제외하고 설정 초기화 (로그인 상태 유지 위함)
+    final savedEmail = getSavedEmail();
+    final savedPassword = getSavedPassword();
+    final saveLoginInfo = getSaveLoginInfo();
+
+    // API 키 정보 임시 저장
+    final upbitAccessKey = getUpbitAccessKey();
+    final upbitSecretKey = getUpbitSecretKey();
+    final binanceApiKey = getBinanceApiKey();
+    final binanceSecretKey = getBinanceSecretKey();
+
+    // 설정값 초기화
+    await _prefs.clear();
+
+    // 로그인 정보 복원 (필요시)
+    if (saveLoginInfo && savedEmail != null && savedPassword != null) {
+      await setSaveLoginInfo(true);
+      await setSavedEmail(savedEmail);
+      await setSavedPassword(savedPassword);
+    }
+
+    // API 키 정보 복원 (필요시)
+    if (upbitAccessKey != null && upbitSecretKey != null) {
+      await setUpbitApiKeys(upbitAccessKey, upbitSecretKey);
+    }
+
+    if (binanceApiKey != null && binanceSecretKey != null) {
+      await setBinanceApiKeys(binanceApiKey, binanceSecretKey);
+    }
   }
 }

@@ -1,17 +1,44 @@
-# coin_alarm
+# Coin Alarm
 
-A new Flutter project.
+암호화폐 시세 모니터링 및 알림 앱
 
-## Getting Started
+## 기능 소개
 
-This project is a starting point for a Flutter application.
+### 기본 기능
 
-A few resources to get you started if this is your first Flutter project:
+- 암호화폐 실시간 시세 조회
+- 가격 알림 설정 및 관리
+- 코인 관련 뉴스 피드
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+### 추가된 기능 (2024-06-12)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
-# Coin_Alarm
+- 테마 설정 (라이트/다크/시스템)
+- 언어 설정 (한국어/영어)
+- 로그인 정보 저장 기능
+- 설정 초기화 기능
+
+### 추가된 기능 (2024-06-13)
+
+- API 키 설정 기능 (Upbit, Binance)
+- 개인정보 처리방침 (한국어/영어)
+- 이용약관 (한국어/영어)
+- UI 개선: 확장 가능한 설정 패널
+- 문서별 언어 전환 기능 (개인정보 처리방침, 이용약관)
+
+## 개발 환경
+
+- Flutter 3.19.0
+- Dart 3.3.0
+- Supabase
+
+## 구현 기술
+
+- MVVM 패턴
+- Provider 상태관리
+- SharedPreferences를 통한 로컬 데이터 저장
+- Supabase 연동 (준비 중)
+
+## 보안 특징
+
+- API 키는 로컬에만 저장되며 서버로 전송되지 않음
+- 개인정보 보호를 위한 안전한 데이터 처리

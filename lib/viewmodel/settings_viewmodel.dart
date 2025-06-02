@@ -14,6 +14,12 @@ class SettingsViewModel extends ChangeNotifier {
   String _language = '한국어';
   bool _saveLoginInfo = false;
 
+  // API 키 상태
+  String? _upbitAccessKey;
+  String? _upbitSecretKey;
+  String? _binanceApiKey;
+  String? _binanceSecretKey;
+
   // 생성자
   SettingsViewModel(this._settingsService) {
     // 설정값 로드
@@ -29,6 +35,18 @@ class SettingsViewModel extends ChangeNotifier {
   String get language => _language;
   bool get saveLoginInfo => _saveLoginInfo;
 
+  // API 키 Getters
+  String? get upbitAccessKey => _upbitAccessKey;
+  String? get upbitSecretKey => _upbitSecretKey;
+  String? get binanceApiKey => _binanceApiKey;
+  String? get binanceSecretKey => _binanceSecretKey;
+
+  // API 키 설정 여부 확인
+  bool get hasUpbitApiKeys =>
+      _upbitAccessKey != null && _upbitSecretKey != null;
+  bool get hasBinanceApiKeys =>
+      _binanceApiKey != null && _binanceSecretKey != null;
+
   // 설정값 로드
   Future<void> _loadSettings() async {
     _isLoading = true;
@@ -42,6 +60,12 @@ class SettingsViewModel extends ChangeNotifier {
       _useBiometricAuth = _settingsService.getBiometricAuthEnabled();
       _language = _settingsService.getLanguage();
       _saveLoginInfo = _settingsService.getSaveLoginInfo();
+
+      // API 키 로드
+      _upbitAccessKey = _settingsService.getUpbitAccessKey();
+      _upbitSecretKey = _settingsService.getUpbitSecretKey();
+      _binanceApiKey = _settingsService.getBinanceApiKey();
+      _binanceSecretKey = _settingsService.getBinanceSecretKey();
     } catch (e) {
       debugPrint('설정 로드 실패: $e');
     } finally {
@@ -157,6 +181,63 @@ class SettingsViewModel extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('로그인 정보 저장 설정 실패: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Upbit API 키 설정
+  Future<void> setUpbitApiKeys(String accessKey, String secretKey) async {
+    if (_upbitAccessKey == accessKey && _upbitSecretKey == secretKey) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _settingsService.setUpbitApiKeys(accessKey, secretKey);
+      _upbitAccessKey = accessKey;
+      _upbitSecretKey = secretKey;
+    } catch (e) {
+      debugPrint('Upbit API 키 설정 실패: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Binance API 키 설정
+  Future<void> setBinanceApiKeys(String apiKey, String secretKey) async {
+    if (_binanceApiKey == apiKey && _binanceSecretKey == secretKey) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _settingsService.setBinanceApiKeys(apiKey, secretKey);
+      _binanceApiKey = apiKey;
+      _binanceSecretKey = secretKey;
+    } catch (e) {
+      debugPrint('Binance API 키 설정 실패: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // API 키 초기화
+  Future<void> clearApiKeys() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _settingsService.clearApiKeys();
+      _upbitAccessKey = null;
+      _upbitSecretKey = null;
+      _binanceApiKey = null;
+      _binanceSecretKey = null;
+    } catch (e) {
+      debugPrint('API 키 초기화 실패: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
