@@ -24,6 +24,9 @@ class SettingsService {
   static const String _keyPushNotifications = 'push_notifications';
   static const String _keyBiometricAuth = 'biometric_auth';
   static const String _keyLanguage = 'language';
+  static const String _keySavedEmail = 'saved_email';
+  static const String _keySaveLoginInfo = 'save_login_info';
+  static const String _keyPassword = 'saved_password'; // 참고: 실제 앱에서는 안전하게 저장 필요
 
   // 초기화
   Future<void> initialize() async {
@@ -95,6 +98,43 @@ class SettingsService {
     return _prefs.getString(_keyLanguage) ?? '한국어';
   }
 
+  // 로그인 정보 저장 설정
+  Future<bool> setSaveLoginInfo(bool save) async {
+    return await _prefs.setBool(_keySaveLoginInfo, save);
+  }
+
+  // 로그인 정보 저장 설정 불러오기
+  bool getSaveLoginInfo() {
+    return _prefs.getBool(_keySaveLoginInfo) ?? false;
+  }
+
+  // 이메일(아이디) 저장
+  Future<bool> setSavedEmail(String email) async {
+    return await _prefs.setString(_keySavedEmail, email);
+  }
+
+  // 저장된 이메일(아이디) 불러오기
+  String? getSavedEmail() {
+    return _prefs.getString(_keySavedEmail);
+  }
+
+  // 비밀번호 저장 (참고: 실제 앱에서는 더 안전한 방법 사용 필요)
+  Future<bool> setSavedPassword(String password) async {
+    return await _prefs.setString(_keyPassword, password);
+  }
+
+  // 저장된 비밀번호 불러오기
+  String? getSavedPassword() {
+    return _prefs.getString(_keyPassword);
+  }
+
+  // 저장된 로그인 정보 삭제
+  Future<void> clearLoginInfo() async {
+    await _prefs.remove(_keySavedEmail);
+    await _prefs.remove(_keyPassword);
+    await _prefs.remove(_keySaveLoginInfo);
+  }
+
   // 모든 설정 기본값으로 초기화
   Future<void> resetToDefaults() async {
     await _prefs.remove(_keyThemeMode);
@@ -102,5 +142,6 @@ class SettingsService {
     await _prefs.remove(_keyPushNotifications);
     await _prefs.remove(_keyBiometricAuth);
     await _prefs.remove(_keyLanguage);
+    // 로그인 정보는 유지 (사용자 편의를 위해)
   }
 }

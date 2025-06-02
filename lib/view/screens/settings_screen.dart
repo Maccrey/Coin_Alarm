@@ -38,6 +38,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirmed != true) return;
 
+    // 로그인 정보 저장 설정이 해제된 경우, 저장된 정보 삭제
+    final settingsViewModel = Provider.of<SettingsViewModel>(
+      context,
+      listen: false,
+    );
+    if (!settingsViewModel.saveLoginInfo) {
+      // ViewModel의 메서드에는 이미 로그인 정보 삭제 로직이 포함되어 있음
+    }
+
     // 로그아웃 처리
     final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
     final success = await authViewModel.signOut();
@@ -61,6 +70,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // 계정 섹션
               _buildSectionHeader('계정'),
               if (authViewModel.isLoggedIn) _buildAccountInfo(authViewModel),
+
+              // 로그인 관련 설정
+              if (authViewModel.isLoggedIn)
+                _buildLoginSettings(settingsViewModel),
 
               // 앱 설정 섹션
               _buildSectionHeader('앱 설정'),
@@ -126,6 +139,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  // 로그인 설정 위젯
+  Widget _buildLoginSettings(SettingsViewModel viewModel) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        children: [
+          SwitchListTile(
+            title: const Text('로그인 정보 저장'),
+            subtitle: const Text('이메일과 비밀번호를 기기에 저장합니다'),
+            value: viewModel.saveLoginInfo,
+            onChanged: (value) => viewModel.setSaveLoginInfo(value),
+            secondary: const Icon(Icons.login),
+          ),
+          if (viewModel.saveLoginInfo)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '주의: 개인 기기가 아닌 경우 사용하지 마세요',
+                style: TextStyle(color: Colors.orange.shade800, fontSize: 12),
+              ),
+            ),
+        ],
       ),
     );
   }

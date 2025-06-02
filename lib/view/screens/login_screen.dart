@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
+import '../../services/settings_service.dart';
 import '../../viewmodel/auth_viewmodel.dart';
+import '../../viewmodel/settings_viewmodel.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
 
@@ -24,6 +26,40 @@ class _LoginScreenState extends State<LoginScreen> {
   // 비밀번호 표시 여부
   bool _isPasswordVisible = false;
 
+  // 로그인 정보 저장
+  bool _saveLoginInfo = false;
+
+  // 설정 서비스 (저장된 로그인 정보 불러오기용)
+  final _settingsService = SettingsService();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedLoginInfo();
+  }
+
+  // 저장된 로그인 정보 불러오기
+  Future<void> _loadSavedLoginInfo() async {
+    // 이 화면이 처음 로드될 때는 ViewModel이 초기화되지 않았을 수 있으므로
+    // 직접 SettingsService를 사용하여 정보를 불러옵니다.
+    _saveLoginInfo = _settingsService.getSaveLoginInfo();
+
+    if (_saveLoginInfo) {
+      final savedEmail = _settingsService.getSavedEmail();
+      final savedPassword = _settingsService.getSavedPassword();
+
+      if (savedEmail != null) {
+        _emailController.text = savedEmail;
+      }
+
+      if (savedPassword != null) {
+        _passwordController.text = savedPassword;
+      }
+    }
+
+    setState(() {});
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -40,6 +76,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // 키보드 닫기
     FocusScope.of(context).unfocus();
+
+    // 로그인 정보 저장 설정 및 정보 저장
+    final settingsViewModel = Provider.of<SettingsViewModel>(
+      context,
+      listen: false,
+    );
+    await settingsViewModel.setSaveLoginInfo(_saveLoginInfo);
+
+    // 이메일과 비밀번호는 직접 저장 (ViewModel에 메서드가 없으므로)
+    if (_saveLoginInfo) {
+      await _settingsService.setSavedEmail(_emailController.text.trim());
+      await _settingsService.setSavedPassword(_passwordController.text);
+    }
 
     // 로그인 시도
     final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
@@ -168,17 +217,32 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 8),
 
-                      // 비밀번호 찾기 링크
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: authViewModel.isLoading
-                              ? null
-                              : () {
-                                  // TODO: 비밀번호 찾기 화면으로 이동
-                                },
-                          child: const Text('비밀번호를 잊으셨나요?'),
-                        ),
+                      // 로그인 정보 저장 체크박스
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _saveLoginInfo,
+                            onChanged: authViewModel.isLoading
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      _saveLoginInfo = value!;
+                                    });
+                                  },
+                            activeColor: AppTheme.primaryColor,
+                          ),
+                          const Text('로그인 정보 저장'),
+                          const Spacer(),
+                          // 비밀번호 찾기 링크
+                          TextButton(
+                            onPressed: authViewModel.isLoading
+                                ? null
+                                : () {
+                                    // TODO: 비밀번호 찾기 화면으로 이동
+                                  },
+                            child: const Text('비밀번호를 잊으셨나요?'),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 24),
 

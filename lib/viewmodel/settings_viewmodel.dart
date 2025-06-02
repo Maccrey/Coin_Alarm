@@ -12,6 +12,7 @@ class SettingsViewModel extends ChangeNotifier {
   bool _pushNotificationsEnabled = true;
   bool _useBiometricAuth = false;
   String _language = '한국어';
+  bool _saveLoginInfo = false;
 
   // 생성자
   SettingsViewModel(this._settingsService) {
@@ -26,6 +27,7 @@ class SettingsViewModel extends ChangeNotifier {
   bool get pushNotificationsEnabled => _pushNotificationsEnabled;
   bool get useBiometricAuth => _useBiometricAuth;
   String get language => _language;
+  bool get saveLoginInfo => _saveLoginInfo;
 
   // 설정값 로드
   Future<void> _loadSettings() async {
@@ -39,6 +41,7 @@ class SettingsViewModel extends ChangeNotifier {
           .getPushNotificationsEnabled();
       _useBiometricAuth = _settingsService.getBiometricAuthEnabled();
       _language = _settingsService.getLanguage();
+      _saveLoginInfo = _settingsService.getSaveLoginInfo();
     } catch (e) {
       debugPrint('설정 로드 실패: $e');
     } finally {
@@ -131,6 +134,29 @@ class SettingsViewModel extends ChangeNotifier {
       _language = lang;
     } catch (e) {
       debugPrint('언어 설정 실패: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // 로그인 정보 저장 설정
+  Future<void> setSaveLoginInfo(bool save) async {
+    if (_saveLoginInfo == save) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _settingsService.setSaveLoginInfo(save);
+      _saveLoginInfo = save;
+
+      // 로그인 정보 저장 해제 시 저장된 정보 삭제
+      if (!save) {
+        await _settingsService.clearLoginInfo();
+      }
+    } catch (e) {
+      debugPrint('로그인 정보 저장 설정 실패: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
