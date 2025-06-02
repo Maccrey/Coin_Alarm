@@ -27,6 +27,11 @@ class _ChartScreenState extends State<ChartScreen> {
   // 차트 데이터 (더미 데이터)
   List<Point<double>> _chartData = [];
 
+  // 확대/축소 관련 변수
+  double _zoomLevel = 1.0;
+  double _minZoomLevel = 0.5;
+  double _maxZoomLevel = 2.0;
+
   @override
   void initState() {
     super.initState();
@@ -100,6 +105,7 @@ class _ChartScreenState extends State<ChartScreen> {
     setState(() {
       _selectedCoin = coin;
       _generateChartData();
+      _zoomLevel = 1.0; // 코인 변경 시 줌 레벨 초기화
     });
   }
 
@@ -108,6 +114,7 @@ class _ChartScreenState extends State<ChartScreen> {
     setState(() {
       _selectedTimeframe = timeframe;
       _generateChartData();
+      _zoomLevel = 1.0; // 기간 변경 시 줌 레벨 초기화
     });
   }
 
@@ -118,25 +125,36 @@ class _ChartScreenState extends State<ChartScreen> {
     });
   }
 
+  // 확대/축소 레벨 업데이트
+  void _updateZoomLevel(double delta) {
+    setState(() {
+      _zoomLevel = (_zoomLevel + delta).clamp(_minZoomLevel, _maxZoomLevel);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('차트')),
-      body: Column(
-        children: [
-          // 코인 선택 드롭다운
-          _buildCoinSelector(),
+    return Column(
+      children: [
+        // 코인 선택 드롭다운
+        _buildCoinSelector(),
 
-          // 차트 영역
-          _buildChartArea(),
+        // 차트 영역
+        Expanded(
+          child: ListView(
+            children: [
+              // 차트 영역
+              _buildChartArea(),
 
-          // 차트 설정 영역
-          _buildChartSettings(),
+              // 차트 설정 영역
+              _buildChartSettings(),
 
-          // 시세 정보
-          _buildPriceInfo(),
-        ],
-      ),
+              // 시세 정보
+              _buildPriceInfo(),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -206,8 +224,65 @@ class _ChartScreenState extends State<ChartScreen> {
 
   // 차트 영역
   Widget _buildChartArea() {
-    return Expanded(
-      child: Container(padding: const EdgeInsets.all(16), child: _buildChart()),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      height: 350, // 고정 높이로 설정
+      child: Column(
+        children: [
+          // 확대/축소 컨트롤
+          _buildZoomControls(),
+
+          // 차트
+          Expanded(child: _buildChart()),
+        ],
+      ),
+    );
+  }
+
+  // 확대/축소 컨트롤
+  Widget _buildZoomControls() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Text(
+          '확대/축소: ${(_zoomLevel * 100).toInt()}%',
+          style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          icon: const Icon(Icons.zoom_out),
+          iconSize: 20,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          onPressed: _zoomLevel > _minZoomLevel
+              ? () => _updateZoomLevel(-0.1)
+              : null,
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          icon: const Icon(Icons.zoom_in),
+          iconSize: 20,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          onPressed: _zoomLevel < _maxZoomLevel
+              ? () => _updateZoomLevel(0.1)
+              : null,
+        ),
+        const SizedBox(width: 8),
+        TextButton(
+          onPressed: () {
+            setState(() {
+              _zoomLevel = 1.0;
+            });
+          },
+          child: const Text('초기화'),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            minimumSize: Size.zero,
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+        ),
+      ],
     );
   }
 
@@ -231,73 +306,96 @@ class _ChartScreenState extends State<ChartScreen> {
     minY -= range * 0.05;
     maxY += range * 0.05;
 
-    final width = MediaQuery.of(context).size.width - 32; // 패딩 제외
-    final height = MediaQuery.of(context).size.height * 0.4; // 차트 높이
+    // 확대/축소 적용 - 가격 범위 조정
+    final zoomedRange = range / _zoomLevel;
+    final mid = (maxY + minY) / 2;
+    final zoomedMinY = mid - zoomedRange / 2;
+    final zoomedMaxY = mid + zoomedRange / 2;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Y축 최대값
-        Text(
-          '₩${_formatPrice(maxY)}',
-          style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
-        ),
-        const SizedBox(height: 4),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight - 40;
 
-        // 실제 차트
-        SizedBox(
-          width: width,
-          height: height,
-          child: CustomPaint(
-            painter: _selectedChartType == '라인'
-                ? LineChartPainter(
-                    points: _chartData,
-                    minX: 0,
-                    maxX: _chartData.length - 1.0,
-                    minY: minY,
-                    maxY: maxY,
-                    color: (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
-                        ? Colors.green
-                        : Colors.red,
-                  )
-                : CandleStickChartPainter(
-                    points: _chartData,
-                    minX: 0,
-                    maxX: _chartData.length - 1.0,
-                    minY: minY,
-                    maxY: maxY,
+        return GestureDetector(
+          onScaleUpdate: (details) {
+            if (details.scale != 1.0) {
+              final newZoomLevel = _zoomLevel * details.scale;
+              setState(() {
+                _zoomLevel = newZoomLevel.clamp(_minZoomLevel, _maxZoomLevel);
+              });
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Y축 최대값
+              Text(
+                '₩${_formatPrice(zoomedMaxY)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).hintColor,
+                ),
+              ),
+
+              // 실제 차트
+              SizedBox(
+                width: width,
+                height: height,
+                child: CustomPaint(
+                  painter: _selectedChartType == '라인'
+                      ? LineChartPainter(
+                          points: _chartData,
+                          minX: 0,
+                          maxX: _chartData.length - 1.0,
+                          minY: zoomedMinY,
+                          maxY: zoomedMaxY,
+                          color:
+                              (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
+                              ? Colors.green
+                              : Colors.red,
+                        )
+                      : CandleStickChartPainter(
+                          points: _chartData,
+                          minX: 0,
+                          maxX: _chartData.length - 1.0,
+                          minY: zoomedMinY,
+                          maxY: zoomedMaxY,
+                        ),
+                ),
+              ),
+
+              // X축 및 Y축 최소값
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _getStartTimeLabel(),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).hintColor,
+                    ),
                   ),
+                  Text(
+                    '₩${_formatPrice(zoomedMinY)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).hintColor,
+                    ),
+                  ),
+                  Text(
+                    '현재',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).hintColor,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ),
-
-        const SizedBox(height: 4),
-        // Y축 최소값
-        Text(
-          '₩${_formatPrice(minY)}',
-          style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
-        ),
-
-        // X축 레이블
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              _getStartTimeLabel(),
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).hintColor,
-              ),
-            ),
-            Text(
-              '현재',
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).hintColor,
-              ),
-            ),
-          ],
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -435,40 +533,60 @@ class _ChartScreenState extends State<ChartScreen> {
 
           const SizedBox(height: 12),
 
-          // 고가/저가
+          // 주요 지표 정보를 그리드로 표시 (공간 효율화)
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('24시간 고가'),
-              Text('₩${_formatPrice(_selectedCoin.high24h ?? 0)}'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('24시간 저가'),
-              Text('₩${_formatPrice(_selectedCoin.low24h ?? 0)}'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('24시간 거래량'),
-              Text('₩${_formatPrice(_selectedCoin.volume24h ?? 0)}'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('시가총액'),
-              Text('₩${_formatPrice(_selectedCoin.marketCap ?? 0)}'),
+              // 왼쪽 열
+              Expanded(
+                child: Column(
+                  children: [
+                    _buildInfoRow(
+                      '24시간 고가',
+                      '₩${_formatPrice(_selectedCoin.high24h ?? 0)}',
+                    ),
+                    const SizedBox(height: 8),
+                    _buildInfoRow(
+                      '24시간 저가',
+                      '₩${_formatPrice(_selectedCoin.low24h ?? 0)}',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              // 오른쪽 열
+              Expanded(
+                child: Column(
+                  children: [
+                    _buildInfoRow(
+                      '24시간 거래량',
+                      '₩${_formatPrice(_selectedCoin.volume24h ?? 0)}',
+                    ),
+                    const SizedBox(height: 8),
+                    _buildInfoRow(
+                      '시가총액',
+                      '₩${_formatPrice(_selectedCoin.marketCap ?? 0)}',
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  // 정보 행 위젯 (레이아웃 일관성 유지)
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13)),
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        ),
+      ],
     );
   }
 
@@ -550,6 +668,11 @@ class LineChartPainter extends CustomPainter {
       // X, Y 좌표 계산
       final x = ((point.x - minX) / (maxX - minX)) * size.width;
       final y = size.height - ((point.y - minY) / (maxY - minY)) * size.height;
+
+      // 범위를 벗어난 경우 처리
+      if (y.isNaN || y.isInfinite || y < 0 || y > size.height) {
+        continue;
+      }
 
       if (isFirst) {
         path.moveTo(x, y);
@@ -661,14 +784,26 @@ class CandleStickChartPainter extends CustomPainter {
       final yLow =
           size.height - ((lowValue - minY) / (maxY - minY)) * size.height;
 
+      // 범위를 벗어난 경우 처리
+      if (yOpen.isNaN ||
+          yOpen.isInfinite ||
+          yCurrent.isNaN ||
+          yCurrent.isInfinite ||
+          yHigh.isNaN ||
+          yHigh.isInfinite ||
+          yLow.isNaN ||
+          yLow.isInfinite) {
+        continue;
+      }
+
       // 캔들 색상 (상승/하락)
       final isUp = currentValue >= openValue;
       final candleColor = isUp ? Colors.green : Colors.red;
 
       // 선 그리기 (고가-저가)
       canvas.drawLine(
-        Offset(x, yHigh),
-        Offset(x, yLow),
+        Offset(x, yHigh.clamp(0, size.height)),
+        Offset(x, yLow.clamp(0, size.height)),
         Paint()
           ..color = candleColor
           ..strokeWidth = 1,
@@ -677,9 +812,9 @@ class CandleStickChartPainter extends CustomPainter {
       // 캔들 바디 그리기
       final candleRect = Rect.fromLTRB(
         x - candleWidth / 3,
-        min(yOpen, yCurrent),
+        min(yOpen, yCurrent).clamp(0, size.height),
         x + candleWidth / 3,
-        max(yOpen, yCurrent),
+        max(yOpen, yCurrent).clamp(0, size.height),
       );
 
       canvas.drawRect(

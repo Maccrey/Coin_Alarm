@@ -9,6 +9,7 @@ import 'login_screen.dart';
 import 'settings_screen.dart';
 import 'alerts_screen.dart';
 import 'news_screen.dart';
+import 'chart_screen.dart';
 
 // 홈 화면
 class HomeScreen extends StatefulWidget {
@@ -83,6 +84,9 @@ class _HomeScreenState extends State<HomeScreen> {
           // 대시보드 페이지
           _buildDashboardPage(),
 
+          // 차트 페이지
+          const ChartScreen(),
+
           // 알림 페이지
           const AlertsScreen(),
 
@@ -100,6 +104,10 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: _onItemTapped,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: '대시보드'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.candlestick_chart),
+            label: '차트',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.notifications), label: '알림'),
           BottomNavigationBarItem(icon: Icon(Icons.article), label: '뉴스'),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: '설정'),
@@ -210,7 +218,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         onTap: () {
-          // TODO: 코인 상세 화면으로 이동
+          // 차트 화면으로 이동
+          setState(() {
+            _selectedIndex = 1; // 차트 탭으로 이동
+          });
+          _pageController.jumpToPage(1);
         },
       ),
     );
