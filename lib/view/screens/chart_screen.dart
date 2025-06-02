@@ -6,7 +6,10 @@ import '../../core/theme.dart';
 
 // 차트 화면
 class ChartScreen extends StatefulWidget {
-  const ChartScreen({super.key});
+  // 선택된 코인 (옵션)
+  final Coin? selectedCoin;
+
+  const ChartScreen({this.selectedCoin, super.key});
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -35,8 +38,19 @@ class _ChartScreenState extends State<ChartScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedCoin = DummyCoins.popularCoins.first;
+    // 전달된 코인이 있으면 사용, 없으면 기본값 사용
+    _selectedCoin = widget.selectedCoin ?? DummyCoins.popularCoins.first;
     _generateChartData();
+  }
+
+  @override
+  void didUpdateWidget(ChartScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 위젯이 업데이트되면서 선택된 코인이 변경되었는지 확인
+    if (widget.selectedCoin != null &&
+        widget.selectedCoin != oldWidget.selectedCoin) {
+      _updateSelectedCoin(widget.selectedCoin!);
+    }
   }
 
   // 차트 데이터 생성 (더미 데이터)

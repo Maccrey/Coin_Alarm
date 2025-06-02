@@ -26,6 +26,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // 페이지 컨트롤러
   final PageController _pageController = PageController();
 
+  // 선택된 코인
+  Coin? _selectedCoin;
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -84,8 +87,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // 대시보드 페이지
           _buildDashboardPage(),
 
-          // 차트 페이지
-          const ChartScreen(),
+          // 차트 페이지 - 선택된 코인 전달
+          ChartScreen(selectedCoin: _selectedCoin),
 
           // 알림 페이지
           const AlertsScreen(),
@@ -218,8 +221,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         onTap: () {
-          // 차트 화면으로 이동
+          // 선택된 코인 저장 및 차트 화면으로 이동
           setState(() {
+            _selectedCoin = coin;
             _selectedIndex = 1; // 차트 탭으로 이동
           });
           _pageController.jumpToPage(1);
