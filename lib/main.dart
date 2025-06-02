@@ -95,6 +95,27 @@ class MyApp extends StatelessWidget {
           darkTheme: AppTheme.darkTheme(), // 다크 테마 적용
           themeMode: themeMode, // 설정에서 선택한 테마 모드 적용
           home: const SplashScreen(), // 스플래시 화면으로 시작
+          // 상태바 아이콘 색상을 테마에 맞게 자동으로 조정
+          builder: (context, child) {
+            // 상태바 스타일을 테마에 맞게 설정
+            final brightness = Theme.of(context).brightness;
+            SystemChrome.setSystemUIOverlayStyle(
+              SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: brightness == Brightness.light
+                    ? Brightness.dark
+                    : Brightness.light,
+                systemNavigationBarColor: brightness == Brightness.light
+                    ? AppTheme.lightBackgroundColor
+                    : AppTheme.darkBackgroundColor,
+                systemNavigationBarIconBrightness:
+                    brightness == Brightness.light
+                    ? Brightness.dark
+                    : Brightness.light,
+              ),
+            );
+            return child!;
+          },
         );
       },
     );
