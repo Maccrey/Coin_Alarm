@@ -72,6 +72,17 @@ dev_dependencies:
   build_runner: ^2.4.8
   test: ^1.24.9
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1
+
+# 런처 아이콘 설정
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icons/coin_alarm.png"
+  min_sdk_android: 21 # android min sdk min:16, default 21
+  adaptive_icon_background: "#FFFFFF" # 안드로이드 적응형 아이콘 배경색
+  adaptive_icon_foreground: "assets/icons/coin_alarm.png" # 안드로이드 적응형 아이콘 전경 이미지
+  remove_alpha_ios: true # iOS 아이콘에서 알파 채널 제거
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
