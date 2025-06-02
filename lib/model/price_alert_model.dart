@@ -6,11 +6,11 @@ class PriceAlert {
   final String coinId;
   final String coinSymbol;
   final double priceTarget;
-  final bool isAbove;
-  final bool isTriggered;
+  final bool isAbove; // true: 가격이 목표가 이상일 때, false: 가격이 목표가 이하일 때
+  final bool isTriggered; // 알림 발생 여부
   final DateTime createdAt;
-  final DateTime? triggeredAt;
-  final String? notes;
+  final DateTime? triggeredAt; // 알림 발생 시각
+  final String? notes; // 사용자 메모
 
   PriceAlert({
     required this.id,
@@ -19,25 +19,23 @@ class PriceAlert {
     required this.coinSymbol,
     required this.priceTarget,
     required this.isAbove,
-    this.isTriggered = false,
+    required this.isTriggered,
     required this.createdAt,
     this.triggeredAt,
     this.notes,
   });
 
-  // JSON 데이터로부터 PriceAlert 객체 생성
+  // JSON에서 변환
   factory PriceAlert.fromJson(Map<String, dynamic> json) {
     return PriceAlert(
       id: json['id'],
       userId: json['user_id'],
       coinId: json['coin_id'],
-      coinSymbol: json['coin_symbol'] ?? json['coin_id'].toUpperCase(),
-      priceTarget: json['price_target']?.toDouble() ?? 0.0,
-      isAbove: json['is_above'] ?? true,
-      isTriggered: json['is_triggered'] ?? false,
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
-          : DateTime.now(),
+      coinSymbol: json['coin_symbol'],
+      priceTarget: json['price_target'].toDouble(),
+      isAbove: json['is_above'],
+      isTriggered: json['is_triggered'],
+      createdAt: DateTime.parse(json['created_at']),
       triggeredAt: json['triggered_at'] != null
           ? DateTime.parse(json['triggered_at'])
           : null,
@@ -45,7 +43,7 @@ class PriceAlert {
     );
   }
 
-  // PriceAlert 객체를 JSON 데이터로 변환
+  // JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -61,19 +59,25 @@ class PriceAlert {
     };
   }
 
+  // 알림 상태 텍스트 반환
+  String get statusText => isTriggered ? '발생됨' : '대기중';
+
+  // 알림 상태 반환 (UI 표시용)
+  String get status => isTriggered ? '발생됨' : '대기중';
+
+  // 알림 조건 텍스트 반환
+  String get conditionText {
+    if (isAbove) {
+      return '$coinSymbol 가격이 ₩$priceTarget 이상일 때';
+    } else {
+      return '$coinSymbol 가격이 ₩$priceTarget 이하일 때';
+    }
+  }
+
   // 알림 설명 텍스트 생성
   String get description {
     final direction = isAbove ? '이상' : '이하';
     return '$coinSymbol이(가) $priceTarget $direction일 때 알림';
-  }
-
-  // 알림 상태 텍스트 생성
-  String get status {
-    if (isTriggered) {
-      return '발생됨';
-    } else {
-      return '대기중';
-    }
   }
 
   // PriceAlert 객체 복사본 생성 (필드 업데이트 가능)

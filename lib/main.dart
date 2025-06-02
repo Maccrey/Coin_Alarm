@@ -12,6 +12,7 @@ import 'viewmodel/news_viewmodel.dart';
 import 'viewmodel/price_alert_viewmodel.dart';
 import 'viewmodel/settings_viewmodel.dart';
 import 'view/screens/splash_screen.dart';
+import 'services/supabase_client.dart';
 
 // 앱 진입점
 void main() async {
@@ -32,15 +33,21 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // .env 파일 로드 (실제 파일은 나중에 생성)
+  // .env 파일 로드
+  await dotenv.load();
+
+  // Supabase 클라이언트 초기화
+  // 추후 실제 Supabase 연동 시 SupabaseService 대신 사용
   try {
-    await dotenv.load();
+    final supabaseClient = SupabaseClientService();
+    await supabaseClient.initialize();
+    debugPrint('Supabase 클라이언트 초기화 성공');
   } catch (e) {
-    debugPrint('환경 변수 로드 실패: $e');
-    // .env 파일이 없어도 실행 가능하도록 진행
+    debugPrint('Supabase 클라이언트 초기화 실패: $e');
+    // 에러가 있더라도 앱은 실행 (더미데이터 사용)
   }
 
-  // 서비스 초기화
+  // 서비스 초기화 (현재는 더미 데이터 사용)
   final supabaseService = SupabaseService();
   await supabaseService.initialize();
 

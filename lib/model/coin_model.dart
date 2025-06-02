@@ -5,9 +5,9 @@ class Coin {
   final String name;
   final String symbol;
   final double currentPrice;
-  final double priceChange24h;
+  final double? priceChange24h;
   final double? priceChangePercentage24h;
-  final double marketCap;
+  final double? marketCap;
   final double? volume24h;
   final double? high24h;
   final double? low24h;
@@ -19,9 +19,9 @@ class Coin {
     required this.name,
     required this.symbol,
     required this.currentPrice,
-    required this.priceChange24h,
+    this.priceChange24h,
     this.priceChangePercentage24h,
-    required this.marketCap,
+    this.marketCap,
     this.volume24h,
     this.high24h,
     this.low24h,
@@ -29,27 +29,28 @@ class Coin {
     this.imageUrl,
   });
 
-  // JSON 데이터로부터 Coin 객체 생성
+  // 가격 상승 여부
+  bool get isPriceUp => (priceChangePercentage24h ?? 0) >= 0;
+
+  // JSON에서 변환
   factory Coin.fromJson(Map<String, dynamic> json) {
     return Coin(
       id: json['id'],
       name: json['name'],
-      symbol: json['symbol'].toUpperCase(),
-      currentPrice: json['current_price']?.toDouble() ?? 0.0,
-      priceChange24h: json['price_change_24h']?.toDouble() ?? 0.0,
+      symbol: json['symbol'],
+      currentPrice: json['current_price'].toDouble(),
+      priceChange24h: json['price_change_24h']?.toDouble(),
       priceChangePercentage24h: json['price_change_percentage_24h']?.toDouble(),
-      marketCap: json['market_cap']?.toDouble() ?? 0.0,
-      volume24h: json['volume_24h']?.toDouble(),
+      marketCap: json['market_cap']?.toDouble(),
+      volume24h: json['total_volume']?.toDouble(),
       high24h: json['high_24h']?.toDouble(),
       low24h: json['low_24h']?.toDouble(),
-      lastUpdated: json['last_updated'] != null
-          ? DateTime.parse(json['last_updated'])
-          : DateTime.now(),
-      imageUrl: json['image_url'],
+      lastUpdated: DateTime.parse(json['last_updated']),
+      imageUrl: json['image'],
     );
   }
 
-  // Coin 객체를 JSON 데이터로 변환
+  // JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -59,16 +60,13 @@ class Coin {
       'price_change_24h': priceChange24h,
       'price_change_percentage_24h': priceChangePercentage24h,
       'market_cap': marketCap,
-      'volume_24h': volume24h,
+      'total_volume': volume24h,
       'high_24h': high24h,
       'low_24h': low24h,
       'last_updated': lastUpdated.toIso8601String(),
-      'image_url': imageUrl,
+      'image': imageUrl,
     };
   }
-
-  // 가격 변화의 상승/하락 여부 확인
-  bool get isPriceUp => priceChange24h >= 0;
 
   // 가격 변화율 (% 형식, 소수점 2자리)
   String get priceChangePercent {
@@ -76,7 +74,7 @@ class Coin {
       return '${priceChangePercentage24h!.toStringAsFixed(2)}%';
     } else if (currentPrice > 0) {
       // 가격 변화율이 없는 경우 현재 가격 대비 계산
-      final percent = (priceChange24h / currentPrice) * 100;
+      final percent = (priceChange24h ?? 0 / currentPrice) * 100;
       return '${percent.toStringAsFixed(2)}%';
     }
     return '0.00%';

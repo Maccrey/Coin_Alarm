@@ -17,11 +17,11 @@ class News {
     required this.source,
     required this.url,
     required this.publishedAt,
-    this.relatedCoins = const [],
+    required this.relatedCoins,
     this.imageUrl,
   });
 
-  // JSON 데이터로부터 News 객체 생성
+  // JSON에서 변환
   factory News.fromJson(Map<String, dynamic> json) {
     return News(
       id: json['id'],
@@ -29,17 +29,13 @@ class News {
       content: json['content'],
       source: json['source'],
       url: json['url'],
-      publishedAt: json['published_at'] != null
-          ? DateTime.parse(json['published_at'])
-          : DateTime.now(),
-      relatedCoins: json['related_coins'] != null
-          ? List<String>.from(json['related_coins'])
-          : [],
+      publishedAt: DateTime.parse(json['published_at']),
+      relatedCoins: List<String>.from(json['related_coins']),
       imageUrl: json['image_url'],
     );
   }
 
-  // News 객체를 JSON 데이터로 변환
+  // JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -51,6 +47,30 @@ class News {
       'related_coins': relatedCoins,
       'image_url': imageUrl,
     };
+  }
+
+  // 뉴스 게시 시간 포맷팅
+  String get publishedTimeAgo {
+    final now = DateTime.now();
+    final difference = now.difference(publishedAt);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}일 전';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}시간 전';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}분 전';
+    } else {
+      return '방금 전';
+    }
+  }
+
+  // 뉴스 내용 요약 (미리보기용)
+  String get contentSummary {
+    if (content.length > 100) {
+      return '${content.substring(0, 100)}...';
+    }
+    return content;
   }
 
   // 콘텐츠 요약 (최대 100자)

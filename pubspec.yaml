@@ -58,6 +58,8 @@ dependencies:
   shimmer: ^3.0.0
   lottie: ^2.7.0
   cached_network_image: ^3.3.1
+  supabase_flutter: ^2.9.0
+  postgrest: ^2.4.2
 
   # Supabase (주석 처리 - 더미데이터로 대체)
   # supabase_flutter: ^1.10.25

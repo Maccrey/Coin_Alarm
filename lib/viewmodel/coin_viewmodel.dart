@@ -73,6 +73,16 @@ class CoinViewModel extends ChangeNotifier {
     }
   }
 
+  // ID로 코인 정보 가져오기
+  Coin? getCoinById(String coinId) {
+    try {
+      return _coins.firstWhere((coin) => coin.id == coinId);
+    } catch (e) {
+      debugPrint('코인 ID로 조회 실패: $e');
+      return null;
+    }
+  }
+
   // 특정 코인 선택
   Future<void> selectCoin(String coinId) async {
     _isLoading = true;

@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
-import '../../services/settings_service.dart';
 import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/settings_viewmodel.dart';
 import 'home_screen.dart';
-import 'register_screen.dart';
 
 // 로그인 화면
 class LoginScreen extends StatefulWidget {
@@ -29,35 +27,33 @@ class _LoginScreenState extends State<LoginScreen> {
   // 로그인 정보 저장
   bool _saveLoginInfo = false;
 
-  // 설정 서비스 (저장된 로그인 정보 불러오기용)
-  final _settingsService = SettingsService();
-
   @override
   void initState() {
     super.initState();
-    _loadSavedLoginInfo();
+    // 화면이 마운트된 후에 저장된 데이터 로드
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSavedLoginInfo();
+    });
   }
 
   // 저장된 로그인 정보 불러오기
-  Future<void> _loadSavedLoginInfo() async {
-    // 이 화면이 처음 로드될 때는 ViewModel이 초기화되지 않았을 수 있으므로
-    // 직접 SettingsService를 사용하여 정보를 불러옵니다.
-    _saveLoginInfo = _settingsService.getSaveLoginInfo();
+  void _loadSavedLoginInfo() {
+    try {
+      // ViewModel을 통해 저장된 설정 불러오기
+      final settingsViewModel = Provider.of<SettingsViewModel>(
+        context,
+        listen: false,
+      );
+      setState(() {
+        _saveLoginInfo = settingsViewModel.saveLoginInfo;
+      });
 
-    if (_saveLoginInfo) {
-      final savedEmail = _settingsService.getSavedEmail();
-      final savedPassword = _settingsService.getSavedPassword();
-
-      if (savedEmail != null) {
-        _emailController.text = savedEmail;
-      }
-
-      if (savedPassword != null) {
-        _passwordController.text = savedPassword;
-      }
+      // 더미 데이터로 테스트 이메일 설정
+      _emailController.text = 'test@example.com';
+      _passwordController.text = 'password';
+    } catch (e) {
+      debugPrint('설정 불러오기 오류: $e');
     }
-
-    setState(() {});
   }
 
   @override
@@ -77,17 +73,15 @@ class _LoginScreenState extends State<LoginScreen> {
     // 키보드 닫기
     FocusScope.of(context).unfocus();
 
-    // 로그인 정보 저장 설정 및 정보 저장
-    final settingsViewModel = Provider.of<SettingsViewModel>(
-      context,
-      listen: false,
-    );
-    await settingsViewModel.setSaveLoginInfo(_saveLoginInfo);
-
-    // 이메일과 비밀번호는 직접 저장 (ViewModel에 메서드가 없으므로)
-    if (_saveLoginInfo) {
-      await _settingsService.setSavedEmail(_emailController.text.trim());
-      await _settingsService.setSavedPassword(_passwordController.text);
+    // 로그인 정보 저장 설정
+    try {
+      final settingsViewModel = Provider.of<SettingsViewModel>(
+        context,
+        listen: false,
+      );
+      await settingsViewModel.setSaveLoginInfo(_saveLoginInfo);
+    } catch (e) {
+      debugPrint('로그인 정보 저장 설정 오류: $e');
     }
 
     // 로그인 시도
@@ -238,7 +232,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: authViewModel.isLoading
                                 ? null
                                 : () {
-                                    // TODO: 비밀번호 찾기 화면으로 이동
+                                    // 비밀번호 찾기 기능은 아직 구현되지 않음
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          '비밀번호 찾기 기능은 아직 구현되지 않았습니다.',
+                                        ),
+                                      ),
+                                    );
                                   },
                             child: const Text('비밀번호를 잊으셨나요?'),
                           ),
@@ -274,9 +275,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: authViewModel.isLoading
                                 ? null
                                 : () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => const RegisterScreen(),
+                                    // 회원가입 기능은 아직 구현되지 않음
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          '회원가입 기능은 아직 구현되지 않았습니다.',
+                                        ),
                                       ),
                                     );
                                   },
