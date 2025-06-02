@@ -27,6 +27,10 @@ class _AlertsScreenState extends State<AlertsScreen>
   late List<PriceAlert> _pendingAlerts;
   late List<PriceAlert> _triggeredAlerts;
 
+  // 필터링
+  String? _selectedFilter;
+  String _selectedFilterName = '전체';
+
   @override
   void initState() {
     super.initState();
@@ -53,8 +57,11 @@ class _AlertsScreenState extends State<AlertsScreen>
   }
 
   // 필터 적용
-  void _applyFilter(String? coinId) {
+  void _applyFilter(String? coinId, String coinName) {
     setState(() {
+      _selectedFilter = coinId;
+      _selectedFilterName = coinName;
+
       if (coinId == null) {
         _pendingAlerts = DummyAlerts.getPendingAlerts();
         _triggeredAlerts = DummyAlerts.getTriggeredAlerts();
@@ -72,11 +79,11 @@ class _AlertsScreenState extends State<AlertsScreen>
   @override
   Widget build(BuildContext context) {
     // 테마 데이터
-    Theme.of(context);
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        // title: const Text('알림'),
+        title: const Text('알림'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -86,28 +93,144 @@ class _AlertsScreenState extends State<AlertsScreen>
         ),
         actions: [
           // 필터 버튼
-          PopupMenuButton<String?>(
-            icon: const Icon(Icons.filter_list),
-            tooltip: '코인별 필터링',
-            onSelected: (value) {
-              _applyFilter(value == '전체' ? null : value);
-            },
-            itemBuilder: (context) {
-              // 코인 목록으로 필터 메뉴 아이템 생성
-              final coinOptions = [
-                {'id': null, 'name': '전체'},
-                ...DummyCoins.popularCoins
-                    .map((coin) => {'id': coin.id, 'name': coin.symbol})
-                    .toList(),
-              ];
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: PopupMenuButton<Map<String, dynamic>>(
+              tooltip: '코인별 필터링',
+              offset: const Offset(0, 56),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      _selectedFilterName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.filter_list,
+                      size: 18,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ],
+                ),
+              ),
+              onSelected: (option) {
+                _applyFilter(option['id'] as String?, option['name'] as String);
+              },
+              itemBuilder: (context) {
+                // 코인 목록으로 필터 메뉴 아이템 생성
+                final allCoins = [
+                  {'id': null, 'name': '전체', 'imageUrl': null},
+                  ...DummyCoins.popularCoins
+                      .map(
+                        (coin) => {
+                          'id': coin.id,
+                          'name': coin.symbol,
+                          'imageUrl': coin.imageUrl,
+                        },
+                      )
+                      .toList(),
+                ];
 
-              return coinOptions.map((option) {
-                return PopupMenuItem<String?>(
-                  value: option['id'],
-                  child: Text(option['name'] as String),
-                );
-              }).toList();
-            },
+                return allCoins.map((coin) {
+                  final bool isSelected =
+                      (coin['id'] == _selectedFilter) ||
+                      (coin['id'] == null && _selectedFilter == null);
+
+                  return PopupMenuItem<Map<String, dynamic>>(
+                    value: coin,
+                    child: Row(
+                      children: [
+                        // 선택 표시
+                        if (isSelected)
+                          Icon(
+                            Icons.check_circle,
+                            color: theme.colorScheme.primary,
+                            size: 18,
+                          )
+                        else
+                          const SizedBox(width: 18),
+                        const SizedBox(width: 8),
+
+                        // 코인 아이콘
+                        if (coin['imageUrl'] != null) ...[
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                coin['imageUrl'] as String,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(
+                                      Icons.currency_bitcoin,
+                                      size: 16,
+                                    ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ] else if (coin['id'] != null) ...[
+                          Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.currency_bitcoin,
+                              size: 16,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ] else ...[
+                          Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.filter_alt,
+                              size: 16,
+                              color: theme.colorScheme.secondary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+
+                        // 코인 이름
+                        Text(
+                          coin['name'] as String,
+                          style: TextStyle(
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList();
+              },
+            ),
           ),
         ],
       ),
@@ -143,7 +266,9 @@ class _AlertsScreenState extends State<AlertsScreen>
             ),
             const SizedBox(height: 16),
             Text(
-              '알림이 없습니다',
+              _selectedFilter == null
+                  ? '알림이 없습니다'
+                  : '$_selectedFilterName 코인에 대한 알림이 없습니다',
               style: TextStyle(
                 fontSize: 18,
                 color: Theme.of(context).disabledColor,
