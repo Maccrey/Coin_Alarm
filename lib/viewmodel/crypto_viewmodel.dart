@@ -209,18 +209,18 @@ class CryptoViewModel extends ChangeNotifier {
     final interval = _settingsService.getRefreshInterval();
     debugPrint('CryptoViewModel: 새로고침 간격 설정 - $interval초');
 
-    // 실시간성을 높이기 위해 5초마다 백그라운드 업데이트
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      // 매 5초마다 백그라운드 새로고침
-      refreshBackground();
-
-      // 설정된 간격에 따라 전체 새로고침
-      if (timer.tick % (interval ~/ 5) == 0) {
-        refresh();
-      }
+    // 정확한 간격으로 타이머 설정
+    _refreshTimer = Timer.periodic(Duration(seconds: interval), (timer) {
+      debugPrint('CryptoViewModel: 설정된 간격($interval초)으로 새로고침 실행');
+      refresh();
     });
 
-    debugPrint('CryptoViewModel: 새로고침 타이머 시작됨 - 전체 새로고침 간격: $interval초');
+    // 초기 데이터 로드
+    if (_topCoins.isEmpty) {
+      refresh();
+    }
+
+    debugPrint('CryptoViewModel: 새로고침 타이머 시작됨 - 간격: $interval초');
   }
 
   // 특정 코인의 가격 변화 상태 확인 (상승/하락)
@@ -243,9 +243,10 @@ class CryptoViewModel extends ChangeNotifier {
 
   // 새로고침 간격 변경 시 타이머 재설정
   void updateRefreshInterval(int seconds) {
+    debugPrint('CryptoViewModel: 새로고침 간격 변경 - $seconds초');
     _settingsService.setRefreshInterval(seconds);
     _startRefreshTimer();
-    notifyListeners();
+    notifyListeners(); // UI 업데이트
   }
 
   // API 서비스 변경
@@ -278,6 +279,9 @@ class CryptoViewModel extends ChangeNotifier {
   String? get error => _error;
   DateTime get lastUpdated => _lastUpdated;
   bool get hasServices => _availableServices.isNotEmpty;
+
+  // 새로고침 간격 getter
+  int get refreshInterval => _settingsService.getRefreshInterval();
 
   @override
   void dispose() {

@@ -57,10 +57,24 @@ class UIConstants {
 
 // 시간 관련 상수
 class TimeConstants {
-  static const int defaultRefreshIntervalSeconds = 30;
+  // 기본 새로고침 간격을 30초에서 10초로 변경
+  static const int defaultRefreshIntervalSeconds = 10;
   static const int alertCheckIntervalSeconds = 60;
   static const int newsRefreshIntervalMinutes = 10;
   static const int maxCacheAgeHours = 24;
+
+  // 새로고침 간격 옵션 (세분화)
+  static const List<int> refreshIntervalOptions = [
+    1,
+    2,
+    5,
+    10,
+    15,
+    30,
+    60,
+    120,
+    300,
+  ];
 }
 
 // 기본 설정값 관련 상수

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/settings_service.dart';
+import '../core/theme.dart';
+import 'crypto_viewmodel.dart';
 
 // 설정 관련 ViewModel 클래스
 class SettingsViewModel extends ChangeNotifier {
@@ -112,9 +115,10 @@ class SettingsViewModel extends ChangeNotifier {
       await _settingsService.setRefreshInterval(seconds);
       _refreshInterval = seconds;
 
-      // CryptoViewModel의 새로고침 간격도 업데이트
-      // 이 부분은 Provider.of를 사용하지 않고 대신 CryptoViewModel이 자체적으로
-      // SettingsService에서 간격을 읽도록 설계되어 있어 별도 처리가 필요하지 않음
+      debugPrint('SettingsViewModel: 새로고침 간격 변경됨 - $seconds초');
+
+      // 다른 뷰모델에서 이 변경사항을 알 수 있도록 서비스에 알림
+      // CryptoViewModel은 자체 SettingsService를 통해 이 변경을 감지할 수 있습니다
     } catch (e) {
       debugPrint('새로고침 간격 설정 실패: $e');
     } finally {

@@ -5,6 +5,7 @@ import '../../core/theme.dart';
 import '../../core/constants.dart';
 import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/settings_viewmodel.dart';
+import '../../viewmodel/crypto_viewmodel.dart';
 import 'login_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
@@ -695,21 +696,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // 새로고침 간격 설정 위젯
   Widget _buildRefreshIntervalSettings(SettingsViewModel viewModel) {
-    // 간격별 표시 정보
-    final intervalInfo = {
-      10: {'text': '10초', 'description': '실시간에 가까운 빠른 업데이트'},
-      30: {'text': '30초', 'description': '균형 잡힌 업데이트 주기'},
-      60: {'text': '1분', 'description': '배터리 절약 모드'},
-      300: {'text': '5분', 'description': '최대 배터리 절약 모드'},
-    };
+    // 간격 설명 생성 함수
+    String getIntervalDescription(int seconds) {
+      if (seconds < 5) return '매우 빠른 업데이트 (높은 배터리 소모)';
+      if (seconds < 15) return '실시간에 가까운 빠른 업데이트';
+      if (seconds < 60) return '균형 잡힌 업데이트 주기';
+      if (seconds < 120) return '배터리 절약 모드';
+      return '최대 배터리 절약 모드';
+    }
+
+    // 간격 표시 텍스트
+    String getIntervalText(int seconds) {
+      if (seconds < 60) return '$seconds초';
+      if (seconds < 120) return '1분';
+      return '${seconds ~/ 60}분';
+    }
+
+    // 슬라이더 값 계산 함수
+    double getSliderValue(int seconds) {
+      final index = TimeConstants.refreshIntervalOptions.indexOf(seconds);
+      if (index != -1) {
+        return index.toDouble();
+      }
+      // 현재 값이 옵션에 없는 경우 가장 가까운 값 찾기
+      int nearestIndex = 0;
+      int minDiff = (TimeConstants.refreshIntervalOptions[0] - seconds).abs();
+
+      for (int i = 1; i < TimeConstants.refreshIntervalOptions.length; i++) {
+        final diff = (TimeConstants.refreshIntervalOptions[i] - seconds).abs();
+        if (diff < minDiff) {
+          minDiff = diff;
+          nearestIndex = i;
+        }
+      }
+      return nearestIndex.toDouble();
+    }
+
+    // 슬라이더 값으로부터 간격 가져오기
+    int getIntervalFromSlider(double value) {
+      final index = value.round();
+      if (index >= 0 && index < TimeConstants.refreshIntervalOptions.length) {
+        return TimeConstants.refreshIntervalOptions[index];
+      }
+      return TimeConstants.defaultRefreshIntervalSeconds;
+    }
 
     return ExpansionTile(
       title: const Text('데이터 새로고침 간격'),
       leading: const Icon(Icons.refresh),
-      subtitle: Text(
-        intervalInfo[viewModel.refreshInterval]?['text'] ??
-            '${viewModel.refreshInterval}초',
-      ),
+      subtitle: Text(getIntervalText(viewModel.refreshInterval)),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
@@ -729,8 +764,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
-                      intervalInfo[viewModel.refreshInterval]?['text'] ??
-                          '${viewModel.refreshInterval}초',
+                      getIntervalText(viewModel.refreshInterval),
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -739,8 +773,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      intervalInfo[viewModel.refreshInterval]?['description'] ??
-                          '사용자 지정 간격',
+                      getIntervalDescription(viewModel.refreshInterval),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
@@ -753,64 +786,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const SizedBox(height: 16),
 
-              // 슬라이더
+              // 슬라이더 컨트롤
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: Theme.of(context).colorScheme.primary,
+                  inactiveTrackColor: Theme.of(
+                    context,
+                  ).colorScheme.primary.withOpacity(0.3),
+                  thumbColor: Theme.of(context).colorScheme.primary,
+                  overlayColor: Theme.of(
+                    context,
+                  ).colorScheme.primary.withOpacity(0.2),
+                  valueIndicatorColor: Theme.of(context).colorScheme.primary,
                   thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 8,
+                    enabledThumbRadius: 10,
                   ),
                   overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 16,
+                    overlayRadius: 20,
                   ),
-                  trackHeight: 4,
                   tickMarkShape: const RoundSliderTickMarkShape(
                     tickMarkRadius: 2,
                   ),
+                  valueIndicatorShape: const PaddleSliderValueIndicatorShape(),
+                  valueIndicatorTextStyle: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimary,
+                    fontSize: 12,
+                  ),
+                  showValueIndicator: ShowValueIndicator.always,
                 ),
                 child: Slider(
-                  value: _getSliderValue(viewModel.refreshInterval),
                   min: 0,
-                  max: 3,
-                  divisions: 3,
-                  onChanged:
-                      viewModel.isLoading
-                          ? null
-                          : (value) {
-                            final interval = _getIntervalFromSlider(value);
-                            viewModel.setRefreshInterval(interval);
-                          },
+                  max:
+                      (TimeConstants.refreshIntervalOptions.length - 1)
+                          .toDouble(),
+                  divisions: TimeConstants.refreshIntervalOptions.length - 1,
+                  value: getSliderValue(viewModel.refreshInterval),
+                  label: getIntervalText(viewModel.refreshInterval),
+                  onChanged: (value) {
+                    final interval = getIntervalFromSlider(value);
+                    // 새로고침 간격 설정 변경 및 CryptoViewModel에도 알림
+                    viewModel.setRefreshInterval(interval);
+                    // CryptoViewModel에 변경 알림
+                    Provider.of<CryptoViewModel>(
+                      context,
+                      listen: false,
+                    ).updateRefreshInterval(interval);
+                  },
                 ),
               ),
 
-              // 간격 라벨
+              // 간격 라벨 표시
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '10초',
+                      getIntervalText(
+                        TimeConstants.refreshIntervalOptions.first,
+                      ),
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).hintColor,
                       ),
                     ),
                     Text(
-                      '30초',
+                      getIntervalText(
+                        TimeConstants.refreshIntervalOptions[TimeConstants
+                                .refreshIntervalOptions
+                                .length ~/
+                            3],
+                      ),
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).hintColor,
                       ),
                     ),
                     Text(
-                      '1분',
+                      getIntervalText(
+                        TimeConstants.refreshIntervalOptions[TimeConstants
+                                .refreshIntervalOptions
+                                .length *
+                            2 ~/
+                            3],
+                      ),
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).hintColor,
                       ),
                     ),
                     Text(
-                      '5분',
+                      getIntervalText(
+                        TimeConstants.refreshIntervalOptions.last,
+                      ),
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).hintColor,
@@ -837,39 +905,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ],
     );
-  }
-
-  // 슬라이더 값 변환 (간격 -> 슬라이더 값)
-  double _getSliderValue(int interval) {
-    switch (interval) {
-      case 10:
-        return 0;
-      case 30:
-        return 1;
-      case 60:
-        return 2;
-      case 300:
-        return 3;
-      default:
-        return 1; // 기본값 30초
-    }
-  }
-
-  // 슬라이더 값 변환 (슬라이더 값 -> 간격)
-  int _getIntervalFromSlider(double value) {
-    final intValue = value.round();
-    switch (intValue) {
-      case 0:
-        return 10;
-      case 1:
-        return 30;
-      case 2:
-        return 60;
-      case 3:
-        return 300;
-      default:
-        return 30;
-    }
   }
 
   // 알림 설정 위젯

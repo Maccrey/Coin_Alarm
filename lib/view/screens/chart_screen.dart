@@ -7,6 +7,9 @@ import '../../data/dummy_coins.dart';
 import '../../model/coin_model.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
 import '../../core/theme.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import '../../core/constants.dart';
 
 // 차트 화면
 class ChartScreen extends StatefulWidget {
@@ -29,10 +32,17 @@ class _ChartScreenState extends State<ChartScreen> {
 
   // 차트 유형 옵션
   final List<String> _chartTypes = ['캔들스틱', '라인'];
-  String _selectedChartType = '라인';
+  String _selectedChartType = '캔들스틱';
 
-  // 차트 데이터 (더미 데이터)
+  // 지표 표시 옵션
+  final List<String> _indicators = ['이동평균선', 'MACD', 'RSI', 'OBV'];
+  final Set<String> _selectedIndicators = {'이동평균선'};
+
+  // 차트 데이터 (임시 데이터)
   List<Point<double>> _chartData = [];
+
+  // 타이머
+  Timer? _refreshTimer;
 
   // 확대/축소 관련 변수
   double _zoomLevel = 1.0;
@@ -42,58 +52,86 @@ class _ChartScreenState extends State<ChartScreen> {
   @override
   void initState() {
     super.initState();
-    // 전달된 코인이 있으면 사용, 없으면 기본값 사용
-    _selectedCoin = widget.selectedCoin ?? DummyCoins.popularCoins.first;
-    _generateChartData();
 
-    // 데이터 초기 로드
+    // 차트 초기화
+    _initChart();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // CryptoViewModel과 연결하여 데이터 자동 갱신
       final cryptoViewModel = Provider.of<CryptoViewModel>(
         context,
         listen: false,
       );
-      if (_selectedCoin != null && cryptoViewModel.topCoins.isNotEmpty) {
-        // API 데이터에서 선택된 코인 찾기
-        final apiCoin = cryptoViewModel.topCoins.firstWhere(
-          (coin) => coin.symbol == _selectedCoin.symbol,
-          orElse: () => _selectedCoin,
-        );
-        if (apiCoin != _selectedCoin) {
-          _updateSelectedCoin(apiCoin);
-        }
-      }
+
+      // 설정된 새로고침 간격으로 타이머 설정
+      _setupRefreshTimer();
     });
   }
 
   @override
-  void didUpdateWidget(ChartScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // 위젯이 업데이트되면서 선택된 코인이 변경되었는지 확인
-    if (widget.selectedCoin != null &&
-        widget.selectedCoin != oldWidget.selectedCoin) {
-      _updateSelectedCoin(widget.selectedCoin!);
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  // 새로고침 타이머 설정
+  void _setupRefreshTimer() {
+    // 이전 타이머 취소
+    _refreshTimer?.cancel();
+
+    // SettingsService에서 새로고침 간격 가져오기
+    final cryptoViewModel = Provider.of<CryptoViewModel>(
+      context,
+      listen: false,
+    );
+    final settingsInterval = cryptoViewModel.refreshInterval;
+
+    debugPrint('ChartScreen: 새로고침 타이머 설정 - $settingsInterval초');
+
+    // 타이머 설정
+    _refreshTimer = Timer.periodic(Duration(seconds: settingsInterval), (
+      timer,
+    ) {
+      if (mounted) {
+        setState(() {
+          // 차트 데이터 업데이트
+          _generateChartData();
+        });
+      }
+    });
+  }
+
+  // 차트 초기화
+  void _initChart() {
+    // 초기 코인 설정
+    if (widget.selectedCoin != null) {
+      _selectedCoin = widget.selectedCoin!;
+    } else {
+      // 기본 코인은 DummyCoins에서 가져옴
+      _selectedCoin = DummyCoins.popularCoins.first;
     }
+
+    // 임시 차트 데이터 생성
+    _generateChartData();
   }
 
   // 차트 데이터 생성 (더미 데이터)
   void _generateChartData() {
     final random = Random();
     final pointCount = _getPointCount();
-    final startValue = _selectedCoin.currentPrice;
-    final volatility = _getVolatility();
 
-    _chartData = List.generate(pointCount, (index) {
-      // 시간 경과에 따른 약간의 트렌드 추가
-      final trend = sin(index / (pointCount / 4)) * volatility * 0.5;
+    // 기존 데이터 초기화
+    _chartData = [];
 
-      // 랜덤 가격 변동 생성
-      final randomChange = (random.nextDouble() * 2 - 1) * volatility;
+    // 랜덤 데이터 생성
+    for (var i = 0; i < pointCount; i++) {
+      final x = i.toDouble();
+      final y =
+          _selectedCoin.currentPrice * (0.97 + 0.06 * random.nextDouble());
+      _chartData.add(Point(x, y));
+    }
 
-      // 최종 가격 계산
-      final value = startValue * (1 + index * 0.001 + trend + randomChange);
-
-      return Point<double>(index.toDouble(), value);
-    });
+    debugPrint('ChartScreen: 차트 데이터 업데이트됨 - ${DateTime.now().toString()}');
   }
 
   // 기간별 데이터 포인트 수 결정
@@ -116,23 +154,13 @@ class _ChartScreenState extends State<ChartScreen> {
     }
   }
 
-  // 기간별 변동성 결정
-  double _getVolatility() {
-    switch (_selectedTimeframe) {
-      case '1일':
-        return 0.005; // 일간 변동성 낮음
-      case '1주일':
-        return 0.02;
-      case '1개월':
-        return 0.05;
-      case '3개월':
-        return 0.08;
-      case '1년':
-        return 0.15;
-      case '전체':
-        return 0.25; // 장기 변동성 높음
-      default:
-        return 0.01;
+  @override
+  void didUpdateWidget(ChartScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 위젯이 업데이트되면서 선택된 코인이 변경되었는지 확인
+    if (widget.selectedCoin != null &&
+        widget.selectedCoin != oldWidget.selectedCoin) {
+      _updateSelectedCoin(widget.selectedCoin!);
     }
   }
 
