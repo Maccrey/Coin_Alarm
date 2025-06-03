@@ -192,16 +192,18 @@ class _ChartScreenState extends State<ChartScreen> {
               color: Theme.of(context).colorScheme.surfaceVariant,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: _selectedCoin.imageUrl != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.network(
-                      _selectedCoin.imageUrl!,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(Icons.currency_bitcoin),
-                    ),
-                  )
-                : const Icon(Icons.currency_bitcoin),
+            child:
+                _selectedCoin.imageUrl != null
+                    ? ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        _selectedCoin.imageUrl!,
+                        errorBuilder:
+                            (context, error, stackTrace) =>
+                                const Icon(Icons.currency_bitcoin),
+                      ),
+                    )
+                    : const Icon(Icons.currency_bitcoin),
           ),
           const SizedBox(width: 12),
 
@@ -212,15 +214,16 @@ class _ChartScreenState extends State<ChartScreen> {
               isExpanded: true,
               underline: const SizedBox(),
               icon: const Icon(Icons.keyboard_arrow_down),
-              items: DummyCoins.popularCoins.map((coin) {
-                return DropdownMenuItem<String>(
-                  value: coin.symbol,
-                  child: Text(
-                    '${coin.name} (${coin.symbol})',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                );
-              }).toList(),
+              items:
+                  DummyCoins.popularCoins.map((coin) {
+                    return DropdownMenuItem<String>(
+                      value: coin.symbol,
+                      child: Text(
+                        '${coin.name} (${coin.symbol})',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    );
+                  }).toList(),
               onChanged: (value) {
                 if (value != null) {
                   final coin = DummyCoins.getCoinBySymbol(value);
@@ -268,9 +271,8 @@ class _ChartScreenState extends State<ChartScreen> {
           iconSize: 20,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          onPressed: _zoomLevel > _minZoomLevel
-              ? () => _updateZoomLevel(-0.1)
-              : null,
+          onPressed:
+              _zoomLevel > _minZoomLevel ? () => _updateZoomLevel(-0.1) : null,
         ),
         const SizedBox(width: 4),
         IconButton(
@@ -278,9 +280,8 @@ class _ChartScreenState extends State<ChartScreen> {
           iconSize: 20,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          onPressed: _zoomLevel < _maxZoomLevel
-              ? () => _updateZoomLevel(0.1)
-              : null,
+          onPressed:
+              _zoomLevel < _maxZoomLevel ? () => _updateZoomLevel(0.1) : null,
         ),
         const SizedBox(width: 8),
         TextButton(
@@ -326,6 +327,13 @@ class _ChartScreenState extends State<ChartScreen> {
     final zoomedMinY = mid - zoomedRange / 2;
     final zoomedMaxY = mid + zoomedRange / 2;
 
+    // 가격 상승/하락에 따른 차트 색상 결정
+    final chartColor =
+        (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
+            ? AppTheme
+                .positiveColor // 파란색
+            : Colors.red;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -357,25 +365,23 @@ class _ChartScreenState extends State<ChartScreen> {
                 width: width,
                 height: height,
                 child: CustomPaint(
-                  painter: _selectedChartType == '라인'
-                      ? LineChartPainter(
-                          points: _chartData,
-                          minX: 0,
-                          maxX: _chartData.length - 1.0,
-                          minY: zoomedMinY,
-                          maxY: zoomedMaxY,
-                          color:
-                              (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
-                              ? Colors.green
-                              : Colors.red,
-                        )
-                      : CandleStickChartPainter(
-                          points: _chartData,
-                          minX: 0,
-                          maxX: _chartData.length - 1.0,
-                          minY: zoomedMinY,
-                          maxY: zoomedMaxY,
-                        ),
+                  painter:
+                      _selectedChartType == '라인'
+                          ? LineChartPainter(
+                            points: _chartData,
+                            minX: 0,
+                            maxX: _chartData.length - 1.0,
+                            minY: zoomedMinY,
+                            maxY: zoomedMaxY,
+                            color: chartColor,
+                          )
+                          : CandleStickChartPainter(
+                            points: _chartData,
+                            minX: 0,
+                            maxX: _chartData.length - 1.0,
+                            minY: zoomedMinY,
+                            maxY: zoomedMaxY,
+                          ),
                 ),
               ),
 
@@ -434,21 +440,22 @@ class _ChartScreenState extends State<ChartScreen> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: _timeframes.map((timeframe) {
-                      final isSelected = timeframe == _selectedTimeframe;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(timeframe),
-                          selected: isSelected,
-                          onSelected: (selected) {
-                            if (selected) {
-                              _updateTimeframe(timeframe);
-                            }
-                          },
-                        ),
-                      );
-                    }).toList(),
+                    children:
+                        _timeframes.map((timeframe) {
+                          final isSelected = timeframe == _selectedTimeframe;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(timeframe),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  _updateTimeframe(timeframe);
+                                }
+                              },
+                            ),
+                          );
+                        }).toList(),
                   ),
                 ),
               ),
@@ -488,14 +495,17 @@ class _ChartScreenState extends State<ChartScreen> {
   // 시세 정보 영역
   Widget _buildPriceInfo() {
     // 가격 변화 표시
-    final priceChangeText = (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
-        ? '+${_selectedCoin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%'
-        : '${_selectedCoin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%';
+    final priceChangeText =
+        (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
+            ? '+${_selectedCoin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%'
+            : '${_selectedCoin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%';
 
     // 가격 변화 색상
-    final priceChangeColor = (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
-        ? Colors.green
-        : Colors.red;
+    final priceChangeColor =
+        (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
+            ? AppTheme
+                .positiveColor // 파란색으로 변경
+            : Colors.red;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -662,14 +672,16 @@ class LineChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+    final paint =
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2;
 
-    final fillPaint = Paint()
-      ..color = color.withOpacity(0.2)
-      ..style = PaintingStyle.fill;
+    final fillPaint =
+        Paint()
+          ..color = color.withOpacity(0.2)
+          ..style = PaintingStyle.fill;
 
     final path = Path();
     final fillPath = Path();
@@ -711,10 +723,11 @@ class LineChartPainter extends CustomPainter {
     canvas.drawPath(path, paint);
 
     // 가로 격자선
-    final gridPaint = Paint()
-      ..color = Colors.grey.withOpacity(0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.5;
+    final gridPaint =
+        Paint()
+          ..color = Colors.grey.withOpacity(0.3)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.5;
 
     for (int i = 1; i < 5; i++) {
       final y = i * size.height / 5;
@@ -754,30 +767,55 @@ class CandleStickChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final random = Random(42); // 일관된 랜덤 시드 사용
 
-    // 그리드 그리기
-    final gridPaint = Paint()
-      ..color = Colors.grey.withOpacity(0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.5;
+    // 배경 그리기
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..color = Colors.black.withOpacity(0.03),
+    );
 
+    // 그리드 그리기
+    final gridPaint =
+        Paint()
+          ..color = Colors.grey.withOpacity(0.3)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.5;
+
+    // 수평 그리드 (가격 레벨)
     for (int i = 1; i < 5; i++) {
       final y = i * size.height / 5;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+
+      // 가격 레이블 추가
+      final priceLevel = minY + (maxY - minY) * (1 - i / 5);
+      final priceText = TextSpan(
+        text: '${priceLevel.toStringAsFixed(0)}',
+        style: TextStyle(color: Colors.grey.withOpacity(0.7), fontSize: 10),
+      );
+      final textPainter = TextPainter(
+        text: priceText,
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(5, y - 12));
     }
 
+    // 수직 그리드 (시간 간격)
     for (int i = 1; i < 5; i++) {
       final x = i * size.width / 5;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
     }
 
     // 캔들스틱 그리기
-    final candleWidth = size.width / (points.length + 1);
+    final candleWidth = (size.width / (points.length + 1)).clamp(2.0, 20.0);
+    final candleSpacing =
+        (size.width - candleWidth * points.length) / (points.length + 1);
 
     for (int i = 0; i < points.length; i++) {
       final point = points[i];
 
       // X 좌표 계산
-      final x = ((point.x - minX) / (maxX - minX)) * size.width;
+      final x =
+          candleSpacing + i * (candleWidth + candleSpacing) + candleWidth / 2;
 
       // 캔들스틱 데이터 생성 (더미)
       final currentValue = point.y;
@@ -812,9 +850,9 @@ class CandleStickChartPainter extends CustomPainter {
 
       // 캔들 색상 (상승/하락)
       final isUp = currentValue >= openValue;
-      final candleColor = isUp ? Colors.green : Colors.red;
+      final candleColor = isUp ? AppTheme.positiveColor : Colors.red;
 
-      // 선 그리기 (고가-저가)
+      // 그림자 선 그리기 (고가-저가)
       canvas.drawLine(
         Offset(x, yHigh.clamp(0, size.height)),
         Offset(x, yLow.clamp(0, size.height)),
@@ -825,9 +863,9 @@ class CandleStickChartPainter extends CustomPainter {
 
       // 캔들 바디 그리기
       final candleRect = Rect.fromLTRB(
-        x - candleWidth / 3,
+        x - candleWidth / 2,
         min(yOpen, yCurrent).clamp(0, size.height),
-        x + candleWidth / 3,
+        x + candleWidth / 2,
         max(yOpen, yCurrent).clamp(0, size.height),
       );
 

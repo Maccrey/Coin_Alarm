@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:math';
 import '../../core/theme.dart';
 import '../../core/constants.dart';
 import '../../viewmodel/auth_viewmodel.dart';
@@ -198,109 +199,198 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ) async {
     debugPrint('SettingsScreen: $exchange API 키 입력 다이얼로그 표시');
 
-    final apiKeyController = TextEditingController();
-    final secretKeyController = TextEditingController();
+    // 기존 저장된 API 키 가져오기
+    String initialApiKey = '';
+    String initialSecretKey = '';
 
-    final result = await showDialog<Map<String, String>?>(
+    if (exchange == '업비트') {
+      initialApiKey = viewModel.upbitAccessKey ?? '';
+      // 시크릿 키는 보안상 마스킹 처리 (앞 4자리만 표시)
+      final secretKey = viewModel.upbitSecretKey ?? '';
+      initialSecretKey =
+          secretKey.isNotEmpty
+              ? '${secretKey.substring(0, min(4, secretKey.length))}${'*' * 20}'
+              : '';
+    } else if (exchange == '바이낸스') {
+      initialApiKey = viewModel.binanceApiKey ?? '';
+      // 시크릿 키는 보안상 마스킹 처리 (앞 4자리만 표시)
+      final secretKey = viewModel.binanceSecretKey ?? '';
+      initialSecretKey =
+          secretKey.isNotEmpty
+              ? '${secretKey.substring(0, min(4, secretKey.length))}${'*' * 20}'
+              : '';
+    }
+
+    // 다이얼로그에서 사용할 임시 값들 (초기값 설정)
+    String apiKey = initialApiKey.trim();
+    String secretKey = ''; // 시크릿 키는 변경 시 항상 새로 입력받음
+    bool isSecretKeyChanged = false;
+
+    // StatefulBuilder로 다이얼로그를 감싸서 다이얼로그 내부에서 상태 관리
+    final result = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('$exchange API 키 설정'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 안내 메시지
-                Text(
-                  '${exchange}에서 발급받은 API 키를 입력하세요.\n해당 키는 로컬에만 저장되며, 서버로 전송되지 않습니다.',
-                ),
-                const SizedBox(height: 16),
-                // API 키 입력
-                TextField(
-                  controller: apiKeyController,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    labelText: '$exchange Access Key',
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('$exchange API 키 설정'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 안내 메시지
+                  Text(
+                    '${exchange}에서 발급받은 API 키를 입력하세요.\n해당 키는 로컬에만 저장되며, 서버로 전송되지 않습니다.',
                   ),
-                  autocorrect: false,
-                  enableSuggestions: false,
-                ),
-                const SizedBox(height: 12),
-                // Secret 키 입력
-                TextField(
-                  controller: secretKeyController,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    labelText: '$exchange Secret Key',
+                  const SizedBox(height: 16),
+                  // API 키 입력 - 초기값 설정
+                  TextField(
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: '$exchange Access Key',
+                      helperText: '공백 없이 정확하게 입력하세요',
+                    ),
+                    controller: TextEditingController(text: initialApiKey),
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    onChanged: (value) {
+                      apiKey = value.trim(); // 입력 시 trim() 적용
+                    },
                   ),
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  obscureText: true,
+                  const SizedBox(height: 12),
+                  // Secret 키 입력
+                  TextField(
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: '$exchange Secret Key',
+                      helperText:
+                          initialSecretKey.isNotEmpty
+                              ? '변경 시에만 입력하세요. 공백 없이 정확하게 입력하세요.'
+                              : '공백 없이 정확하게 입력하세요',
+                    ),
+                    controller: TextEditingController(),
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    obscureText: true,
+                    onChanged: (value) {
+                      secretKey = value.trim(); // 입력 시 trim() 적용
+                      isSecretKeyChanged = secretKey.isNotEmpty; // 트림된 값으로 체크
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('취소'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    // 저장 전 마지막으로 공백 제거
+                    apiKey = apiKey.trim();
+                    secretKey = secretKey.trim();
+
+                    // API 키가 비어있으면 경고
+                    if (apiKey.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('API Key를 입력해주세요')),
+                      );
+                      return;
+                    }
+
+                    Navigator.pop(context, true);
+                  },
+                  child: const Text('저장'),
                 ),
               ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, null),
-                child: const Text('취소'),
-              ),
-              TextButton(
-                onPressed: () {
-                  // 값을 먼저 가져온 다음 팝업을 닫음
-                  final apiKey = apiKeyController.text.trim();
-                  final secretKey = secretKeyController.text.trim();
-
-                  // 값이 비어있지 않은 경우만 반환
-                  if (apiKey.isNotEmpty && secretKey.isNotEmpty) {
-                    Navigator.pop(context, {
-                      'apiKey': apiKey,
-                      'secretKey': secretKey,
-                    });
-                  } else {
-                    Navigator.pop(context, null);
-                  }
-                },
-                child: const Text('저장'),
-              ),
-            ],
-          ),
+            );
+          },
+        );
+      },
     );
 
-    // 컨트롤러 dispose (더 이상 사용하지 않음)
-    apiKeyController.dispose();
-    secretKeyController.dispose();
+    // 다이얼로그 결과 처리
+    if (result == true) {
+      // 저장 전 마지막으로 한 번 더 공백 제거
+      apiKey = apiKey.trim();
+      secretKey = secretKey.trim();
 
-    // 다이얼로그에서 반환된 값 처리
-    if (result != null) {
-      final apiKey = result['apiKey']!;
-      final secretKey = result['secretKey']!;
-
-      debugPrint(
-        'SettingsScreen: $exchange API 키 저장 시작 - API 키 길이: ${apiKey.length}, 시크릿 키 길이: ${secretKey.length}',
-      );
-
-      if (exchange == '업비트') {
-        await viewModel.setUpbitApiKeys(apiKey, secretKey);
-        debugPrint('SettingsScreen: 업비트 API 키 저장 완료');
-      } else if (exchange == '바이낸스') {
-        await viewModel.setBinanceApiKeys(apiKey, secretKey);
-        debugPrint('SettingsScreen: 바이낸스 API 키 저장 완료');
+      if (apiKey.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('API Key를 입력해주세요')));
+        }
+        return;
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$exchange API 키가 저장되었습니다')));
-
-        // 저장 후 API 키 길이 확인
+      try {
         if (exchange == '업비트') {
+          // Secret 키는 변경된 경우만 저장, 아니면 기존 값 사용
+          final finalSecretKey =
+              isSecretKeyChanged
+                  ? secretKey
+                  : (viewModel.upbitSecretKey ?? '').trim();
+
+          // Secret 키가 없는 경우 경고
+          if (finalSecretKey.isEmpty) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Secret Key를 입력해주세요')),
+              );
+            }
+            return;
+          }
+
+          await viewModel.setUpbitApiKeys(apiKey, finalSecretKey);
           debugPrint(
-            'SettingsScreen: 저장 후 업비트 키 상태 - Access: ${viewModel.upbitAccessKey?.length ?? 0}, Secret: ${viewModel.upbitSecretKey?.length ?? 0}',
+            'SettingsScreen: 업비트 API 키 저장 완료 - 길이: ${apiKey.length}, Secret 키 길이: ${finalSecretKey.length}',
           );
-        } else {
+        } else if (exchange == '바이낸스') {
+          // Secret 키는 변경된 경우만 저장, 아니면 기존 값 사용
+          final finalSecretKey =
+              isSecretKeyChanged
+                  ? secretKey
+                  : (viewModel.binanceSecretKey ?? '').trim();
+
+          // Secret 키가 없는 경우 경고
+          if (finalSecretKey.isEmpty) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Secret Key를 입력해주세요')),
+              );
+            }
+            return;
+          }
+
+          await viewModel.setBinanceApiKeys(apiKey, finalSecretKey);
           debugPrint(
-            'SettingsScreen: 저장 후 바이낸스 키 상태 - API: ${viewModel.binanceApiKey?.length ?? 0}, Secret: ${viewModel.binanceSecretKey?.length ?? 0}',
+            'SettingsScreen: 바이낸스 API 키 저장 완료 - 길이: ${apiKey.length}, Secret 키 길이: ${finalSecretKey.length}',
           );
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('$exchange API 키가 저장되었습니다')));
+
+          // 저장 후 API 키 길이 확인
+          if (exchange == '업비트') {
+            debugPrint(
+              'SettingsScreen: 저장 후 업비트 키 상태 - Access: ${viewModel.upbitAccessKey?.length ?? 0}, Secret: ${viewModel.upbitSecretKey?.length ?? 0}',
+            );
+          } else {
+            debugPrint(
+              'SettingsScreen: 저장 후 바이낸스 키 상태 - API: ${viewModel.binanceApiKey?.length ?? 0}, Secret: ${viewModel.binanceSecretKey?.length ?? 0}',
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('SettingsScreen: API 키 저장 중 오류 발생 - $e');
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('API 키 저장 중 오류가 발생했습니다: $e')));
         }
       }
     }

@@ -14,9 +14,12 @@ class CryptoViewModel extends ChangeNotifier {
   List<CryptoApiService> _availableServices = [];
   CryptoApiService? _activeService;
   bool _isLoading = false;
+  bool _isBackgroundLoading = false; // 백그라운드 로딩 상태
   String? _error;
   DateTime _lastUpdated = DateTime.now();
   Timer? _refreshTimer;
+  Map<String, double> _previousPrices = {}; // 이전 가격 저장용
+  Map<String, bool> _priceIncreased = {}; // 가격 상승/하락 상태 저장
 
   // 생성자
   CryptoViewModel({SettingsService? settingsService})
@@ -85,7 +88,7 @@ class CryptoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 데이터 새로고침
+  // 데이터 새로고침 (전체 UI 새로고침)
   Future<void> refresh() async {
     if (_isLoading) {
       debugPrint('CryptoViewModel: 이미 로딩 중이므로 새로고침 무시');
@@ -117,7 +120,9 @@ class CryptoViewModel extends ChangeNotifier {
       debugPrint('CryptoViewModel: API 응답 수신 - ${coins.length}개 코인');
 
       if (coins.isNotEmpty) {
+        _storePreviousPrices(); // 이전 가격 저장
         _topCoins = coins;
+        _updatePriceChangeStatus(); // 가격 변화 상태 업데이트
         _lastUpdated = DateTime.now();
         debugPrint('CryptoViewModel: 데이터 업데이트 성공');
 
@@ -146,17 +151,91 @@ class CryptoViewModel extends ChangeNotifier {
     }
   }
 
+  // CoinViewModel과의 호환성을 위한 메서드
+  Future<void> refreshCoins() async {
+    return refresh();
+  }
+
+  // 백그라운드 데이터 새로고침 (UI 업데이트 최소화)
+  Future<void> refreshBackground() async {
+    if (_isBackgroundLoading || _activeService == null) {
+      return;
+    }
+
+    _isBackgroundLoading = true;
+
+    try {
+      final coins = await _activeService!.getTopCoins(limit: 20);
+
+      if (coins.isNotEmpty) {
+        _storePreviousPrices(); // 이전 가격 저장
+        _topCoins = coins;
+        _updatePriceChangeStatus(); // 가격 변화 상태 업데이트
+        _lastUpdated = DateTime.now();
+
+        // UI 업데이트
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('CryptoViewModel: 백그라운드 새로고침 오류 - $e');
+    } finally {
+      _isBackgroundLoading = false;
+    }
+  }
+
+  // 이전 가격 정보 저장
+  void _storePreviousPrices() {
+    for (final coin in _topCoins) {
+      _previousPrices[coin.symbol] = coin.currentPrice;
+    }
+  }
+
+  // 가격 변화 상태 업데이트
+  void _updatePriceChangeStatus() {
+    for (final coin in _topCoins) {
+      final prevPrice = _previousPrices[coin.symbol];
+      if (prevPrice != null) {
+        _priceIncreased[coin.symbol] = coin.currentPrice > prevPrice;
+      }
+    }
+  }
+
   // 자동 새로고침 타이머 시작
   void _startRefreshTimer() {
     // 기존 타이머 취소
     _refreshTimer?.cancel();
 
-    // 설정된 새로고침 간격으로 타이머 설정
+    // 일반 새로고침 타이머 (30초~60초)
     final interval = _settingsService.getRefreshInterval();
-    _refreshTimer = Timer.periodic(
-      Duration(seconds: interval),
-      (_) => refresh(),
+
+    // 실시간성을 높이기 위해 5초마다 백그라운드 업데이트
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      // 매 5초마다 백그라운드 새로고침
+      refreshBackground();
+
+      // 설정된 간격에 따라 전체 새로고침
+      if (timer.tick % (interval ~/ 5) == 0) {
+        refresh();
+      }
+    });
+  }
+
+  // 특정 코인의 가격 변화 상태 확인 (상승/하락)
+  bool isPriceIncreased(String symbol) {
+    return _priceIncreased[symbol] ?? false;
+  }
+
+  // 특정 코인의 가격이 방금 변경되었는지 확인
+  bool hasPriceChanged(String symbol) {
+    final prevPrice = _previousPrices[symbol];
+    if (prevPrice == null) return false;
+
+    final coin = _topCoins.firstWhere(
+      (c) => c.symbol == symbol,
+      orElse: () => _topCoins.first,
     );
+
+    return prevPrice != coin.currentPrice;
   }
 
   // 새로고침 간격 변경 시 타이머 재설정
@@ -188,6 +267,7 @@ class CryptoViewModel extends ChangeNotifier {
 
   // Getters
   List<Coin> get topCoins => _topCoins;
+  List<Coin> get coins => _topCoins; // CoinViewModel과의 호환성을 위한 getter
   List<CryptoApiService> get availableServices => _availableServices;
   CryptoApiService? get activeService => _activeService;
   bool get isLoading => _isLoading;

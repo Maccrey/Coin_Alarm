@@ -188,14 +188,34 @@ class UpbitApiService implements CryptoApiService {
             id: symbol.toLowerCase(),
             name: name,
             symbol: symbol,
-            currentPrice: ticker['trade_price'] as double,
-            priceChange24h: ticker['signed_change_price'] as double,
+            currentPrice:
+                (ticker['trade_price'] is int)
+                    ? (ticker['trade_price'] as int).toDouble()
+                    : ticker['trade_price'] as double,
+            priceChange24h:
+                (ticker['signed_change_price'] is int)
+                    ? (ticker['signed_change_price'] as int).toDouble()
+                    : ticker['signed_change_price'] as double,
             priceChangePercentage24h:
-                ticker['signed_change_rate'] * 100 as double,
-            marketCap: ticker['acc_trade_price_24h'] as double,
-            volume24h: ticker['acc_trade_volume_24h'] as double,
-            high24h: ticker['high_price'] as double,
-            low24h: ticker['low_price'] as double,
+                (ticker['signed_change_rate'] is int)
+                    ? (ticker['signed_change_rate'] as int) * 100.0
+                    : ticker['signed_change_rate'] * 100 as double,
+            marketCap:
+                (ticker['acc_trade_price_24h'] is int)
+                    ? (ticker['acc_trade_price_24h'] as int).toDouble()
+                    : ticker['acc_trade_price_24h'] as double,
+            volume24h:
+                (ticker['acc_trade_volume_24h'] is int)
+                    ? (ticker['acc_trade_volume_24h'] as int).toDouble()
+                    : ticker['acc_trade_volume_24h'] as double,
+            high24h:
+                (ticker['high_price'] is int)
+                    ? (ticker['high_price'] as int).toDouble()
+                    : ticker['high_price'] as double,
+            low24h:
+                (ticker['low_price'] is int)
+                    ? (ticker['low_price'] as int).toDouble()
+                    : ticker['low_price'] as double,
             lastUpdated: DateTime.fromMillisecondsSinceEpoch(
               ticker['timestamp'],
             ),
@@ -255,13 +275,34 @@ class UpbitApiService implements CryptoApiService {
         id: symbol.toLowerCase(),
         name: name,
         symbol: symbol.toUpperCase(),
-        currentPrice: ticker['trade_price'] as double,
-        priceChange24h: ticker['signed_change_price'] as double,
-        priceChangePercentage24h: ticker['signed_change_rate'] * 100 as double,
-        marketCap: ticker['acc_trade_price_24h'] as double,
-        volume24h: ticker['acc_trade_volume_24h'] as double,
-        high24h: ticker['high_price'] as double,
-        low24h: ticker['low_price'] as double,
+        currentPrice:
+            (ticker['trade_price'] is int)
+                ? (ticker['trade_price'] as int).toDouble()
+                : ticker['trade_price'] as double,
+        priceChange24h:
+            (ticker['signed_change_price'] is int)
+                ? (ticker['signed_change_price'] as int).toDouble()
+                : ticker['signed_change_price'] as double,
+        priceChangePercentage24h:
+            (ticker['signed_change_rate'] is int)
+                ? (ticker['signed_change_rate'] as int) * 100.0
+                : ticker['signed_change_rate'] * 100 as double,
+        marketCap:
+            (ticker['acc_trade_price_24h'] is int)
+                ? (ticker['acc_trade_price_24h'] as int).toDouble()
+                : ticker['acc_trade_price_24h'] as double,
+        volume24h:
+            (ticker['acc_trade_volume_24h'] is int)
+                ? (ticker['acc_trade_volume_24h'] as int).toDouble()
+                : ticker['acc_trade_volume_24h'] as double,
+        high24h:
+            (ticker['high_price'] is int)
+                ? (ticker['high_price'] as int).toDouble()
+                : ticker['high_price'] as double,
+        low24h:
+            (ticker['low_price'] is int)
+                ? (ticker['low_price'] as int).toDouble()
+                : ticker['low_price'] as double,
         lastUpdated: DateTime.fromMillisecondsSinceEpoch(ticker['timestamp']),
         imageUrl: 'https://static.upbit.com/logos/${symbol.toUpperCase()}.png',
       );
