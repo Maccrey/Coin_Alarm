@@ -11,8 +11,10 @@ import 'viewmodel/coin_viewmodel.dart';
 import 'viewmodel/news_viewmodel.dart';
 import 'viewmodel/price_alert_viewmodel.dart';
 import 'viewmodel/settings_viewmodel.dart';
+import 'viewmodel/crypto_viewmodel.dart';
 import 'view/screens/splash_screen.dart';
 import 'services/supabase_client.dart';
+import 'view/screens/settings_screen.dart';
 
 // 앱 진입점
 void main() async {
@@ -89,6 +91,10 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => SettingsViewModel(settingsService),
         ),
+        // 실시간 암호화폐 API 데이터 ViewModel
+        ChangeNotifierProvider(
+          create: (_) => CryptoViewModel(settingsService: settingsService),
+        ),
       ],
       builder: (context, child) {
         // SettingsViewModel에서 테마 모드 가져오기
@@ -102,6 +108,9 @@ class MyApp extends StatelessWidget {
           darkTheme: AppTheme.darkTheme(), // 다크 테마 적용
           themeMode: themeMode, // 설정에서 선택한 테마 모드 적용
           home: const SplashScreen(), // 스플래시 화면으로 시작
+          // 라우트 정의
+          routes: {'/settings': (context) => const SettingsScreen()},
+
           // 상태바 아이콘 색상을 테마에 맞게 자동으로 조정
           builder: (context, child) {
             // 상태바 스타일을 테마에 맞게 설정
@@ -109,16 +118,18 @@ class MyApp extends StatelessWidget {
             SystemChrome.setSystemUIOverlayStyle(
               SystemUiOverlayStyle(
                 statusBarColor: Colors.transparent,
-                statusBarIconBrightness: brightness == Brightness.light
-                    ? Brightness.dark
-                    : Brightness.light,
-                systemNavigationBarColor: brightness == Brightness.light
-                    ? AppTheme.lightBackgroundColor
-                    : AppTheme.darkBackgroundColor,
+                statusBarIconBrightness:
+                    brightness == Brightness.light
+                        ? Brightness.dark
+                        : Brightness.light,
+                systemNavigationBarColor:
+                    brightness == Brightness.light
+                        ? AppTheme.lightBackgroundColor
+                        : AppTheme.darkBackgroundColor,
                 systemNavigationBarIconBrightness:
                     brightness == Brightness.light
-                    ? Brightness.dark
-                    : Brightness.light,
+                        ? Brightness.dark
+                        : Brightness.light,
               ),
             );
             return child!;

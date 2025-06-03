@@ -22,20 +22,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // 확인 다이얼로그
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('로그아웃'),
-        content: const Text('정말 로그아웃 하시겠습니까?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('로그아웃'),
+            content: const Text('정말 로그아웃 하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('로그아웃'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('로그아웃'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed != true) return;
@@ -146,23 +147,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Upbit API 키 설정
         ListTile(
           title: const Text('Upbit API 키 설정'),
-          subtitle: Text(viewModel.hasUpbitApiKeys ? '설정됨' : '미설정'),
-          leading: const Padding(
-            padding: EdgeInsets.only(left: 16.0),
-            child: Icon(Icons.vpn_key_outlined, size: 20),
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: viewModel.isLoading
-              ? null
-              : () => _showApiKeyInputDialog(
-                  context: context,
-                  exchange: 'Upbit',
-                  accessKey: viewModel.upbitAccessKey,
-                  secretKey: viewModel.upbitSecretKey,
-                  onSave: (accessKey, secretKey) {
-                    viewModel.setUpbitApiKeys(accessKey, secretKey);
-                  },
-                ),
+          subtitle: Text(viewModel.hasUpbitApiKeys ? '설정됨' : '설정되지 않음'),
+          leading: const Icon(Icons.security),
+          onTap:
+              viewModel.isLoading
+                  ? null
+                  : () => _showApiKeyDialog(context, '업비트', viewModel),
         ),
 
         const Divider(height: 1, indent: 16, endIndent: 16),
@@ -170,23 +160,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Binance API 키 설정
         ListTile(
           title: const Text('Binance API 키 설정'),
-          subtitle: Text(viewModel.hasBinanceApiKeys ? '설정됨' : '미설정'),
-          leading: const Padding(
-            padding: EdgeInsets.only(left: 16.0),
-            child: Icon(Icons.vpn_key_outlined, size: 20),
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: viewModel.isLoading
-              ? null
-              : () => _showApiKeyInputDialog(
-                  context: context,
-                  exchange: 'Binance',
-                  accessKey: viewModel.binanceApiKey,
-                  secretKey: viewModel.binanceSecretKey,
-                  onSave: (accessKey, secretKey) {
-                    viewModel.setBinanceApiKeys(accessKey, secretKey);
-                  },
-                ),
+          subtitle: Text(viewModel.hasBinanceApiKeys ? '설정됨' : '설정되지 않음'),
+          leading: const Icon(Icons.security),
+          onTap:
+              viewModel.isLoading
+                  ? null
+                  : () => _showApiKeyDialog(context, '바이낸스', viewModel),
         ),
 
         const Divider(height: 1, indent: 16, endIndent: 16),
@@ -202,89 +181,127 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: EdgeInsets.only(left: 16.0),
             child: Icon(Icons.delete_outline, color: Colors.orange),
           ),
-          onTap: viewModel.isLoading
-              ? null
-              : () => _showClearApiKeysDialog(context, viewModel),
+          onTap:
+              viewModel.isLoading
+                  ? null
+                  : () => _showClearApiKeysDialog(context, viewModel),
         ),
       ],
     );
   }
 
   // API 키 입력 다이얼로그
-  Future<void> _showApiKeyInputDialog({
-    required BuildContext context,
-    required String exchange,
-    String? accessKey,
-    String? secretKey,
-    required Function(String, String) onSave,
-  }) async {
-    final accessKeyController = TextEditingController(text: accessKey ?? '');
-    final secretKeyController = TextEditingController(text: secretKey ?? '');
+  Future<void> _showApiKeyDialog(
+    BuildContext context,
+    String exchange,
+    SettingsViewModel viewModel,
+  ) async {
+    debugPrint('SettingsScreen: $exchange API 키 입력 다이얼로그 표시');
 
-    final saved = await showDialog<bool>(
+    final apiKeyController = TextEditingController();
+    final secretKeyController = TextEditingController();
+
+    final result = await showDialog<Map<String, String>?>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('$exchange API 키 설정'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${exchange}에서 발급받은 API 키를 입력하세요.\n해당 키는 로컬에만 저장되며, 서버로 전송되지 않습니다.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).hintColor,
+      builder:
+          (context) => AlertDialog(
+            title: Text('$exchange API 키 설정'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 안내 메시지
+                Text(
+                  '${exchange}에서 발급받은 API 키를 입력하세요.\n해당 키는 로컬에만 저장되며, 서버로 전송되지 않습니다.',
                 ),
+                const SizedBox(height: 16),
+                // API 키 입력
+                TextField(
+                  controller: apiKeyController,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: '$exchange Access Key',
+                  ),
+                  autocorrect: false,
+                  enableSuggestions: false,
+                ),
+                const SizedBox(height: 12),
+                // Secret 키 입력
+                TextField(
+                  controller: secretKeyController,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: '$exchange Secret Key',
+                  ),
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  obscureText: true,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('취소'),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: accessKeyController,
-                decoration: const InputDecoration(
-                  labelText: 'Access Key',
-                  hintText: 'API 액세스 키 입력',
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: secretKeyController,
-                decoration: const InputDecoration(
-                  labelText: 'Secret Key',
-                  hintText: 'API 시크릿 키 입력',
-                ),
-                obscureText: true,
+              TextButton(
+                onPressed: () {
+                  // 값을 먼저 가져온 다음 팝업을 닫음
+                  final apiKey = apiKeyController.text.trim();
+                  final secretKey = secretKeyController.text.trim();
+
+                  // 값이 비어있지 않은 경우만 반환
+                  if (apiKey.isNotEmpty && secretKey.isNotEmpty) {
+                    Navigator.pop(context, {
+                      'apiKey': apiKey,
+                      'secretKey': secretKey,
+                    });
+                  } else {
+                    Navigator.pop(context, null);
+                  }
+                },
+                child: const Text('저장'),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (accessKeyController.text.trim().isEmpty ||
-                  secretKeyController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('모든 필드를 입력해주세요')));
-                return;
-              }
-              Navigator.pop(context, true);
-            },
-            child: const Text('저장'),
-          ),
-        ],
-      ),
     );
 
-    if (saved == true) {
-      onSave(accessKeyController.text.trim(), secretKeyController.text.trim());
+    // 컨트롤러 dispose (더 이상 사용하지 않음)
+    apiKeyController.dispose();
+    secretKeyController.dispose();
+
+    // 다이얼로그에서 반환된 값 처리
+    if (result != null) {
+      final apiKey = result['apiKey']!;
+      final secretKey = result['secretKey']!;
+
+      debugPrint(
+        'SettingsScreen: $exchange API 키 저장 시작 - API 키 길이: ${apiKey.length}, 시크릿 키 길이: ${secretKey.length}',
+      );
+
+      if (exchange == '업비트') {
+        await viewModel.setUpbitApiKeys(apiKey, secretKey);
+        debugPrint('SettingsScreen: 업비트 API 키 저장 완료');
+      } else if (exchange == '바이낸스') {
+        await viewModel.setBinanceApiKeys(apiKey, secretKey);
+        debugPrint('SettingsScreen: 바이낸스 API 키 저장 완료');
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('$exchange API 키가 저장되었습니다')));
+
+        // 저장 후 API 키 길이 확인
+        if (exchange == '업비트') {
+          debugPrint(
+            'SettingsScreen: 저장 후 업비트 키 상태 - Access: ${viewModel.upbitAccessKey?.length ?? 0}, Secret: ${viewModel.upbitSecretKey?.length ?? 0}',
+          );
+        } else {
+          debugPrint(
+            'SettingsScreen: 저장 후 바이낸스 키 상태 - API: ${viewModel.binanceApiKey?.length ?? 0}, Secret: ${viewModel.binanceSecretKey?.length ?? 0}',
+          );
+        }
       }
     }
   }
@@ -296,20 +313,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('API 키 초기화'),
-        content: const Text('저장된 모든 API 키를 삭제하시겠습니까?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('API 키 초기화'),
+            content: const Text('저장된 모든 API 키를 삭제하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('초기화'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('초기화'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed == true) {
@@ -350,20 +368,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // 확인 다이얼로그
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('설정 초기화'),
-        content: const Text('모든 설정을 기본값으로 초기화하시겠습니까?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('설정 초기화'),
+            content: const Text('모든 설정을 기본값으로 초기화하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('초기화'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('초기화'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed == true) {
@@ -472,9 +491,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '기기의 테마 설정을 따릅니다',
                 icon: Icons.settings_brightness,
                 selected: viewModel.themeMode == ThemeMode.system,
-                onTap: viewModel.isLoading
-                    ? null
-                    : () => viewModel.setThemeMode(ThemeMode.system),
+                onTap:
+                    viewModel.isLoading
+                        ? null
+                        : () => viewModel.setThemeMode(ThemeMode.system),
               ),
 
               const Divider(),
@@ -485,9 +505,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '밝은 색상의 테마를 사용합니다',
                 icon: Icons.wb_sunny_outlined,
                 selected: viewModel.themeMode == ThemeMode.light,
-                onTap: viewModel.isLoading
-                    ? null
-                    : () => viewModel.setThemeMode(ThemeMode.light),
+                onTap:
+                    viewModel.isLoading
+                        ? null
+                        : () => viewModel.setThemeMode(ThemeMode.light),
                 color: AppTheme.lightBackgroundColor,
                 textColor: AppTheme.lightTextColor,
               ),
@@ -500,9 +521,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '어두운 색상의 테마를 사용합니다',
                 icon: Icons.nightlight_round,
                 selected: viewModel.themeMode == ThemeMode.dark,
-                onTap: viewModel.isLoading
-                    ? null
-                    : () => viewModel.setThemeMode(ThemeMode.dark),
+                onTap:
+                    viewModel.isLoading
+                        ? null
+                        : () => viewModel.setThemeMode(ThemeMode.dark),
                 color: AppTheme.darkBackgroundColor,
                 textColor: AppTheme.darkTextColor,
               ),
@@ -537,9 +559,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: color,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: selected
-                      ? AppTheme.primaryColor
-                      : Colors.grey.withOpacity(0.3),
+                  color:
+                      selected
+                          ? AppTheme.primaryColor
+                          : Colors.grey.withOpacity(0.3),
                   width: selected ? 2 : 1,
                 ),
               ),
@@ -659,12 +682,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   min: 0,
                   max: 3,
                   divisions: 3,
-                  onChanged: viewModel.isLoading
-                      ? null
-                      : (value) {
-                          final interval = _getIntervalFromSlider(value);
-                          viewModel.setRefreshInterval(interval);
-                        },
+                  onChanged:
+                      viewModel.isLoading
+                          ? null
+                          : (value) {
+                            final interval = _getIntervalFromSlider(value);
+                            viewModel.setRefreshInterval(interval);
+                          },
                 ),
               ),
 
@@ -769,9 +793,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: const Text('가격 알림 및 중요 소식 알림 받기'),
           secondary: const Icon(Icons.notifications_outlined),
           value: viewModel.pushNotificationsEnabled,
-          onChanged: viewModel.isLoading
-              ? null
-              : (value) => viewModel.setPushNotificationsEnabled(value),
+          onChanged:
+              viewModel.isLoading
+                  ? null
+                  : (value) => viewModel.setPushNotificationsEnabled(value),
         ),
       ),
     );
@@ -788,9 +813,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: const Text('지문 또는 얼굴 인식으로 로그인'),
           secondary: const Icon(Icons.fingerprint),
           value: viewModel.useBiometricAuth,
-          onChanged: viewModel.isLoading
-              ? null
-              : (value) => viewModel.setUseBiometricAuth(value),
+          onChanged:
+              viewModel.isLoading
+                  ? null
+                  : (value) => viewModel.setUseBiometricAuth(value),
         ),
       ),
     );
@@ -805,63 +831,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: Text(viewModel.language),
         leading: const Icon(Icons.language),
         trailing: const Icon(Icons.chevron_right),
-        onTap: viewModel.isLoading
-            ? null
-            : () {
-                // 언어 선택 바텀시트 표시
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primaryContainer.withOpacity(0.3),
-                        child: const Text(
-                          '언어 설정',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+        onTap:
+            viewModel.isLoading
+                ? null
+                : () {
+                  // 언어 선택 바텀시트 표시
+                  showModalBottomSheet(
+                    context: context,
+                    builder:
+                        (context) => Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer.withOpacity(0.3),
+                              child: const Text(
+                                '언어 설정',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            ListTile(
+                              title: const Text('한국어'),
+                              leading: Radio<String>(
+                                value: '한국어',
+                                groupValue: viewModel.language,
+                                onChanged: null,
+                              ),
+                              trailing:
+                                  viewModel.language == '한국어'
+                                      ? Icon(
+                                        Icons.check_circle,
+                                        color:
+                                            Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                      )
+                                      : null,
+                              onTap: () {
+                                viewModel.setLanguage('한국어');
+                                Navigator.pop(context);
+                              },
+                            ),
+                            ListTile(
+                              title: const Text('English (준비 중)'),
+                              leading: Radio<String>(
+                                value: 'English',
+                                groupValue: viewModel.language,
+                                onChanged: null,
+                              ),
+                              enabled: false,
+                              onTap: null,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                         ),
-                      ),
-                      ListTile(
-                        title: const Text('한국어'),
-                        leading: Radio<String>(
-                          value: '한국어',
-                          groupValue: viewModel.language,
-                          onChanged: null,
-                        ),
-                        trailing: viewModel.language == '한국어'
-                            ? Icon(
-                                Icons.check_circle,
-                                color: Theme.of(context).colorScheme.primary,
-                              )
-                            : null,
-                        onTap: () {
-                          viewModel.setLanguage('한국어');
-                          Navigator.pop(context);
-                        },
-                      ),
-                      ListTile(
-                        title: const Text('English (준비 중)'),
-                        leading: Radio<String>(
-                          value: 'English',
-                          groupValue: viewModel.language,
-                          onChanged: null,
-                        ),
-                        enabled: false,
-                        onTap: null,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                );
-              },
+                  );
+                },
       ),
     );
   }
@@ -921,9 +953,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Card(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: InkWell(
-            onTap: settingsViewModel.isLoading
-                ? null
-                : () => _resetSettings(settingsViewModel),
+            onTap:
+                settingsViewModel.isLoading
+                    ? null
+                    : () => _resetSettings(settingsViewModel),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
@@ -983,100 +1016,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(
-              Icons.currency_bitcoin,
-              size: 28,
-              color: AppTheme.primaryColor,
-            ),
-            const SizedBox(width: 8),
-            Text(AppConstants.appName),
-          ],
-        ),
-        content: StatefulBuilder(
-          builder: (context, setState) {
-            bool _isKorean = viewModel.language == '한국어';
-
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
               children: [
-                // 버전 정보
-                Text('버전: 1.0.0 (개발 버전)'),
-                const SizedBox(height: 16),
+                Icon(
+                  Icons.currency_bitcoin,
+                  size: 28,
+                  color: AppTheme.primaryColor,
+                ),
+                const SizedBox(width: 8),
+                Text(AppConstants.appName),
+              ],
+            ),
+            content: StatefulBuilder(
+              builder: (context, setState) {
+                bool _isKorean = viewModel.language == '한국어';
 
-                // 언어 전환 스위치
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '한국어',
-                      style: TextStyle(
-                        fontWeight: _isKorean
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
+                    // 버전 정보
+                    Text('버전: 1.0.0 (개발 버전)'),
+                    const SizedBox(height: 16),
+
+                    // 언어 전환 스위치
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '한국어',
+                          style: TextStyle(
+                            fontWeight:
+                                _isKorean ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        Switch(
+                          value: !_isKorean,
+                          onChanged: (value) {
+                            setState(() {
+                              _isKorean = !_isKorean;
+                              viewModel.setLanguage(value ? 'English' : '한국어');
+                            });
+                          },
+                          activeColor: AppTheme.primaryColor,
+                        ),
+                        Text(
+                          'English',
+                          style: TextStyle(
+                            fontWeight:
+                                !_isKorean
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                          ),
+                        ),
+                      ],
                     ),
-                    Switch(
-                      value: !_isKorean,
-                      onChanged: (value) {
-                        setState(() {
-                          _isKorean = !_isKorean;
-                          viewModel.setLanguage(value ? 'English' : '한국어');
-                        });
-                      },
-                      activeColor: AppTheme.primaryColor,
-                    ),
+
+                    const SizedBox(height: 16),
+
+                    // 설명
                     Text(
-                      'English',
+                      _isKorean
+                          ? '코인 알람은 가상화폐 가격 모니터링 및 알림 서비스를 제공합니다.'
+                          : 'Coin Alarm provides cryptocurrency price monitoring and notification services.',
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _isKorean
+                          ? '개발: Flutter, Supabase'
+                          : 'Developed with: Flutter, Supabase',
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 저작권
+                    Text(
+                      _isKorean
+                          ? '© 2025 코인알람. 모든 권리 보유.'
+                          : '© 2025 CoinAlarm. All rights reserved.',
                       style: TextStyle(
-                        fontWeight: !_isKorean
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                        fontSize: 12,
+                        color: Theme.of(context).hintColor,
                       ),
                     ),
                   ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // 설명
-                Text(
-                  _isKorean
-                      ? '코인 알람은 가상화폐 가격 모니터링 및 알림 서비스를 제공합니다.'
-                      : 'Coin Alarm provides cryptocurrency price monitoring and notification services.',
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _isKorean
-                      ? '개발: Flutter, Supabase'
-                      : 'Developed with: Flutter, Supabase',
-                ),
-                const SizedBox(height: 16),
-
-                // 저작권
-                Text(
-                  _isKorean
-                      ? '© 2025 코인알람. 모든 권리 보유.'
-                      : '© 2025 CoinAlarm. All rights reserved.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).hintColor,
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(isKorean ? '닫기' : 'Close'),
+                );
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(isKorean ? '닫기' : 'Close'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

@@ -49,14 +49,15 @@ class SettingsViewModel extends ChangeNotifier {
 
   // 설정값 로드
   Future<void> _loadSettings() async {
+    debugPrint('SettingsViewModel: 설정 로드 시작');
     _isLoading = true;
     notifyListeners();
 
     try {
       _themeMode = _settingsService.getThemeMode();
       _refreshInterval = _settingsService.getRefreshInterval();
-      _pushNotificationsEnabled = _settingsService
-          .getPushNotificationsEnabled();
+      _pushNotificationsEnabled =
+          _settingsService.getPushNotificationsEnabled();
       _useBiometricAuth = _settingsService.getBiometricAuthEnabled();
       _language = _settingsService.getLanguage();
       _saveLoginInfo = _settingsService.getSaveLoginInfo();
@@ -66,8 +67,16 @@ class SettingsViewModel extends ChangeNotifier {
       _upbitSecretKey = _settingsService.getUpbitSecretKey();
       _binanceApiKey = _settingsService.getBinanceApiKey();
       _binanceSecretKey = _settingsService.getBinanceSecretKey();
+
+      debugPrint('SettingsViewModel: 설정 로드 완료');
+      debugPrint(
+        'SettingsViewModel: API 키 로드 상태 - Upbit: ${hasUpbitApiKeys}, Binance: ${hasBinanceApiKeys}',
+      );
+      debugPrint(
+        'SettingsViewModel: 업비트 키 길이 - Access: ${_upbitAccessKey?.length ?? 0}, Secret: ${_upbitSecretKey?.length ?? 0}',
+      );
     } catch (e) {
-      debugPrint('설정 로드 실패: $e');
+      debugPrint('SettingsViewModel: 설정 로드 실패: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -189,8 +198,14 @@ class SettingsViewModel extends ChangeNotifier {
 
   // Upbit API 키 설정
   Future<void> setUpbitApiKeys(String accessKey, String secretKey) async {
-    if (_upbitAccessKey == accessKey && _upbitSecretKey == secretKey) return;
+    if (_upbitAccessKey == accessKey && _upbitSecretKey == secretKey) {
+      debugPrint('SettingsViewModel: 업비트 API 키 변경 없음, 무시');
+      return;
+    }
 
+    debugPrint(
+      'SettingsViewModel: 업비트 API 키 설정 시도 - Access 키 길이: ${accessKey.length}, Secret 키 길이: ${secretKey.length}',
+    );
     _isLoading = true;
     notifyListeners();
 
@@ -198,8 +213,9 @@ class SettingsViewModel extends ChangeNotifier {
       await _settingsService.setUpbitApiKeys(accessKey, secretKey);
       _upbitAccessKey = accessKey;
       _upbitSecretKey = secretKey;
+      debugPrint('SettingsViewModel: 업비트 API 키 설정 성공');
     } catch (e) {
-      debugPrint('Upbit API 키 설정 실패: $e');
+      debugPrint('SettingsViewModel: 업비트 API 키 설정 실패: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -208,8 +224,14 @@ class SettingsViewModel extends ChangeNotifier {
 
   // Binance API 키 설정
   Future<void> setBinanceApiKeys(String apiKey, String secretKey) async {
-    if (_binanceApiKey == apiKey && _binanceSecretKey == secretKey) return;
+    if (_binanceApiKey == apiKey && _binanceSecretKey == secretKey) {
+      debugPrint('SettingsViewModel: 바이낸스 API 키 변경 없음, 무시');
+      return;
+    }
 
+    debugPrint(
+      'SettingsViewModel: 바이낸스 API 키 설정 시도 - API 키 길이: ${apiKey.length}, Secret 키 길이: ${secretKey.length}',
+    );
     _isLoading = true;
     notifyListeners();
 
@@ -217,8 +239,9 @@ class SettingsViewModel extends ChangeNotifier {
       await _settingsService.setBinanceApiKeys(apiKey, secretKey);
       _binanceApiKey = apiKey;
       _binanceSecretKey = secretKey;
+      debugPrint('SettingsViewModel: 바이낸스 API 키 설정 성공');
     } catch (e) {
-      debugPrint('Binance API 키 설정 실패: $e');
+      debugPrint('SettingsViewModel: 바이낸스 API 키 설정 실패: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

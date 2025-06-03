@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme.dart';
-import '../../data/dummy_coins.dart';
-import '../../data/dummy_news.dart';
 import '../../model/coin_model.dart';
-import '../../model/news_model.dart';
+import '../../viewmodel/crypto_viewmodel.dart';
+import '../../viewmodel/settings_viewmodel.dart';
 
 // 대시보드 화면 (홈 화면)
 class DashboardScreen extends StatefulWidget {
@@ -14,12 +14,40 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // 데이터 새로고침 관련 상태
-  bool _isRefreshing = false;
-  DateTime _lastUpdated = DateTime.now();
-
   // 검색창 컨트롤러
   final _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // 화면이 처음 로드될 때 API 키 확인 및 데이터 새로고침
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final cryptoViewModel = Provider.of<CryptoViewModel>(
+        context,
+        listen: false,
+      );
+      final settingsViewModel = Provider.of<SettingsViewModel>(
+        context,
+        listen: false,
+      );
+
+      if (cryptoViewModel.availableServices.isEmpty) {
+        debugPrint('대시보드: API 서비스 사용 불가 - API 키 확인 중');
+        final hasUpbitKeys = settingsViewModel.hasUpbitApiKeys;
+        final hasBinanceKeys = settingsViewModel.hasBinanceApiKeys;
+
+        debugPrint(
+          '대시보드: API 키 상태 - Upbit: $hasUpbitKeys, Binance: $hasBinanceKeys',
+        );
+
+        // API 키가 설정되어 있다면 데이터 새로고침 시도
+        if (hasUpbitKeys || hasBinanceKeys) {
+          debugPrint('대시보드: API 키가 설정되어 있어 CryptoViewModel 새로고침 시도');
+          cryptoViewModel.refresh();
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -27,83 +55,239 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  // 데이터 새로고침 함수
-  Future<void> _refreshData() async {
-    setState(() {
-      _isRefreshing = true;
-    });
-
-    // 실제로는 API 호출 등을 통해 데이터를 가져오지만, 여기서는 지연만 시뮬레이션
-    await Future.delayed(const Duration(seconds: 1));
-
-    setState(() {
-      _lastUpdated = DateTime.now();
-      _isRefreshing = false;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('코인 알람'),
-        actions: [
-          // 새로고침 버튼
-          IconButton(
-            icon: _isRefreshing
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.refresh),
-            onPressed: _isRefreshing ? null : _refreshData,
-            tooltip: '데이터 새로고침',
+    // CryptoViewModel 프로바이더 연결
+    return Consumer<CryptoViewModel>(
+      builder: (context, viewModel, _) {
+        debugPrint(
+          '대시보드 빌드: 서비스 있음=${viewModel.hasServices}, 코인 개수=${viewModel.topCoins.length}',
+        );
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('코인 알람'),
+            actions: [
+              // 새로고침 버튼
+              IconButton(
+                icon:
+                    viewModel.isLoading
+                        ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                        : const Icon(Icons.refresh),
+                onPressed:
+                    viewModel.isLoading ? null : () => viewModel.refresh(),
+                tooltip: '데이터 새로고침',
+              ),
+              // 알림 버튼
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {
+                  // 알림 화면으로 이동
+                },
+                tooltip: '알림',
+              ),
+              // 설정 버튼 추가
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () => Navigator.pushNamed(context, '/settings'),
+                tooltip: '설정',
+              ),
+            ],
           ),
-          // 알림 버튼
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {
-              // 알림 화면으로 이동
-            },
-            tooltip: '알림',
+          body: RefreshIndicator(
+            onRefresh: () => viewModel.refresh(),
+            child: _buildDashboardContent(viewModel),
           ),
+        );
+      },
+    );
+  }
+
+  // 대시보드 콘텐츠 위젯
+  Widget _buildDashboardContent(CryptoViewModel viewModel) {
+    // API 서비스가 없는 경우
+    if (!viewModel.hasServices) {
+      return _buildNoApiServiceView();
+    }
+
+    // 에러가 있는 경우
+    if (viewModel.error != null) {
+      return _buildErrorView(viewModel.error!);
+    }
+
+    // 데이터 로딩 중이고 데이터가 없는 경우
+    if (viewModel.isLoading && viewModel.topCoins.isEmpty) {
+      return _buildLoadingView();
+    }
+
+    // 정상 데이터 표시
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // 거래소 정보 표시
+        if (viewModel.activeService != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _buildExchangeInfoCard(viewModel),
+          ),
+
+        // 검색창
+        _buildSearchBar(),
+
+        const SizedBox(height: 24),
+
+        // 인기 코인 리스트
+        _buildPopularCoinsSection(viewModel),
+
+        const SizedBox(height: 24),
+
+        // 최신 뉴스 섹션 (임시로 간소화)
+        _buildSimpleNewsSection(),
+
+        const SizedBox(height: 16),
+
+        // 마지막 업데이트 시간 표시
+        Center(
+          child: Text(
+            '마지막 업데이트: ${_formatUpdateTime(viewModel.lastUpdated)}',
+            style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // API 서비스가 없을 때 표시되는 화면
+  Widget _buildNoApiServiceView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.vpn_key_outlined, size: 72, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              'API 키 설정이 필요합니다',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '업비트 또는 바이낸스 API 키를 설정하면 실시간 시세 정보를 확인할 수 있습니다.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.settings),
+              label: const Text('API 키 설정하기'),
+              onPressed: () {
+                // 설정 화면으로 이동
+                Navigator.pushNamed(context, '/settings');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 에러 발생 시 표시되는 화면
+  Widget _buildErrorView(String errorMessage) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 72, color: Colors.red),
+            const SizedBox(height: 16),
+            const Text(
+              '데이터를 불러올 수 없습니다',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(errorMessage, textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text('다시 시도'),
+              onPressed: () {
+                // 데이터 새로고침
+                context.read<CryptoViewModel>().refresh();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 로딩 중 표시되는 화면
+  Widget _buildLoadingView() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('데이터를 불러오는 중...'),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+    );
+  }
+
+  // 거래소 정보 카드
+  Widget _buildExchangeInfoCard(CryptoViewModel viewModel) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
           children: [
-            // 검색창
-            _buildSearchBar(),
-
-            const SizedBox(height: 24),
-
-            // 인기 코인 리스트
-            _buildPopularCoinsSection(),
-
-            const SizedBox(height: 24),
-
-            // 최신 뉴스 섹션
-            _buildLatestNewsSection(),
-
-            const SizedBox(height: 16),
-
-            // 마지막 업데이트 시간 표시
-            Center(
-              child: Text(
-                '마지막 업데이트: ${_formatUpdateTime(_lastUpdated)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).hintColor,
-                ),
+            const Icon(Icons.account_balance, size: 32),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${viewModel.activeService?.exchangeName} 실시간 시세',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (viewModel.availableServices.length > 1)
+                    Row(
+                      children: [
+                        const Text('거래소 변경:', style: TextStyle(fontSize: 12)),
+                        const SizedBox(width: 8),
+                        ...viewModel.availableServices.map(
+                          (service) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(service.exchangeName),
+                              selected: service == viewModel.activeService,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  viewModel.setActiveService(service);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -123,15 +307,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             hintText: '코인 검색 (BTC, ETH, ...)',
             border: InputBorder.none,
             icon: const Icon(Icons.search),
-            suffixIcon: _searchController.text.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _searchController.clear();
-                      FocusScope.of(context).unfocus();
-                    },
-                  ),
+            suffixIcon:
+                _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                        FocusScope.of(context).unfocus();
+                      },
+                    ),
           ),
           onChanged: (value) {
             setState(() {});
@@ -148,9 +334,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // 인기 코인 섹션 위젯
-  Widget _buildPopularCoinsSection() {
-    final popularCoins = DummyCoins.getPopularCoins();
-
+  Widget _buildPopularCoinsSection(CryptoViewModel viewModel) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -173,7 +357,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(height: 16),
         // 코인 목록
-        ...popularCoins.map((coin) => _buildCoinListItem(coin)),
+        if (viewModel.topCoins.isEmpty && !viewModel.isLoading)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('표시할 코인 정보가 없습니다.'),
+            ),
+          )
+        else
+          ...viewModel.topCoins.map((coin) => _buildCoinListItem(coin)),
       ],
     );
   }
@@ -200,16 +392,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: Theme.of(context).colorScheme.surfaceVariant,
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: coin.imageUrl != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: Image.network(
-                          coin.imageUrl!,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.currency_bitcoin),
-                        ),
-                      )
-                    : const Icon(Icons.currency_bitcoin),
+                child:
+                    coin.imageUrl != null
+                        ? ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Image.network(
+                            coin.imageUrl!,
+                            errorBuilder:
+                                (context, error, stackTrace) =>
+                                    const Icon(Icons.currency_bitcoin),
+                          ),
+                        )
+                        : const Icon(Icons.currency_bitcoin),
               ),
               const SizedBox(width: 16),
               // 코인 정보
@@ -263,101 +457,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // 최신 뉴스 섹션 위젯
-  Widget _buildLatestNewsSection() {
-    final latestNews = DummyNews.getLatestNews(limit: 3);
-
+  // 간소화된 뉴스 섹션
+  Widget _buildSimpleNewsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '최신 뉴스',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge!.copyWith(fontWeight: FontWeight.bold),
-            ),
-            TextButton(
-              onPressed: () {
-                // 뉴스 목록 전체보기 화면으로 이동
-              },
-              child: const Text('더 보기'),
-            ),
-          ],
+        Text(
+          '최신 뉴스',
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge!.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
-        // 뉴스 목록
-        ...latestNews.map((news) => _buildNewsListItem(news)),
-      ],
-    );
-  }
-
-  // 뉴스 목록 아이템 위젯
-  Widget _buildNewsListItem(News news) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          // 뉴스 상세 페이지로 이동
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 뉴스 제목 및 소스
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      news.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+        // 뉴스 API 연동 전 임시 카드
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.update,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    '뉴스 데이터는 추후 업데이트될 예정입니다.',
+                    style: TextStyle(fontSize: 16),
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // 뉴스 요약
-              Text(
-                news.summary,
-                style: const TextStyle(fontSize: 14),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              // 뉴스 소스 및 시간
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    news.source,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  Text(
-                    news.getTimeAgo(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).hintColor,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 

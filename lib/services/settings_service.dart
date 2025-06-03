@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math';
 import '../core/constants.dart';
 
 // 설정 관리를 위한 서비스 클래스
@@ -39,6 +40,19 @@ class SettingsService {
     try {
       _prefs = await SharedPreferences.getInstance();
       debugPrint('SettingsService: 초기화 완료');
+
+      // API 키 존재 확인
+      final upbitAccessKey = getUpbitAccessKey();
+      final upbitSecretKey = getUpbitSecretKey();
+      final binanceApiKey = getBinanceApiKey();
+      final binanceSecretKey = getBinanceSecretKey();
+
+      debugPrint(
+        'SettingsService: API 키 확인 - Upbit Access: ${upbitAccessKey != null && upbitAccessKey.isNotEmpty}, Upbit Secret: ${upbitSecretKey != null && upbitSecretKey.isNotEmpty}',
+      );
+      debugPrint(
+        'SettingsService: API 키 확인 - Binance API: ${binanceApiKey != null && binanceApiKey.isNotEmpty}, Binance Secret: ${binanceSecretKey != null && binanceSecretKey.isNotEmpty}',
+      );
     } catch (e) {
       debugPrint('SettingsService: 초기화 실패 - $e');
       rethrow;
@@ -143,6 +157,10 @@ class SettingsService {
 
   // Upbit API 키 저장
   Future<bool> setUpbitApiKeys(String accessKey, String secretKey) async {
+    debugPrint(
+      'SettingsService: Upbit API 키 저장 시도 - Access 키 길이: ${accessKey.length}, Secret 키 길이: ${secretKey.length}',
+    );
+
     final accessKeySaved = await _prefs.setString(
       _keyUpbitAccessKey,
       accessKey,
@@ -151,45 +169,83 @@ class SettingsService {
       _keyUpbitSecretKey,
       secretKey,
     );
-    return accessKeySaved && secretKeySaved;
+
+    final success = accessKeySaved && secretKeySaved;
+    debugPrint('SettingsService: Upbit API 키 저장 ${success ? '성공' : '실패'}');
+    return success;
   }
 
   // Upbit Access Key 가져오기
   String? getUpbitAccessKey() {
-    return _prefs.getString(_keyUpbitAccessKey);
+    final key = _prefs.getString(_keyUpbitAccessKey);
+    debugPrint(
+      'SettingsService: Upbit Access Key 조회 - ${key != null ? "존재함 (${key.length}자)" : "없음"}',
+    );
+    if (key != null && key.isNotEmpty) {
+      debugPrint(
+        'SettingsService: Upbit Access Key 샘플 - ${key.substring(0, min(4, key.length))}...',
+      );
+    }
+    return key;
   }
 
   // Upbit Secret Key 가져오기
   String? getUpbitSecretKey() {
-    return _prefs.getString(_keyUpbitSecretKey);
+    final key = _prefs.getString(_keyUpbitSecretKey);
+    debugPrint(
+      'SettingsService: Upbit Secret Key 조회 - ${key != null ? "존재함 (${key.length}자)" : "없음"}',
+    );
+    if (key != null && key.isNotEmpty) {
+      debugPrint(
+        'SettingsService: Upbit Secret Key 샘플 - ${key.substring(0, min(4, key.length))}...',
+      );
+    }
+    return key;
   }
 
   // Binance API 키 저장
   Future<bool> setBinanceApiKeys(String apiKey, String secretKey) async {
+    debugPrint(
+      'SettingsService: Binance API 키 저장 시도 - API 키 길이: ${apiKey.length}, Secret 키 길이: ${secretKey.length}',
+    );
+
     final apiKeySaved = await _prefs.setString(_keyBinanceApiKey, apiKey);
     final secretKeySaved = await _prefs.setString(
       _keyBinanceSecretKey,
       secretKey,
     );
-    return apiKeySaved && secretKeySaved;
+
+    final success = apiKeySaved && secretKeySaved;
+    debugPrint('SettingsService: Binance API 키 저장 ${success ? '성공' : '실패'}');
+    return success;
   }
 
   // Binance API Key 가져오기
   String? getBinanceApiKey() {
-    return _prefs.getString(_keyBinanceApiKey);
+    final key = _prefs.getString(_keyBinanceApiKey);
+    debugPrint(
+      'SettingsService: Binance API Key 조회 - ${key != null ? "존재함 (${key.length}자)" : "없음"}',
+    );
+    return key;
   }
 
   // Binance Secret Key 가져오기
   String? getBinanceSecretKey() {
-    return _prefs.getString(_keyBinanceSecretKey);
+    final key = _prefs.getString(_keyBinanceSecretKey);
+    debugPrint(
+      'SettingsService: Binance Secret Key 조회 - ${key != null ? "존재함 (${key.length}자)" : "없음"}',
+    );
+    return key;
   }
 
   // API 키 초기화
   Future<void> clearApiKeys() async {
+    debugPrint('SettingsService: 모든 API 키 초기화 시도');
     await _prefs.remove(_keyUpbitAccessKey);
     await _prefs.remove(_keyUpbitSecretKey);
     await _prefs.remove(_keyBinanceApiKey);
     await _prefs.remove(_keyBinanceSecretKey);
+    debugPrint('SettingsService: 모든 API 키 초기화 완료');
   }
 
   // 모든 설정 기본값으로 초기화
