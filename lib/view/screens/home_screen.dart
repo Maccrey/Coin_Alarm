@@ -38,8 +38,21 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
-    // 기본적으로 BTC, ETH는 선택되도록 설정
-    _selectedCoins = {'BTC', 'ETH'};
+    // 기본적으로 DefaultSettings에서 기본 코인 목록을 가져옴
+    _selectedCoins = Set.from(DefaultSettings.defaultFavoriteCoins);
+
+    // CryptoViewModel의 새로고침 간격이 변경될 때마다 UI 업데이트를 위한 리스너 설정
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final cryptoViewModel = Provider.of<CryptoViewModel>(
+        context,
+        listen: false,
+      );
+
+      // 화면이 처음 로드될 때 데이터 가져오기
+      if (cryptoViewModel.topCoins.isEmpty) {
+        cryptoViewModel.refresh();
+      }
+    });
   }
 
   @override
@@ -84,20 +97,42 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 코인 선택 모달 표시
   void _showCoinSelectionModal() {
-    final supportedCoins = DummyCoins.popularCoins;
+    // API에서 가져온 코인 목록 사용
+    final cryptoViewModel = Provider.of<CryptoViewModel>(
+      context,
+      listen: false,
+    );
 
     // 임시 선택 상태를 저장할 집합 생성
     Set<String> tempSelectedCoins = Set.from(_selectedCoins);
 
+    // 검색어 컨트롤러
+    final searchController = TextEditingController();
+    String searchQuery = '';
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true, // 전체 화면의 80%까지 확장 가능
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            // 검색어에 따라 필터링된 코인 목록
+            final filteredCoins =
+                cryptoViewModel.topCoins.where((coin) {
+                  final symbolMatch = coin.symbol.toLowerCase().contains(
+                    searchQuery.toLowerCase(),
+                  );
+                  final nameMatch = coin.name.toLowerCase().contains(
+                    searchQuery.toLowerCase(),
+                  );
+                  return symbolMatch || nameMatch;
+                }).toList();
+
             return Container(
+              height: MediaQuery.of(context).size.height * 0.8, // 화면 높이의 80%
               padding: const EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -113,31 +148,110 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      TextButton(
-                        onPressed: () {
-                          // 모달을 닫기 전에 선택된 코인을 적용
-                          setState(() {
-                            _selectedCoins = Set.from(tempSelectedCoins);
-                          });
-                          Navigator.pop(context);
-                        },
-                        child: const Text('완료'),
+                      Row(
+                        children: [
+                          // 전체 선택 버튼
+                          TextButton(
+                            onPressed: () {
+                              setModalState(() {
+                                if (tempSelectedCoins.length ==
+                                    filteredCoins.length) {
+                                  // 모두 선택되어 있다면 모두 해제 (최소 1개는 유지)
+                                  tempSelectedCoins = {
+                                    filteredCoins.first.symbol,
+                                  };
+                                } else {
+                                  // 모두 선택
+                                  tempSelectedCoins =
+                                      filteredCoins
+                                          .map((c) => c.symbol)
+                                          .toSet();
+                                }
+                              });
+                            },
+                            child: Text(
+                              tempSelectedCoins.length == filteredCoins.length
+                                  ? '모두 해제'
+                                  : '모두 선택',
+                              style: TextStyle(color: AppTheme.primaryColor),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              // 모달을 닫기 전에 선택된 코인을 적용
+                              setState(() {
+                                _selectedCoins = Set.from(tempSelectedCoins);
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: const Text('완료'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Flexible(
+
+                  // 검색창
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: TextField(
+                      controller: searchController,
+                      decoration: InputDecoration(
+                        hintText: '코인 이름 또는 심볼 검색',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 0.0,
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey.shade100,
+                      ),
+                      onChanged: (value) {
+                        setModalState(() {
+                          searchQuery = value;
+                        });
+                      },
+                    ),
+                  ),
+
+                  // 선택된 코인 수 표시
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Text(
+                      '${tempSelectedCoins.length}개 선택됨 (총 ${filteredCoins.length}개)',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+
+                  // 코인 목록
+                  Expanded(
                     child: ListView.builder(
                       shrinkWrap: true,
-                      itemCount: supportedCoins.length,
+                      itemCount: filteredCoins.length,
                       itemBuilder: (context, index) {
-                        final coin = supportedCoins[index];
+                        final coin = filteredCoins[index];
                         final isSelected = tempSelectedCoins.contains(
                           coin.symbol,
                         );
 
                         return CheckboxListTile(
                           title: Text('${coin.name} (${coin.symbol})'),
+                          subtitle: Text(
+                            '₩${_formatPrice(coin.currentPrice)} · ${coin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%',
+                            style: TextStyle(
+                              color:
+                                  (coin.priceChangePercentage24h ?? 0) >= 0
+                                      ? AppTheme.positiveColor
+                                      : Colors.red,
+                              fontSize: 12,
+                            ),
+                          ),
                           value: isSelected,
                           activeColor: AppTheme.primaryColor,
                           onChanged: (_) {
@@ -151,14 +265,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 tempSelectedCoins.add(coin.symbol);
                               }
                             });
-
-                            // 즉시 적용을 위해 외부 setState도 호출
-                            setState(() {
-                              _selectedCoins = Set.from(tempSelectedCoins);
-                            });
                           },
                           secondary: _buildCoinIcon(coin, size: 32),
                           controlAffinity: ListTileControlAffinity.trailing,
+                          dense: true,
                         );
                       },
                     ),
@@ -170,6 +280,21 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+  }
+
+  // 가격 포맷팅 함수
+  String _formatPrice(double price) {
+    if (price >= 1000000000) {
+      return '${(price / 1000000000).toStringAsFixed(2)}B';
+    } else if (price >= 1000000) {
+      return '${(price / 1000000).toStringAsFixed(2)}M';
+    } else if (price >= 1000) {
+      return '${price.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}';
+    } else if (price >= 1) {
+      return price.toStringAsFixed(2);
+    } else {
+      return price.toStringAsFixed(6);
+    }
   }
 
   @override
@@ -259,19 +384,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildDashboardPage() {
     return Consumer<CryptoViewModel>(
       builder: (context, cryptoViewModel, child) {
-        // 차트에서 지원하는 코인 목록을 가져옴
-        final supportedCoins = DummyCoins.popularCoins;
+        // API에서 가져온 코인 목록 사용
+        final supportedCoins = cryptoViewModel.topCoins;
+
         // 지원되는 코인 심볼 목록 생성
         final supportedSymbols = supportedCoins.map((c) => c.symbol).toSet();
 
-        // 차트에서 지원하는 코인 중 선택된 코인만 필터링
+        // 선택된 코인 중 API에서 지원하는 코인만 필터링
         final displayCoins =
             cryptoViewModel.topCoins
-                .where(
-                  (coin) =>
-                      supportedSymbols.contains(coin.symbol) &&
-                      _selectedCoins.contains(coin.symbol),
-                )
+                .where((coin) => _selectedCoins.contains(coin.symbol))
                 .toList();
 
         if (cryptoViewModel.isLoading && displayCoins.isEmpty) {

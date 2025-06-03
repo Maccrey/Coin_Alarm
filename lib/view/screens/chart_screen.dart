@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'dart:ui'; // TextDirection을 위해 필요
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../data/dummy_coins.dart';
 import '../../model/coin_model.dart';
+import '../../viewmodel/crypto_viewmodel.dart';
 import '../../core/theme.dart';
 
 // 차트 화면
@@ -41,6 +45,24 @@ class _ChartScreenState extends State<ChartScreen> {
     // 전달된 코인이 있으면 사용, 없으면 기본값 사용
     _selectedCoin = widget.selectedCoin ?? DummyCoins.popularCoins.first;
     _generateChartData();
+
+    // 데이터 초기 로드
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final cryptoViewModel = Provider.of<CryptoViewModel>(
+        context,
+        listen: false,
+      );
+      if (_selectedCoin != null && cryptoViewModel.topCoins.isNotEmpty) {
+        // API 데이터에서 선택된 코인 찾기
+        final apiCoin = cryptoViewModel.topCoins.firstWhere(
+          (coin) => coin.symbol == _selectedCoin.symbol,
+          orElse: () => _selectedCoin,
+        );
+        if (apiCoin != _selectedCoin) {
+          _updateSelectedCoin(apiCoin);
+        }
+      }
+    });
   }
 
   @override
@@ -148,32 +170,72 @@ class _ChartScreenState extends State<ChartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // 코인 선택 드롭다운
-        _buildCoinSelector(),
+    return Consumer<CryptoViewModel>(
+      builder: (context, cryptoViewModel, child) {
+        // 실시간 업데이트를 위한 코인 데이터 확인
+        if (_selectedCoin != null && cryptoViewModel.topCoins.isNotEmpty) {
+          final apiCoin = cryptoViewModel.topCoins.firstWhere(
+            (coin) => coin.symbol == _selectedCoin.symbol,
+            orElse: () => _selectedCoin,
+          );
 
-        // 차트 영역
-        Expanded(
-          child: ListView(
-            children: [
-              // 차트 영역
-              _buildChartArea(),
+          // 코인 데이터가 업데이트되었으면 차트 데이터도 업데이트
+          if (apiCoin.lastUpdated != _selectedCoin.lastUpdated) {
+            _selectedCoin = apiCoin;
+            _generateChartData();
+          }
+        }
 
-              // 차트 설정 영역
-              _buildChartSettings(),
+        return Column(
+          children: [
+            // 코인 선택 드롭다운
+            _buildCoinSelector(cryptoViewModel),
 
-              // 시세 정보
-              _buildPriceInfo(),
-            ],
-          ),
-        ),
-      ],
+            // 마지막 업데이트 시간 표시
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 4.0,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '마지막 업데이트: ${DateFormat('HH:mm:ss').format(cryptoViewModel.lastUpdated)}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  if (cryptoViewModel.activeService != null)
+                    Text(
+                      '${cryptoViewModel.activeService!.exchangeName}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                ],
+              ),
+            ),
+
+            // 차트 영역
+            Expanded(
+              child: ListView(
+                children: [
+                  // 차트 영역
+                  _buildChartArea(),
+
+                  // 차트 설정 영역
+                  _buildChartSettings(),
+
+                  // 시세 정보
+                  _buildPriceInfo(),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
   // 코인 선택 드롭다운
-  Widget _buildCoinSelector() {
+  Widget _buildCoinSelector(CryptoViewModel cryptoViewModel) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -215,7 +277,7 @@ class _ChartScreenState extends State<ChartScreen> {
               underline: const SizedBox(),
               icon: const Icon(Icons.keyboard_arrow_down),
               items:
-                  DummyCoins.popularCoins.map((coin) {
+                  cryptoViewModel.topCoins.map((coin) {
                     return DropdownMenuItem<String>(
                       value: coin.symbol,
                       child: Text(
@@ -226,10 +288,11 @@ class _ChartScreenState extends State<ChartScreen> {
                   }).toList(),
               onChanged: (value) {
                 if (value != null) {
-                  final coin = DummyCoins.getCoinBySymbol(value);
-                  if (coin != null) {
-                    _updateSelectedCoin(coin);
-                  }
+                  final coin = cryptoViewModel.topCoins.firstWhere(
+                    (coin) => coin.symbol == value,
+                    orElse: () => _selectedCoin,
+                  );
+                  _updateSelectedCoin(coin);
                 }
               },
             ),
@@ -785,18 +848,13 @@ class CandleStickChartPainter extends CustomPainter {
       final y = i * size.height / 5;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
 
-      // 가격 레이블 추가
+      // 가격 레이블 추가 - 텍스트 페인터 사용 제거
+      // 간단한 가격 표시로 대체
       final priceLevel = minY + (maxY - minY) * (1 - i / 5);
-      final priceText = TextSpan(
-        text: '${priceLevel.toStringAsFixed(0)}',
-        style: TextStyle(color: Colors.grey.withOpacity(0.7), fontSize: 10),
-      );
-      final textPainter = TextPainter(
-        text: priceText,
-        textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
-      textPainter.paint(canvas, Offset(5, y - 12));
+      final paint = Paint()..color = Colors.grey.withOpacity(0.7);
+
+      // 단순히 선으로 표시
+      canvas.drawLine(Offset(0, y), Offset(10, y), paint..strokeWidth = 2);
     }
 
     // 수직 그리드 (시간 간격)

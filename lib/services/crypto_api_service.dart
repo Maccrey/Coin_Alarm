@@ -128,15 +128,12 @@ class UpbitApiService implements CryptoApiService {
 
       debugPrint('UpbitApiService: KRW 마켓 필터링 결과 - ${krwMarkets.length}개 마켓');
 
-      // 최대 100개 마켓으로 제한 (API 제한)
-      final marketsToFetch = krwMarkets
-          .take(min(100, krwMarkets.length))
-          .join(',');
-      final queryString = 'markets=$marketsToFetch';
+      // 업비트 API는 한 번에 최대 100개 마켓 지원 (API 제한)
+      final maxMarkets = min(100, krwMarkets.length);
+      debugPrint('UpbitApiService: 최대 $maxMarkets개 마켓 데이터 요청');
 
-      debugPrint(
-        'UpbitApiService: 시세 요청 준비 - ${min(100, krwMarkets.length)}개 마켓',
-      );
+      final marketsToFetch = krwMarkets.take(maxMarkets).join(',');
+      final queryString = 'markets=$marketsToFetch';
 
       // 토큰 생성
       debugPrint('UpbitApiService: JWT 토큰 생성 중...');
@@ -144,14 +141,7 @@ class UpbitApiService implements CryptoApiService {
       debugPrint('UpbitApiService: JWT 토큰 생성 완료');
 
       // 시세 정보 가져오기
-      debugPrint(
-        'UpbitApiService: 시세 정보 요청 중... markets: ${marketsToFetch.substring(0, min(50, marketsToFetch.length))}...',
-      );
-      debugPrint('UpbitApiService: 요청 URL - $_baseUrl/ticker');
-      debugPrint(
-        'UpbitApiService: Authorization 헤더 추가 - Bearer ${token.substring(0, 20)}...',
-      );
-
+      debugPrint('UpbitApiService: 시세 정보 요청 중...');
       final tickerResponse = await _dio.get(
         '$_baseUrl/ticker',
         queryParameters: {'markets': marketsToFetch},
@@ -168,13 +158,6 @@ class UpbitApiService implements CryptoApiService {
       debugPrint(
         'UpbitApiService: 시세 정보 응답 성공, ${(tickerResponse.data as List).length}개 코인 데이터 수신',
       );
-
-      if ((tickerResponse.data as List).isNotEmpty) {
-        final sampleData = tickerResponse.data[0];
-        debugPrint(
-          'UpbitApiService: 응답 샘플 데이터 - ${jsonEncode(sampleData).substring(0, min(100, jsonEncode(sampleData).length))}...',
-        );
-      }
 
       // 코인 모델 변환
       final List<Coin> coins = [];
@@ -224,18 +207,12 @@ class UpbitApiService implements CryptoApiService {
         );
       }
 
-      // 거래량 기준 정렬 후 상위 코인 반환
+      // 거래량 기준 정렬
       coins.sort((a, b) => (b.volume24h ?? 0).compareTo(a.volume24h ?? 0));
-      final result = coins.take(limit).toList();
-      debugPrint('UpbitApiService: 최종 반환 데이터 - ${result.length}개 코인');
 
-      // 첫 번째 코인 정보 샘플 출력
-      if (result.isNotEmpty) {
-        final sample = result.first;
-        debugPrint(
-          'UpbitApiService: 샘플 코인 - ${sample.symbol}, 가격: ${sample.currentPrice}, 변화율: ${sample.priceChangePercentage24h}%',
-        );
-      }
+      // limit이 0이면 모든 코인 반환, 아니면 limit 수만큼 반환
+      final result = limit > 0 ? coins.take(limit).toList() : coins;
+      debugPrint('UpbitApiService: 최종 반환 데이터 - ${result.length}개 코인');
 
       return result;
     } catch (e) {

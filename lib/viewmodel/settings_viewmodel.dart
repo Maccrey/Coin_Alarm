@@ -111,6 +111,10 @@ class SettingsViewModel extends ChangeNotifier {
     try {
       await _settingsService.setRefreshInterval(seconds);
       _refreshInterval = seconds;
+
+      // CryptoViewModel의 새로고침 간격도 업데이트
+      // 이 부분은 Provider.of를 사용하지 않고 대신 CryptoViewModel이 자체적으로
+      // SettingsService에서 간격을 읽도록 설계되어 있어 별도 처리가 필요하지 않음
     } catch (e) {
       debugPrint('새로고침 간격 설정 실패: $e');
     } finally {

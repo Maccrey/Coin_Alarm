@@ -115,7 +115,7 @@ class CryptoViewModel extends ChangeNotifier {
       debugPrint(
         'CryptoViewModel: ${_activeService!.exchangeName} 서비스를 통해 데이터를 요청합니다.',
       );
-      final coins = await _activeService!.getTopCoins(limit: 20);
+      final coins = await _activeService!.getTopCoins(limit: 0);
 
       debugPrint('CryptoViewModel: API 응답 수신 - ${coins.length}개 코인');
 
@@ -165,7 +165,7 @@ class CryptoViewModel extends ChangeNotifier {
     _isBackgroundLoading = true;
 
     try {
-      final coins = await _activeService!.getTopCoins(limit: 20);
+      final coins = await _activeService!.getTopCoins(limit: 0);
 
       if (coins.isNotEmpty) {
         _storePreviousPrices(); // 이전 가격 저장
@@ -205,8 +205,9 @@ class CryptoViewModel extends ChangeNotifier {
     // 기존 타이머 취소
     _refreshTimer?.cancel();
 
-    // 일반 새로고침 타이머 (30초~60초)
+    // 설정에서 새로고침 간격 가져오기
     final interval = _settingsService.getRefreshInterval();
+    debugPrint('CryptoViewModel: 새로고침 간격 설정 - $interval초');
 
     // 실시간성을 높이기 위해 5초마다 백그라운드 업데이트
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
@@ -218,6 +219,8 @@ class CryptoViewModel extends ChangeNotifier {
         refresh();
       }
     });
+
+    debugPrint('CryptoViewModel: 새로고침 타이머 시작됨 - 전체 새로고침 간격: $interval초');
   }
 
   // 특정 코인의 가격 변화 상태 확인 (상승/하락)
@@ -242,6 +245,7 @@ class CryptoViewModel extends ChangeNotifier {
   void updateRefreshInterval(int seconds) {
     _settingsService.setRefreshInterval(seconds);
     _startRefreshTimer();
+    notifyListeners();
   }
 
   // API 서비스 변경
