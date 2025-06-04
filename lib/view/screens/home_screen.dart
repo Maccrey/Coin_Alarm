@@ -32,14 +32,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Coin? _selectedCoin;
 
   // 선택된 코인 심볼 목록 (대시보드에 표시할 코인)
-  Set<String> _selectedCoins = {};
+  List<String> _selectedCoins = [];
 
   @override
   void initState() {
     super.initState();
 
     // 기본적으로 DefaultSettings에서 기본 코인 목록을 가져옴
-    _selectedCoins = Set.from(DefaultSettings.defaultFavoriteCoins);
+    _selectedCoins = List<String>.from(DefaultSettings.defaultFavoriteCoins);
 
     // CryptoViewModel의 새로고침 간격이 변경될 때마다 UI 업데이트를 위한 리스너 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -86,7 +86,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       if (_selectedCoins.contains(symbol)) {
         if (_selectedCoins.length > 1) {
-          // 최소 1개 이상 선택되도록
           _selectedCoins.remove(symbol);
         }
       } else {
@@ -104,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     // 임시 선택 상태를 저장할 집합 생성
-    Set<String> tempSelectedCoins = Set.from(_selectedCoins);
+    List<String> tempSelectedCoins = List<String>.from(_selectedCoins);
 
     // 검색어 컨트롤러
     final searchController = TextEditingController();
@@ -120,16 +119,15 @@ class _HomeScreenState extends State<HomeScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             // 검색어에 따라 필터링된 코인 목록
-            final filteredCoins =
-                cryptoViewModel.topCoins.where((coin) {
-                  final symbolMatch = coin.symbol.toLowerCase().contains(
-                    searchQuery.toLowerCase(),
-                  );
-                  final nameMatch = coin.name.toLowerCase().contains(
-                    searchQuery.toLowerCase(),
-                  );
-                  return symbolMatch || nameMatch;
-                }).toList();
+            final filteredCoins = cryptoViewModel.topCoins.where((coin) {
+              final symbolMatch = coin.symbol.toLowerCase().contains(
+                searchQuery.toLowerCase(),
+              );
+              final nameMatch = coin.name.toLowerCase().contains(
+                searchQuery.toLowerCase(),
+              );
+              return symbolMatch || nameMatch;
+            }).toList();
 
             return Container(
               height: MediaQuery.of(context).size.height * 0.8, // 화면 높이의 80%
@@ -157,15 +155,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 if (tempSelectedCoins.length ==
                                     filteredCoins.length) {
                                   // 모두 선택되어 있다면 모두 해제 (최소 1개는 유지)
-                                  tempSelectedCoins = {
+                                  tempSelectedCoins = [
                                     filteredCoins.first.symbol,
-                                  };
+                                  ];
                                 } else {
                                   // 모두 선택
-                                  tempSelectedCoins =
-                                      filteredCoins
-                                          .map((c) => c.symbol)
-                                          .toSet();
+                                  tempSelectedCoins = filteredCoins
+                                      .map((c) => c.symbol)
+                                      .toList();
                                 }
                               });
                             },
@@ -180,7 +177,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             onPressed: () {
                               // 모달을 닫기 전에 선택된 코인을 적용
                               setState(() {
-                                _selectedCoins = Set.from(tempSelectedCoins);
+                                _selectedCoins = List<String>.from(
+                                  tempSelectedCoins,
+                                );
                               });
                               Navigator.pop(context);
                             },
@@ -245,10 +244,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           subtitle: Text(
                             '₩${_formatPrice(coin.currentPrice)} · ${coin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%',
                             style: TextStyle(
-                              color:
-                                  (coin.priceChangePercentage24h ?? 0) >= 0
-                                      ? AppTheme.positiveColor
-                                      : Colors.red,
+                              color: (coin.priceChangePercentage24h ?? 0) >= 0
+                                  ? AppTheme.positiveColor
+                                  : Colors.red,
                               fontSize: 12,
                             ),
                           ),
@@ -258,7 +256,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             setModalState(() {
                               if (tempSelectedCoins.contains(coin.symbol)) {
                                 if (tempSelectedCoins.length > 1) {
-                                  // 최소 1개 이상 선택되도록
                                   tempSelectedCoins.remove(coin.symbol);
                                 }
                               } else {
@@ -282,19 +279,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 가격 포맷팅 함수
+  // 가격을 천 단위 콤마로 표시하고, 12자리 이상이면 ...으로 말줄임 처리
   String _formatPrice(double price) {
-    if (price >= 1000000000) {
-      return '${(price / 1000000000).toStringAsFixed(2)}B';
-    } else if (price >= 1000000) {
-      return '${(price / 1000000).toStringAsFixed(2)}M';
-    } else if (price >= 1000) {
-      return '${price.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}';
-    } else if (price >= 1) {
-      return price.toStringAsFixed(2);
+    String formatted;
+    if (price >= 1) {
+      formatted = price
+          .toStringAsFixed(0)
+          .replaceAllMapped(
+            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+            (Match m) => '${m[1]},',
+          );
     } else {
-      return price.toStringAsFixed(6);
+      formatted = price.toStringAsFixed(6);
     }
+    // 12자리(콤마 포함) 이상이면 ...으로 말줄임
+    if (formatted.length > 15) {
+      formatted = formatted.substring(0, 15) + '...';
+    }
+    return formatted;
   }
 
   @override
@@ -391,10 +393,9 @@ class _HomeScreenState extends State<HomeScreen> {
         final supportedSymbols = supportedCoins.map((c) => c.symbol).toSet();
 
         // 선택된 코인 중 API에서 지원하는 코인만 필터링
-        final displayCoins =
-            cryptoViewModel.topCoins
-                .where((coin) => _selectedCoins.contains(coin.symbol))
-                .toList();
+        final displayCoins = cryptoViewModel.topCoins
+            .where((coin) => _selectedCoins.contains(coin.symbol))
+            .toList();
 
         if (cryptoViewModel.isLoading && displayCoins.isEmpty) {
           // 로딩 중이고 데이터가 없는 경우
@@ -438,81 +439,210 @@ class _HomeScreenState extends State<HomeScreen> {
           'HH:mm:ss',
         ).format(cryptoViewModel.lastUpdated);
 
-        // 코인 목록 표시
+        // _selectedCoins의 순서대로 displayCoins를 정렬
+        final sortedDisplayCoins = _selectedCoins
+            .map(
+              (symbol) => cryptoViewModel.topCoins.firstWhere(
+                (c) => c.symbol == symbol,
+                orElse: () => cryptoViewModel.topCoins.isNotEmpty
+                    ? cryptoViewModel.topCoins.first
+                    : Coin(
+                        id: '',
+                        name: '',
+                        symbol: '',
+                        currentPrice: 0,
+                        lastUpdated: DateTime.now(),
+                      ),
+              ),
+            )
+            .where((c) => c.id.isNotEmpty)
+            .toList();
+
         return RefreshIndicator(
           onRefresh: () => cryptoViewModel.refresh(),
           child: Column(
             children: [
-              // 상단 정보 및 코인 선택 버튼
+              // 코인 선택 버튼 (상단에 추가)
               Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 8,
+                  bottom: 4,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '마지막 업데이트: $lastUpdated',
-                      style: const TextStyle(fontSize: 13, color: Colors.grey),
+                      '내 코인 리스트',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    Row(
-                      children: [
-                        if (cryptoViewModel.activeService != null)
-                          Text(
-                            '${cryptoViewModel.activeService!.exchangeName}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        const SizedBox(width: 8),
-                        InkWell(
-                          onTap: _showCoinSelectionModal,
-                          borderRadius: BorderRadius.circular(16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).primaryColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
+                    TextButton.icon(
+                      onPressed: _showCoinSelectionModal,
+                      icon: const Icon(Icons.tune, size: 18),
+                      label: const Text('코인 선택'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        minimumSize: Size(0, 32),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ReorderableListView(
+                  padding: EdgeInsets.all(16),
+                  children: [
+                    for (int i = 0; i < sortedDisplayCoins.length; i++)
+                      Card(
+                        key: ValueKey(sortedDisplayCoins[i].id),
+                        margin: const EdgeInsets.only(bottom: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () {
+                            setState(() {
+                              _selectedCoin = sortedDisplayCoins[i];
+                              _selectedIndex = 1; // 차트 탭으로 이동
+                            });
+                            _pageController.jumpToPage(1);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
                             child: Row(
                               children: [
-                                Text(
-                                  '${_selectedCoins.length} 코인',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Theme.of(context).primaryColor,
-                                    fontWeight: FontWeight.w500,
+                                // 코인 아이콘 (드래그 핸들 제거)
+                                _buildCoinIcon(sortedDisplayCoins[i], size: 32),
+                                const SizedBox(width: 12),
+                                // 코인 정보
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        sortedDisplayCoins[i].name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Theme.of(
+                                                context,
+                                              ).primaryColor.withOpacity(0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              sortedDisplayCoins[i].symbol,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Theme.of(
+                                                  context,
+                                                ).primaryColor,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            '₩${_formatPrice(sortedDisplayCoins[i].currentPrice)}',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey[700],
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.edit,
-                                  size: 14,
-                                  color: Theme.of(context).primaryColor,
+                                // 가격 변동 정보
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            (sortedDisplayCoins[i].isPriceUp
+                                                    ? AppTheme.positiveColor
+                                                    : AppTheme.negativeColor)
+                                                .withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        sortedDisplayCoins[i]
+                                            .priceChangePercent,
+                                        style: TextStyle(
+                                          color: sortedDisplayCoins[i].isPriceUp
+                                              ? AppTheme.positiveColor
+                                              : AppTheme.negativeColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      sortedDisplayCoins[i].priceChange24h
+                                              ?.toStringAsFixed(2) ??
+                                          '0.00',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: sortedDisplayCoins[i].isPriceUp
+                                            ? AppTheme.positiveColor
+                                            : AppTheme.negativeColor,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
                   ],
+                  onReorder: (oldIndex, newIndex) {
+                    if (newIndex > oldIndex) newIndex -= 1;
+                    final symbolList = List<String>.from(_selectedCoins);
+                    final moved = symbolList.removeAt(oldIndex);
+                    symbolList.insert(newIndex, moved);
+                    setState(() {
+                      _selectedCoins = symbolList;
+                    });
+                  },
                 ),
               ),
-
-              // 코인 목록
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  itemCount: displayCoins.length,
-                  itemBuilder: (context, index) {
-                    final coin = displayCoins[index];
-                    return _buildCoinCard(coin, cryptoViewModel);
-                  },
+              // 마지막 업데이트 시간 표시
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Text(
+                  '마지막 업데이트: $lastUpdated',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).hintColor,
+                  ),
                 ),
               ),
             ],
@@ -525,8 +655,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // 코인 카드 위젯 - 디자인 개선
   Widget _buildCoinCard(Coin coin, CryptoViewModel cryptoViewModel) {
     final isPriceUp = coin.isPriceUp;
-    final priceColor =
-        isPriceUp ? AppTheme.positiveColor : AppTheme.negativeColor;
+    final priceColor = isPriceUp
+        ? AppTheme.positiveColor
+        : AppTheme.negativeColor;
 
     // 가격 변화 확인 - 애니메이션 효과에 사용
     final hasPriceChanged = cryptoViewModel.hasPriceChanged(coin.symbol);
@@ -548,16 +679,15 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       builder: (context, value, child) {
         // 가격 변화에 따른 배경색 애니메이션
-        final backgroundColor =
-            hasPriceChanged
-                ? Color.lerp(
-                  Colors.transparent,
-                  isPriceIncreased
-                      ? AppTheme.positiveColor.withOpacity(0.05)
-                      : Colors.red.withOpacity(0.05),
-                  value,
-                )
-                : Colors.transparent;
+        final backgroundColor = hasPriceChanged
+            ? Color.lerp(
+                Colors.transparent,
+                isPriceIncreased
+                    ? AppTheme.positiveColor.withOpacity(0.05)
+                    : Colors.red.withOpacity(0.05),
+                value,
+              )
+            : Colors.transparent;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -698,30 +828,29 @@ class _HomeScreenState extends State<HomeScreen> {
         color: backgroundColor,
         borderRadius: BorderRadius.circular(size / 2),
       ),
-      child:
-          coin.imageUrl != null && coin.imageUrl!.isNotEmpty
-              ? ClipRRect(
-                borderRadius: BorderRadius.circular(size / 2),
-                child: Image.network(
-                  coin.imageUrl!,
-                  width: size,
-                  height: size,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    // 이미지 로드 실패 시 폴백 아이콘
-                    return Icon(
-                      Icons.currency_bitcoin,
-                      size: size * 0.6,
-                      color: Theme.of(context).primaryColor,
-                    );
-                  },
-                ),
-              )
-              : Icon(
-                Icons.currency_bitcoin,
-                size: size * 0.6,
-                color: Theme.of(context).primaryColor,
+      child: coin.imageUrl != null && coin.imageUrl!.isNotEmpty
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(size / 2),
+              child: Image.network(
+                coin.imageUrl!,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  // 이미지 로드 실패 시 폴백 아이콘
+                  return Icon(
+                    Icons.currency_bitcoin,
+                    size: size * 0.6,
+                    color: Theme.of(context).primaryColor,
+                  );
+                },
               ),
+            )
+          : Icon(
+              Icons.currency_bitcoin,
+              size: size * 0.6,
+              color: Theme.of(context).primaryColor,
+            ),
     );
   }
 }

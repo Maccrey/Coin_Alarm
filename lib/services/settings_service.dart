@@ -28,6 +28,7 @@ class SettingsService {
   static const String _keySavedEmail = 'saved_email';
   static const String _keySaveLoginInfo = 'save_login_info';
   static const String _keyPassword = 'saved_password'; // 참고: 실제 앱에서는 안전하게 저장 필요
+  static const String _keyCoinOrder = 'coin_order'; // 코인 순서 저장 키
 
   // API 키 저장 상수
   static const String _keyUpbitAccessKey = 'upbit_access_key';
@@ -248,6 +249,60 @@ class SettingsService {
     debugPrint('SettingsService: 모든 API 키 초기화 완료');
   }
 
+  // 코인 목록 순서 저장
+  Future<bool> setCoinOrder(Map<String, int> orderMap) async {
+    debugPrint('SettingsService: 코인 순서 저장 시도 - ${orderMap.length}개 항목');
+
+    // Map<String, int>를 String으로 변환
+    final List<String> encodedEntries = [];
+    orderMap.forEach((symbol, order) {
+      encodedEntries.add('$symbol:$order');
+    });
+
+    final orderString = encodedEntries.join(',');
+    final result = await _prefs.setString(_keyCoinOrder, orderString);
+
+    debugPrint('SettingsService: 코인 순서 저장 ${result ? '성공' : '실패'}');
+    return result;
+  }
+
+  // 코인 목록 순서 불러오기
+  Map<String, int> getCoinOrder() {
+    final orderString = _prefs.getString(_keyCoinOrder);
+    final Map<String, int> orderMap = {};
+
+    if (orderString != null && orderString.isNotEmpty) {
+      final entries = orderString.split(',');
+
+      for (final entry in entries) {
+        final parts = entry.split(':');
+        if (parts.length == 2) {
+          final symbol = parts[0];
+          final order = int.tryParse(parts[1]);
+          if (order != null) {
+            orderMap[symbol] = order;
+          }
+        }
+      }
+
+      debugPrint('SettingsService: 코인 순서 불러오기 완료 - ${orderMap.length}개 항목');
+    } else {
+      debugPrint('SettingsService: 저장된 코인 순서 없음');
+    }
+
+    return orderMap;
+  }
+
+  // 특정 코인의 순서 삭제
+  Future<bool> removeCoinOrder(String symbol) async {
+    final orderMap = getCoinOrder();
+    if (orderMap.containsKey(symbol)) {
+      orderMap.remove(symbol);
+      return setCoinOrder(orderMap);
+    }
+    return true;
+  }
+
   // 모든 설정 기본값으로 초기화
   Future<void> resetToDefaults() async {
     // 로그인 정보 제외하고 설정 초기화 (로그인 상태 유지 위함)
@@ -260,6 +315,9 @@ class SettingsService {
     final upbitSecretKey = getUpbitSecretKey();
     final binanceApiKey = getBinanceApiKey();
     final binanceSecretKey = getBinanceSecretKey();
+
+    // 코인 순서도 초기화에서 제외
+    final coinOrder = getCoinOrder();
 
     // 설정값 초기화
     await _prefs.clear();
@@ -278,6 +336,11 @@ class SettingsService {
 
     if (binanceApiKey != null && binanceSecretKey != null) {
       await setBinanceApiKeys(binanceApiKey, binanceSecretKey);
+    }
+
+    // 코인 순서 복원
+    if (coinOrder.isNotEmpty) {
+      await setCoinOrder(coinOrder);
     }
   }
 }

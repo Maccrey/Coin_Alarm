@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:math';
 import '../../core/theme.dart';
 import '../../model/coin_model.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
@@ -69,19 +70,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             actions: [
               // 새로고침 버튼
               IconButton(
-                icon:
-                    viewModel.isLoading
-                        ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                        : const Icon(Icons.refresh),
-                onPressed:
-                    viewModel.isLoading ? null : () => viewModel.refresh(),
+                icon: viewModel.isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.refresh),
+                onPressed: viewModel.isLoading
+                    ? null
+                    : () => viewModel.refresh(),
                 tooltip: '데이터 새로고침',
               ),
               // 알림 버튼
@@ -307,17 +308,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             hintText: '코인 검색 (BTC, ETH, ...)',
             border: InputBorder.none,
             icon: const Icon(Icons.search),
-            suffixIcon:
-                _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {});
-                        FocusScope.of(context).unfocus();
-                      },
-                    ),
+            suffixIcon: _searchController.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {});
+                      FocusScope.of(context).unfocus();
+                    },
+                  ),
           ),
           onChanged: (value) {
             setState(() {});
@@ -335,9 +335,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // 인기 코인 섹션 위젯
   Widget _buildPopularCoinsSection(CryptoViewModel viewModel) {
+    final sortedCoins = viewModel.getSortedCoins();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 섹션 헤더
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -347,17 +350,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 context,
               ).textTheme.titleLarge!.copyWith(fontWeight: FontWeight.bold),
             ),
-            TextButton(
-              onPressed: () {
-                // 코인 목록 전체보기 화면으로 이동
-              },
-              child: const Text('더 보기'),
+            Row(
+              children: [
+                // 순서 초기화 버튼
+                IconButton(
+                  icon: Icon(
+                    Icons.restart_alt,
+                    color: Theme.of(context).hintColor,
+                    size: 20,
+                  ),
+                  tooltip: '순서 초기화',
+                  onPressed: () => _showResetOrderConfirmDialog(viewModel),
+                ),
+                TextButton(
+                  onPressed: () {
+                    // 코인 목록 전체보기 화면으로 이동
+                  },
+                  child: const Text('더 보기'),
+                ),
+              ],
             ),
           ],
         ),
+
         const SizedBox(height: 16),
+
         // 코인 목록
-        if (viewModel.topCoins.isEmpty && !viewModel.isLoading)
+        if (sortedCoins.isEmpty && !viewModel.isLoading)
           const Center(
             child: Padding(
               padding: EdgeInsets.all(16),
@@ -365,96 +384,143 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           )
         else
-          ...viewModel.topCoins.map((coin) => _buildCoinListItem(coin)),
-      ],
-    );
-  }
-
-  // 코인 목록 아이템 위젯
-  Widget _buildCoinListItem(Coin coin) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          // 코인 상세 페이지로 이동
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+          Column(
             children: [
-              // 코인 아이콘
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child:
-                    coin.imageUrl != null
-                        ? ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
-                          child: Image.network(
-                            coin.imageUrl!,
-                            errorBuilder:
-                                (context, error, stackTrace) =>
-                                    const Icon(Icons.currency_bitcoin),
-                          ),
-                        )
-                        : const Icon(Icons.currency_bitcoin),
-              ),
-              const SizedBox(width: 16),
-              // 코인 정보
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              // 순서 변경 안내 메시지
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
                   children: [
-                    Text(
-                      '${coin.name} (${coin.symbol})',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                    Icon(
+                      Icons.touch_app,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(width: 8),
                     Text(
-                      '₩${_formatPrice(coin.currentPrice)}',
-                      style: const TextStyle(fontSize: 15),
+                      '리스트 항목을 길게 누르고 드래그하여 순서 변경',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).hintColor,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ],
                 ),
               ),
-              // 가격 변화 정보
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    coin.isPriceUp
-                        ? '+${coin.priceChangePercent}'
-                        : coin.priceChangePercent,
-                    style: TextStyle(
-                      color: coin.isPriceUp ? Colors.green : Colors.red,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '24시간',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).hintColor,
-                    ),
-                  ),
-                ],
+
+              // 재정렬 가능한 코인 목록을 간단하게 다시 구현
+              Container(
+                height: min(sortedCoins.length * 92.0, 400),
+                child: ReorderableListView(
+                  children: [
+                    for (int i = 0; i < sortedCoins.length; i++)
+                      ListTile(
+                        key: ValueKey(sortedCoins[i].id),
+                        leading: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 드래그 핸들 아이콘
+                            Icon(
+                              Icons.drag_handle,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            // 코인 아이콘
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceVariant,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: sortedCoins[i].imageUrl != null
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: Image.network(
+                                        sortedCoins[i].imageUrl!,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const Icon(
+                                                  Icons.currency_bitcoin,
+                                                ),
+                                      ),
+                                    )
+                                  : const Icon(Icons.currency_bitcoin),
+                            ),
+                          ],
+                        ),
+                        title: Text(
+                          '${sortedCoins[i].name} (${sortedCoins[i].symbol})',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          '₩${_formatPrice(sortedCoins[i].currentPrice)}',
+                        ),
+                        trailing: Text(
+                          sortedCoins[i].isPriceUp
+                              ? '+${sortedCoins[i].priceChangePercent}'
+                              : sortedCoins[i].priceChangePercent,
+                          style: TextStyle(
+                            color: sortedCoins[i].isPriceUp
+                                ? Colors.green
+                                : Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        onTap: () {
+                          // 코인 상세 페이지로 이동
+                        },
+                      ),
+                  ],
+                  onReorder: (oldIndex, newIndex) {
+                    debugPrint(
+                      '코인 재정렬: oldIndex=$oldIndex, newIndex=$newIndex',
+                    );
+                    viewModel.reorderCoins(oldIndex, newIndex);
+                  },
+                ),
               ),
             ],
           ),
-        ),
+      ],
+    );
+  }
+
+  // 순서 초기화 확인 다이얼로그
+  Future<void> _showResetOrderConfirmDialog(CryptoViewModel viewModel) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('순서 초기화'),
+        content: const Text('코인 목록 순서를 기본 순서로 초기화하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('초기화'),
+          ),
+        ],
       ),
     );
+
+    if (result == true) {
+      viewModel.resetCoinOrder();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('코인 목록 순서가 초기화되었습니다')));
+      }
+    }
   }
 
   // 간소화된 뉴스 섹션

@@ -20,6 +20,7 @@ class CryptoViewModel extends ChangeNotifier {
   Timer? _refreshTimer;
   Map<String, double> _previousPrices = {}; // 이전 가격 저장용
   Map<String, bool> _priceIncreased = {}; // 가격 상승/하락 상태 저장
+  Map<String, int> _userDefinedOrder = {}; // 사용자 정의 순서 저장용
 
   // 생성자
   CryptoViewModel({SettingsService? settingsService})
@@ -43,6 +44,9 @@ class CryptoViewModel extends ChangeNotifier {
       'CryptoViewModel: 사용 가능한 서비스 - ${_availableServices.length}개, 활성 서비스: ${_activeService?.exchangeName ?? "없음"}',
     );
 
+    // 저장된 사용자 정의 순서 불러오기
+    _loadUserDefinedOrder();
+
     await refresh();
     _startRefreshTimer();
     debugPrint('CryptoViewModel: 초기화 완료');
@@ -57,21 +61,21 @@ class CryptoViewModel extends ChangeNotifier {
     // 각 API 서비스 유형별 상태 확인
     final upbitService =
         _availableServices
-                .where((service) => service is UpbitApiService)
-                .isEmpty
-            ? null
-            : _availableServices.firstWhere(
-              (service) => service is UpbitApiService,
-            );
+            .where((service) => service is UpbitApiService)
+            .isEmpty
+        ? null
+        : _availableServices.firstWhere(
+            (service) => service is UpbitApiService,
+          );
 
     final binanceService =
         _availableServices
-                .where((service) => service is BinanceApiService)
-                .isEmpty
-            ? null
-            : _availableServices.firstWhere(
-              (service) => service is BinanceApiService,
-            );
+            .where((service) => service is BinanceApiService)
+            .isEmpty
+        ? null
+        : _availableServices.firstWhere(
+            (service) => service is BinanceApiService,
+          );
 
     debugPrint(
       'CryptoViewModel: API 서비스 상태 - 업비트: ${upbitService != null ? "구성됨" : "없음"}, 바이낸스: ${binanceService != null ? "구성됨" : "없음"}',
@@ -123,6 +127,10 @@ class CryptoViewModel extends ChangeNotifier {
         _storePreviousPrices(); // 이전 가격 저장
         _topCoins = coins;
         _updatePriceChangeStatus(); // 가격 변화 상태 업데이트
+
+        // 새로운 코인의 경우 사용자 정의 순서 초기화
+        _initializeOrderForNewCoins();
+
         _lastUpdated = DateTime.now();
         debugPrint('CryptoViewModel: 데이터 업데이트 성공');
 
@@ -270,9 +278,152 @@ class CryptoViewModel extends ChangeNotifier {
     }
   }
 
+  // 사용자 정의 순서 불러오기
+  void _loadUserDefinedOrder() {
+    // SettingsService에서 저장된 순서 불러오기
+    _userDefinedOrder = _settingsService.getCoinOrder();
+    debugPrint(
+      'CryptoViewModel: 사용자 정의 순서 불러오기 완료 - ${_userDefinedOrder.length}개 항목',
+    );
+  }
+
+  // 새로운 코인에 대한 순서 초기화
+  void _initializeOrderForNewCoins() {
+    // 새로 추가된 코인에 대해 순서 번호 할당
+    int maxOrder = _userDefinedOrder.isEmpty
+        ? 0
+        : _userDefinedOrder.values.reduce((a, b) => a > b ? a : b);
+
+    for (final coin in _topCoins) {
+      if (!_userDefinedOrder.containsKey(coin.symbol)) {
+        _userDefinedOrder[coin.symbol] = ++maxOrder;
+      }
+    }
+  }
+
+  // 코인 순서 재정렬
+  void reorderCoins(int oldIndex, int newIndex) {
+    debugPrint('CryptoViewModel: 코인 순서 변경 시작 - 이전: $oldIndex, 새로운: $newIndex');
+
+    // ReorderableListView에서는 newIndex가 항목이 제거된 후의 인덱스이므로 조정이 필요함
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+      debugPrint('CryptoViewModel: newIndex 조정됨 -> $newIndex');
+    }
+
+    // 정렬된 목록 가져오기
+    final sortedCoins = getSortedCoins();
+
+    debugPrint(
+      'CryptoViewModel: 현재 정렬된 코인 목록 - ${sortedCoins.map((c) => "${c.symbol}:${_userDefinedOrder[c.symbol]}").join(", ")}',
+    );
+
+    if (oldIndex < 0 ||
+        oldIndex >= sortedCoins.length ||
+        newIndex < 0 ||
+        newIndex >= sortedCoins.length) {
+      debugPrint('CryptoViewModel: 인덱스가 범위를 벗어남. 재정렬 취소');
+      return;
+    }
+
+    // 이동할 코인
+    final movingCoin = sortedCoins[oldIndex];
+    debugPrint(
+      'CryptoViewModel: 이동할 코인 - ${movingCoin.symbol}, 현재 순서: ${_userDefinedOrder[movingCoin.symbol]}',
+    );
+
+    // 새로운 순서 값 계산
+    int newOrderValue;
+
+    if (newIndex == 0) {
+      // 맨 앞으로 이동하는 경우
+      newOrderValue = sortedCoins[0].symbol != movingCoin.symbol
+          ? (_userDefinedOrder[sortedCoins[0].symbol]! - 1)
+          : _userDefinedOrder[sortedCoins[0].symbol]!;
+      debugPrint('CryptoViewModel: 맨 앞으로 이동, 새 순서 값: $newOrderValue');
+    } else if (newIndex == sortedCoins.length - 1) {
+      // 맨 뒤로 이동하는 경우
+      newOrderValue =
+          sortedCoins[sortedCoins.length - 1].symbol != movingCoin.symbol
+          ? (_userDefinedOrder[sortedCoins[sortedCoins.length - 1].symbol]! + 1)
+          : _userDefinedOrder[sortedCoins[sortedCoins.length - 1].symbol]!;
+      debugPrint('CryptoViewModel: 맨 뒤로 이동, 새 순서 값: $newOrderValue');
+    } else {
+      // 중간으로 이동하는 경우
+      final before = sortedCoins[newIndex - 1];
+      final after = sortedCoins[newIndex];
+      final beforeOrder = _userDefinedOrder[before.symbol]!;
+      final afterOrder = _userDefinedOrder[after.symbol]!;
+      newOrderValue = (beforeOrder + afterOrder) ~/ 2;
+      debugPrint(
+        'CryptoViewModel: 중간으로 이동, 이전 코인: ${before.symbol} (순서:$beforeOrder), 이후 코인: ${after.symbol} (순서:$afterOrder), 계산된 순서 값: $newOrderValue',
+      );
+
+      // 순서값이 같아지는 경우를 방지
+      if (newOrderValue == beforeOrder || newOrderValue == afterOrder) {
+        debugPrint('CryptoViewModel: 순서값 충돌 감지, 정규화 실행');
+        // 전체 순서 재정렬
+        _normalizeOrders(sortedCoins);
+        // 이동 재시도
+        debugPrint('CryptoViewModel: 정규화 후 재시도');
+        reorderCoins(oldIndex, newIndex);
+        return;
+      }
+    }
+
+    // 이동하는 코인의 순서 설정
+    _userDefinedOrder[movingCoin.symbol] = newOrderValue;
+    debugPrint(
+      'CryptoViewModel: 코인 ${movingCoin.symbol}의 순서를 $newOrderValue로 설정',
+    );
+
+    // 변경 사항 저장
+    _saveUserDefinedOrder();
+
+    // UI 업데이트
+    notifyListeners();
+    debugPrint('CryptoViewModel: 코인 순서 변경 완료');
+  }
+
+  // 순서값 정규화 (간격 균등화)
+  void _normalizeOrders(List<Coin> sortedCoins) {
+    debugPrint('CryptoViewModel: 코인 순서 정규화 실행');
+    for (int i = 0; i < sortedCoins.length; i++) {
+      _userDefinedOrder[sortedCoins[i].symbol] =
+          (i + 1) * 10; // 10, 20, 30... 간격으로 설정
+    }
+  }
+
+  // 사용자 정의 순서 저장
+  void _saveUserDefinedOrder() {
+    // SettingsService를 통해 순서 저장
+    _settingsService.setCoinOrder(_userDefinedOrder);
+    debugPrint(
+      'CryptoViewModel: 사용자 정의 순서 저장 - ${_userDefinedOrder.length}개 항목',
+    );
+  }
+
   // Getters
   List<Coin> get topCoins => _topCoins;
   List<Coin> get coins => _topCoins; // CoinViewModel과의 호환성을 위한 getter
+
+  // 사용자 정의 순서로 정렬된 코인 목록 반환
+  List<Coin> getSortedCoins() {
+    if (_topCoins.isEmpty) return [];
+
+    // 사용자 정의 순서가 있는 코인 목록 복사
+    final sortedCoins = List<Coin>.from(_topCoins);
+
+    // 사용자 정의 순서로 정렬
+    sortedCoins.sort((a, b) {
+      final orderA = _userDefinedOrder[a.symbol] ?? 999999;
+      final orderB = _userDefinedOrder[b.symbol] ?? 999999;
+      return orderA.compareTo(orderB);
+    });
+
+    return sortedCoins;
+  }
+
   List<CryptoApiService> get availableServices => _availableServices;
   CryptoApiService? get activeService => _activeService;
   bool get isLoading => _isLoading;
@@ -282,6 +433,15 @@ class CryptoViewModel extends ChangeNotifier {
 
   // 새로고침 간격 getter
   int get refreshInterval => _settingsService.getRefreshInterval();
+
+  // 코인 순서 초기화 (기본 순서로 재설정)
+  void resetCoinOrder() {
+    _userDefinedOrder.clear();
+    _initializeOrderForNewCoins();
+    _saveUserDefinedOrder();
+    notifyListeners();
+    debugPrint('CryptoViewModel: 코인 순서 초기화 완료');
+  }
 
   @override
   void dispose() {
