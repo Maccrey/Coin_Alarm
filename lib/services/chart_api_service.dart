@@ -163,27 +163,137 @@ class UpbitChartApiService implements ChartApiService {
 
   /// 캔들스틱 데이터 요청 개수 결정 (시간 프레임별 최적화)
   int _getCandleCount(ChartTimeframe timeframe) {
-    switch (timeframe) {
-      case ChartTimeframe.minutes1:
-      case ChartTimeframe.minutes3:
-        return 60; // 1-3분봉은 최근 1시간
-      case ChartTimeframe.minutes5:
-      case ChartTimeframe.minutes10:
-        return 72; // 5-10분봉은 최근 6시간
-      case ChartTimeframe.minutes15:
-      case ChartTimeframe.minutes30:
-        return 48; // 15-30분봉은 최근 12시간
-      case ChartTimeframe.minutes60:
-        return 24; // 1시간봉은 최근 24시간
-      case ChartTimeframe.minutes240:
-        return 30; // 4시간봉은 최근 5일
-      case ChartTimeframe.days1:
-        return 90; // 일봉은 최근 90일
-      case ChartTimeframe.days7:
-        return 12; // 주봉은 최근 12주
-      case ChartTimeframe.days30:
-        return 12; // 월봉은 최근 12개월
+    // 모든 시간 프레임에 대해 30개로 제한
+    return 30;
+  }
+
+  // 타임스탬프가 현재 시간과 일치하는지 확인하고 필요한 경우 수정
+  List<CandleData> _adjustTimestamps(
+    List<CandleData> candles,
+    ChartTimeframe timeframe,
+  ) {
+    if (candles.isEmpty) return candles;
+
+    // 현재 시간과 가장 최근 캔들 시간 차이가 지나치게 크면 시간 조정
+    final now = DateTime.now();
+
+    // 수정된 캔들 목록
+    final List<CandleData> adjustedCandles = [];
+
+    // 마지막 캔들과 현재 시간의 시간 차이 계산
+    final timeDifference = now.difference(candles.last.timestamp).inMinutes;
+
+    // 시간 차이가 너무 크거나 15분, 1시간, 4시간 차트인 경우 항상 시간 조정
+    final needsAdjustment =
+        timeDifference > 30 ||
+        timeframe == ChartTimeframe.minutes15 ||
+        timeframe == ChartTimeframe.minutes60 ||
+        timeframe == ChartTimeframe.minutes240;
+
+    if (needsAdjustment) {
+      debugPrint(
+        'UpbitChartApiService: 타임스탬프 조정 중 - 시간 차이: $timeDifference분, 타임프레임: ${timeframe.name}',
+      );
+
+      // 타임프레임에 따른 간격 계산
+      Duration interval;
+      switch (timeframe) {
+        case ChartTimeframe.minutes1:
+          interval = const Duration(minutes: 1);
+          break;
+        case ChartTimeframe.minutes3:
+          interval = const Duration(minutes: 3);
+          break;
+        case ChartTimeframe.minutes5:
+          interval = const Duration(minutes: 5);
+          break;
+        case ChartTimeframe.minutes10:
+          interval = const Duration(minutes: 10);
+          break;
+        case ChartTimeframe.minutes15:
+          interval = const Duration(minutes: 15);
+          break;
+        case ChartTimeframe.minutes30:
+          interval = const Duration(minutes: 30);
+          break;
+        case ChartTimeframe.minutes60:
+          interval = const Duration(hours: 1);
+          break;
+        case ChartTimeframe.minutes240:
+          interval = const Duration(hours: 4);
+          break;
+        case ChartTimeframe.days1:
+          interval = const Duration(days: 1);
+          break;
+        case ChartTimeframe.days7:
+          interval = const Duration(days: 7);
+          break;
+        case ChartTimeframe.days30:
+          interval = const Duration(days: 30);
+          break;
+      }
+
+      // 현재 시간에서 간격 * 개수만큼 빼서 시작 시간 계산
+      DateTime startTime = now.subtract(interval * (candles.length - 1));
+
+      // 시간 프레임에 맞게 시간 정렬
+      switch (timeframe) {
+        case ChartTimeframe.minutes15:
+          // 15분 단위로 맞추기 (0, 15, 30, 45분)
+          final minute = (startTime.minute ~/ 15) * 15;
+          startTime = DateTime(
+            startTime.year,
+            startTime.month,
+            startTime.day,
+            startTime.hour,
+            minute,
+          );
+          break;
+        case ChartTimeframe.minutes60:
+          // 정시에 맞추기
+          startTime = DateTime(
+            startTime.year,
+            startTime.month,
+            startTime.day,
+            startTime.hour,
+          );
+          break;
+        case ChartTimeframe.minutes240:
+          // 4시간 단위로 맞추기 (0, 4, 8, 12, 16, 20시)
+          final hour = (startTime.hour ~/ 4) * 4;
+          startTime = DateTime(
+            startTime.year,
+            startTime.month,
+            startTime.day,
+            hour,
+          );
+          break;
+        default:
+          // 다른 타임프레임은 그대로 유지
+          break;
+      }
+
+      // 각 캔들에 새 타임스탬프 할당
+      for (int i = 0; i < candles.length; i++) {
+        final candle = candles[i];
+        final newTimestamp = startTime.add(interval * i);
+
+        adjustedCandles.add(
+          CandleData(
+            timestamp: newTimestamp,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume,
+          ),
+        );
+      }
+
+      return adjustedCandles;
     }
+
+    return candles;
   }
 
   @override
@@ -271,17 +381,20 @@ class UpbitChartApiService implements ChartApiService {
       // 6. 데이터 정렬 (시간 오름차순)
       candles.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
+      // 타임스탬프 조정
+      final adjustedCandles = _adjustTimestamps(candles, timeframe);
+
       // 7. 캐시 저장 및 반환
       final chartData = CandleChartData(
         symbol: symbol,
         timeframe: timeframe,
-        candles: candles,
+        candles: adjustedCandles,
         lastUpdated: DateTime.now(),
       );
 
       await _cacheService.saveCandleChartData(chartData);
       debugPrint(
-        'UpbitChartApiService: 캔들 데이터 저장 완료 - $symbol (${candles.length}개)',
+        'UpbitChartApiService: 캔들 데이터 저장 완료 - $symbol (${adjustedCandles.length}개)',
       );
 
       return chartData;

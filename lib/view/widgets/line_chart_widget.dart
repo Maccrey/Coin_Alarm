@@ -41,6 +41,36 @@ class _LineChartWidgetState extends State<LineChartWidget> {
   int? _selectedPointIndex;
   final ScrollController _scrollController = ScrollController();
 
+  // 표시할 데이터 포인트 범위
+  int _visibleStartIndex = 0;
+  int _visibleEndIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _calculateVisibleIndices();
+  }
+
+  @override
+  void didUpdateWidget(LineChartWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.chartData != oldWidget.chartData) {
+      _calculateVisibleIndices();
+    }
+  }
+
+  // 표시할 데이터 포인트 범위 계산
+  void _calculateVisibleIndices() {
+    if (widget.chartData.points.isEmpty) return;
+
+    // 항상 최대 30개의 포인트만 표시하도록 설정
+    final totalPoints = widget.chartData.points.length;
+    final visibleCount = min(30, totalPoints);
+
+    _visibleStartIndex = max(0, totalPoints - visibleCount);
+    _visibleEndIndex = totalPoints - 1;
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -77,12 +107,21 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         ? const Color(0x004CAF50) // 다크 모드에서는 투명 녹색
         : widget.gradientEndColor;
 
+    // 표시할 데이터 포인트
+    final visiblePoints = widget.chartData.points.sublist(
+      _visibleStartIndex,
+      _visibleEndIndex + 1,
+    );
+
+    // 가격 레이블의 너비 (오른쪽 여백)
+    const priceLabelsWidth = 70.0;
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final points = widget.chartData.points;
         final pointWidth = 10.0; // 포인트 간 기본 간격
-        final totalWidth = pointWidth * points.length * _scale;
-        final visibleWidth = constraints.maxWidth;
+        final totalWidth = pointWidth * visiblePoints.length * _scale;
+        final visibleWidth =
+            constraints.maxWidth - priceLabelsWidth; // 가격 레이블 공간 제외
 
         return GestureDetector(
           onScaleStart: (details) {
@@ -124,29 +163,35 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                 color: backgroundColor,
               ),
 
-              // 차트 영역
-              SingleChildScrollView(
-                controller: _scrollController,
-                scrollDirection: Axis.horizontal,
-                physics: const NeverScrollableScrollPhysics(),
-                child: SizedBox(
-                  width: totalWidth,
-                  height: constraints.maxHeight,
-                  child: CustomPaint(
-                    painter: LineChartPainter(
-                      points: points,
-                      lineColor: lineColor,
-                      gridColor: gridColor,
-                      textColor: textColor,
-                      showGrid: widget.showGrid,
-                      showGradient: widget.showGradient,
-                      gradientStartColor: gradientStartColor,
-                      gradientEndColor: gradientEndColor,
-                      pointWidth: pointWidth,
-                      scale: _scale,
-                      scrollOffset: _scrollOffset,
-                      selectedPointIndex: _selectedPointIndex,
-                      isDarkMode: isDarkMode,
+              // 차트 영역 (가격 레이블 공간을 제외한 영역)
+              Positioned(
+                left: 0,
+                top: 0,
+                width: visibleWidth,
+                height: constraints.maxHeight,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const NeverScrollableScrollPhysics(),
+                  child: SizedBox(
+                    width: totalWidth,
+                    height: constraints.maxHeight,
+                    child: CustomPaint(
+                      painter: LineChartPainter(
+                        points: visiblePoints,
+                        lineColor: lineColor,
+                        gridColor: gridColor,
+                        textColor: textColor,
+                        showGrid: widget.showGrid,
+                        showGradient: widget.showGradient,
+                        gradientStartColor: gradientStartColor,
+                        gradientEndColor: gradientEndColor,
+                        pointWidth: pointWidth,
+                        scale: _scale,
+                        scrollOffset: _scrollOffset,
+                        selectedPointIndex: _selectedPointIndex,
+                        isDarkMode: isDarkMode,
+                      ),
                     ),
                   ),
                 ),
@@ -155,12 +200,12 @@ class _LineChartWidgetState extends State<LineChartWidget> {
               // 툴팁 (선택된 포인트가 있는 경우)
               if (widget.showTooltip &&
                   _selectedPointIndex != null &&
-                  _selectedPointIndex! < points.length)
+                  _selectedPointIndex! < visiblePoints.length)
                 Positioned(
                   top: 8,
-                  right: 8,
+                  right: priceLabelsWidth + 8, // 가격 레이블 공간을 고려한 위치 조정
                   child: _buildTooltip(
-                    points[_selectedPointIndex!],
+                    visiblePoints[_selectedPointIndex!],
                     isDarkMode,
                   ),
                 ),
@@ -169,9 +214,10 @@ class _LineChartWidgetState extends State<LineChartWidget> {
               Positioned(
                 top: 0,
                 right: 0,
+                width: priceLabelsWidth,
                 bottom: 0,
                 child: _buildPriceLabels(
-                  points,
+                  visiblePoints,
                   labelBackgroundColor,
                   textColor,
                 ),
@@ -180,10 +226,10 @@ class _LineChartWidgetState extends State<LineChartWidget> {
               // 날짜 레이블 (하단)
               Positioned(
                 left: 0,
-                right: 0,
+                right: priceLabelsWidth, // 가격 레이블 공간을 제외
                 bottom: 0,
                 child: _buildDateLabels(
-                  points,
+                  visiblePoints,
                   labelBackgroundColor,
                   textColor,
                 ),
@@ -257,49 +303,55 @@ class _LineChartWidgetState extends State<LineChartWidget> {
   ) {
     final dateFormat = DateFormat('MM/dd');
     final timeFormat = DateFormat('HH:mm');
-
-    // 시간 프레임에 따라 표시할 날짜 개수 조정
     final timeframe = widget.chartData.timeframe;
-    int skipFactor;
 
-    switch (timeframe) {
-      case ChartTimeframe.minutes1:
-      case ChartTimeframe.minutes3:
-      case ChartTimeframe.minutes5:
-        skipFactor = 10;
-        break;
-      case ChartTimeframe.minutes10:
-      case ChartTimeframe.minutes15:
-      case ChartTimeframe.minutes30:
-        skipFactor = 6;
-        break;
-      case ChartTimeframe.minutes60:
-      case ChartTimeframe.minutes240:
-        skipFactor = 4;
-        break;
-      default:
-        skipFactor = 2;
-    }
+    // 표시할 레이블 개수 (5개로 고정)
+    const int labelCount = 5;
 
     return Container(
       height: 20,
       color: backgroundColor,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          for (int i = 0; i < points.length; i += skipFactor)
-            if (i < points.length)
-              SizedBox(
-                width: 50,
-                child: Text(
-                  _isMinutesTimeframe(timeframe)
-                      ? timeFormat.format(points[i].timestamp)
-                      : dateFormat.format(points[i].timestamp),
-                  style: TextStyle(fontSize: 10, color: textColor),
-                  textAlign: TextAlign.center,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final labelWidth = constraints.maxWidth / labelCount;
+
+          // 균등하게 분포된 인덱스 계산
+          final List<int> labelIndices = [];
+          if (points.length >= labelCount) {
+            final step = (points.length - 1) / (labelCount - 1);
+            for (int i = 0; i < labelCount; i++) {
+              labelIndices.add((i * step).round());
+            }
+          } else {
+            // 포인트가 5개 미만인 경우 모든 포인트에 레이블 표시
+            for (int i = 0; i < points.length; i++) {
+              labelIndices.add(i);
+            }
+          }
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (int i = 0; i < labelIndices.length; i++)
+                SizedBox(
+                  width: labelWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                    child: Text(
+                      _isMinutesTimeframe(timeframe)
+                          ? timeFormat.format(points[labelIndices[i]].timestamp)
+                          : dateFormat.format(
+                              points[labelIndices[i]].timestamp,
+                            ),
+                      style: TextStyle(fontSize: 10, color: textColor),
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
-              ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

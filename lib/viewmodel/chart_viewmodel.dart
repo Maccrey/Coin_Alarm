@@ -27,6 +27,13 @@ class ChartViewModel extends ChangeNotifier {
   CandleChartData? _candleChartData;
   ChartData? _lineChartData;
 
+  // 가격 정보
+  double _currentPrice = 0.0;
+  double _highPrice = 0.0;
+  double _lowPrice = 0.0;
+  double _priceChange = 0.0;
+  double _priceChangePercent = 0.0;
+
   // 선택된 코인 및 설정
   String _selectedSymbol = 'BTC';
   ChartTimeframe _selectedTimeframe = ChartTimeframe.days1;
@@ -50,6 +57,13 @@ class ChartViewModel extends ChangeNotifier {
   ChartType get selectedChartType => _selectedChartType;
   bool get isOfflineMode => _isOfflineMode;
   bool get isConnected => _isConnected;
+
+  // 가격 정보 게터
+  double get currentPrice => _currentPrice;
+  double get highPrice => _highPrice;
+  double get lowPrice => _lowPrice;
+  double get priceChange => _priceChange;
+  double get priceChangePercent => _priceChangePercent;
 
   // 초기화
   Future<void> _initialize() async {
@@ -212,6 +226,9 @@ class ChartViewModel extends ChangeNotifier {
           debugPrint(
             'ChartViewModel: 캔들스틱 데이터 로드 완료 - ${_candleChartData!.candles.length}개',
           );
+
+          // 가격 정보 업데이트
+          _updateCandleChartPriceInfo(_candleChartData!);
         }
       } else {
         _lineChartData = await _apiService!.getLineData(
@@ -225,6 +242,9 @@ class ChartViewModel extends ChangeNotifier {
           debugPrint(
             'ChartViewModel: 라인 차트 데이터 로드 완료 - ${_lineChartData!.points.length}개',
           );
+
+          // 가격 정보 업데이트
+          _updateLineChartPriceInfo(_lineChartData!);
         }
       }
 
@@ -237,6 +257,50 @@ class ChartViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  // 가격 정보 업데이트 (캔들스틱 차트)
+  void _updateCandleChartPriceInfo(CandleChartData data) {
+    if (data.candles.isEmpty) return;
+
+    // 현재가 (마지막 캔들의 종가)
+    final lastCandle = data.candles.last;
+    _currentPrice = lastCandle.close;
+
+    // 고가/저가 계산
+    _highPrice = data.candles
+        .map((c) => c.high)
+        .reduce((a, b) => a > b ? a : b);
+    _lowPrice = data.candles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
+
+    // 변동폭 계산 (첫 캔들과 마지막 캔들 비교)
+    final firstCandle = data.candles.first;
+    _priceChange = lastCandle.close - firstCandle.open;
+
+    // 변동률 계산
+    _priceChangePercent = (lastCandle.close / firstCandle.open - 1) * 100;
+  }
+
+  // 가격 정보 업데이트 (라인 차트)
+  void _updateLineChartPriceInfo(ChartData data) {
+    if (data.points.isEmpty) return;
+
+    // 현재가 (마지막 포인트)
+    final lastPoint = data.points.last;
+    _currentPrice = lastPoint.price;
+
+    // 고가/저가 계산
+    _highPrice = data.points
+        .map((p) => p.price)
+        .reduce((a, b) => a > b ? a : b);
+    _lowPrice = data.points.map((p) => p.price).reduce((a, b) => a < b ? a : b);
+
+    // 변동폭 계산 (첫 포인트와 마지막 포인트 비교)
+    final firstPoint = data.points.first;
+    _priceChange = lastPoint.price - firstPoint.price;
+
+    // 변동률 계산
+    _priceChangePercent = (lastPoint.price / firstPoint.price - 1) * 100;
   }
 
   // 차트 데이터 새로고침

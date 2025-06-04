@@ -254,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // 로그인 버튼
+                      // Todo:로그인 버튼 실제 수파베이스와 연결
                       ElevatedButton(
                         onPressed: () {
                           Navigator.of(context).push(

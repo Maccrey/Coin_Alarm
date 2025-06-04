@@ -19,6 +19,7 @@ class ChartOfflineIndicator extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      constraints: const BoxConstraints(maxWidth: 200),
       decoration: BoxDecoration(
         color: isOfflineMode
             ? Colors.blue.withOpacity(0.2)
@@ -38,12 +39,15 @@ class ChartOfflineIndicator extends StatelessWidget {
             color: isOfflineMode ? Colors.blue : Colors.red,
           ),
           const SizedBox(width: 6),
-          Text(
-            isOfflineMode ? '오프라인 모드' : '네트워크 연결 없음',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: isOfflineMode ? Colors.blue : Colors.red,
+          Flexible(
+            child: Text(
+              isOfflineMode ? '오프라인 모드' : '네트워크 연결 없음',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isOfflineMode ? Colors.blue : Colors.red,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           if (isOfflineMode) ...[

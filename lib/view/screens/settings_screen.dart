@@ -148,23 +148,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _showApiKeyDialog(context, '바이낸스', settingsViewModel),
                   ),
 
-                  // Supabase API 키 설정
-                  ListTile(
-                    title: const Text('Supabase API 키 설정'),
-                    subtitle: Text(
-                      settingsViewModel.upbitAccessKey != null &&
-                              settingsViewModel.upbitAccessKey!.isNotEmpty
-                          ? 'Supabase URL 및 Anon Key 설정됨'
-                          : 'Supabase URL 및 Anon Key 설정되지 않음',
-                    ),
-                    trailing: const Icon(Icons.edit),
-                    onTap: () => _showSupabaseApiKeyDialog(
-                      context,
-                      settingsViewModel.upbitAccessKey,
-                      settingsViewModel.upbitSecretKey,
-                    ),
-                  ),
-
                   // API 키 초기화 버튼
                   Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -1259,107 +1242,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  // Supabase API 키 설정 다이얼로그
-  void _showSupabaseApiKeyDialog(
-    BuildContext context,
-    String? currentUrl,
-    String? currentAnonKey,
-  ) {
-    final urlController = TextEditingController(text: currentUrl ?? '');
-    final anonKeyController = TextEditingController(text: currentAnonKey ?? '');
-    final settingsViewModel = Provider.of<SettingsViewModel>(
-      context,
-      listen: false,
-    );
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Supabase API 키 설정'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Supabase 프로젝트의 URL과 Anon Key를 입력하세요.\n'
-                '이 정보는 앱 내에 안전하게 저장됩니다.',
-                style: TextStyle(fontSize: 12),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: urlController,
-                decoration: const InputDecoration(
-                  labelText: 'Supabase URL',
-                  hintText: 'https://your-project.supabase.co',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: anonKeyController,
-                decoration: const InputDecoration(
-                  labelText: 'Anon Key',
-                  hintText: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('취소'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final url = urlController.text.trim();
-                final anonKey = anonKeyController.text.trim();
-
-                if (url.isEmpty || anonKey.isEmpty) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('모든 필드를 입력하세요')));
-                  return;
-                }
-
-                // 임시로 Upbit API 키 필드에 저장
-                final success = await settingsViewModel.setUpbitApiKeys(
-                  url,
-                  anonKey,
-                );
-
-                if (context.mounted) {
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Supabase API 키가 저장되었습니다')),
-                  );
-
-                  // 앱 재시작 권장 메시지
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('설정 완료'),
-                      content: const Text(
-                        'Supabase API 키가 저장되었습니다. 변경사항을 적용하려면 앱을 재시작하세요.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('확인'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              },
-              child: const Text('저장'),
-            ),
-          ],
-        );
-      },
     );
   }
 }

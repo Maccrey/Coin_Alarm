@@ -406,6 +406,7 @@ class CryptoViewModel extends ChangeNotifier {
   // Getters
   List<Coin> get topCoins => _topCoins;
   List<Coin> get coins => _topCoins; // CoinViewModel과의 호환성을 위한 getter
+  List<Coin> get visibleCoins => _topCoins; // 차트 화면에서 사용할 코인 목록
 
   // 사용자 정의 순서로 정렬된 코인 목록 반환
   List<Coin> getSortedCoins() {

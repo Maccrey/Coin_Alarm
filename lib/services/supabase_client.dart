@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'settings_service.dart';
 
 /// Supabase 클라이언트 서비스
 ///
@@ -32,37 +31,14 @@ class SupabaseClientService {
 
   /// Supabase 클라이언트 초기화
   ///
-  /// 1. 먼저 설정 서비스에서 저장된 API 키를 확인합니다.
-  /// 2. 저장된 키가 없으면 .env 파일에서 환경 변수를 로드합니다.
-  /// 3. Supabase 클라이언트를 초기화합니다.
+  /// .env 파일에서 Supabase URL과 API 키를 로드하여 클라이언트를 초기화합니다.
   Future<void> initialize() async {
     if (_initialized) return;
 
     try {
-      String? supabaseUrl;
-      String? supabaseAnonKey;
-
-      // 설정 서비스에서 저장된 API 키 확인
-      final settingsService = SettingsService();
-      final savedUrl = settingsService
-          .getUpbitAccessKey(); // 임시로 Upbit API 키 필드 사용
-      final savedAnonKey = settingsService
-          .getUpbitSecretKey(); // 임시로 Upbit Secret 키 필드 사용
-
-      // 저장된 키가 있으면 사용
-      if (savedUrl != null &&
-          savedUrl.isNotEmpty &&
-          savedAnonKey != null &&
-          savedAnonKey.isNotEmpty) {
-        supabaseUrl = savedUrl;
-        supabaseAnonKey = savedAnonKey;
-        debugPrint('SupabaseClientService: 저장된 API 키 사용');
-      } else {
-        // 저장된 키가 없으면 .env 파일에서 환경 변수 로드
-        supabaseUrl = dotenv.env['SUPABASE_URL'];
-        supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
-        debugPrint('SupabaseClientService: .env 파일의 API 키 사용');
-      }
+      // .env 파일에서 환경 변수 로드
+      final supabaseUrl = dotenv.env['SUPABASE_URL'];
+      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
 
       // 환경 변수가 설정되어 있는지 확인
       if (supabaseUrl == null || supabaseAnonKey == null) {
@@ -81,15 +57,6 @@ class SupabaseClientService {
       _initialized = true;
 
       debugPrint('SupabaseClientService: 초기화 완료');
-
-      // API 키가 .env에서 로드된 경우 설정 서비스에 저장
-      if (savedUrl == null ||
-          savedUrl.isEmpty ||
-          savedAnonKey == null ||
-          savedAnonKey.isEmpty) {
-        await settingsService.setUpbitApiKeys(supabaseUrl, supabaseAnonKey);
-        debugPrint('SupabaseClientService: API 키를 설정 서비스에 저장');
-      }
     } catch (e) {
       debugPrint('SupabaseClientService: 초기화 실패 - $e');
       rethrow;

@@ -9,7 +9,6 @@ import '../model/news_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../model/chart_data_model.dart';
-import '../services/settings_service.dart';
 
 /// Supabase 서비스 클래스
 class SupabaseService {
@@ -33,49 +32,22 @@ class SupabaseService {
     try {
       if (_useRealSupabase) {
         // 실제 Supabase 초기화
-        final settingsService = SettingsService();
-        String? url;
-        String? anonKey;
-
-        // 설정에서 저장된 API 키 확인
-        final savedUrl = settingsService
-            .getUpbitAccessKey(); // 임시로 Upbit API 키 필드 사용
-        final savedAnonKey = settingsService
-            .getUpbitSecretKey(); // 임시로 Upbit Secret 키 필드 사용
-
-        if (savedUrl != null &&
-            savedUrl.isNotEmpty &&
-            savedAnonKey != null &&
-            savedAnonKey.isNotEmpty) {
-          url = savedUrl;
-          anonKey = savedAnonKey;
-          debugPrint('SupabaseService: 저장된 API 키 사용');
-        } else {
-          // 저장된 키가 없으면 .env 파일에서 환경 변수 로드
-          url = dotenv.env['SUPABASE_URL'];
-          anonKey = dotenv.env['SUPABASE_ANON_KEY'];
-          debugPrint('SupabaseService: .env 파일의 API 키 사용');
-        }
+        final url = dotenv.env['SUPABASE_URL'];
+        final anonKey = dotenv.env['SUPABASE_ANON_KEY'];
 
         if (url == null || anonKey == null) {
-          throw Exception('SUPABASE_URL 또는 SUPABASE_ANON_KEY가 설정되지 않았습니다.');
+          throw Exception(
+            'SUPABASE_URL 또는 SUPABASE_ANON_KEY가 .env 파일에 설정되지 않았습니다.',
+          );
         }
 
         await supabase.Supabase.initialize(url: url, anonKey: anonKey);
-
         _client = supabase.Supabase.instance.client;
-
-        // API 키가 .env에서 로드된 경우 설정 서비스에 저장
-        if (savedUrl == null ||
-            savedUrl.isEmpty ||
-            savedAnonKey == null ||
-            savedAnonKey.isEmpty) {
-          await settingsService.setUpbitApiKeys(url, anonKey);
-          debugPrint('SupabaseService: API 키를 설정 서비스에 저장');
-        }
+        debugPrint('SupabaseService: Supabase 초기화 완료');
       } else {
         // 더미 Supabase 클라이언트 사용
         _client = DummySupabaseClient();
+        debugPrint('SupabaseService: 더미 Supabase 클라이언트 사용');
       }
 
       _initialized = true;

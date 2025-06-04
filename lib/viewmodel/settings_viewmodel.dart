@@ -59,8 +59,8 @@ class SettingsViewModel extends ChangeNotifier {
     try {
       _themeMode = _settingsService.getThemeMode();
       _refreshInterval = _settingsService.getRefreshInterval();
-      _pushNotificationsEnabled =
-          _settingsService.getPushNotificationsEnabled();
+      _pushNotificationsEnabled = _settingsService
+          .getPushNotificationsEnabled();
       _useBiometricAuth = _settingsService.getBiometricAuthEnabled();
       _language = _settingsService.getLanguage();
       _saveLoginInfo = _settingsService.getSaveLoginInfo();

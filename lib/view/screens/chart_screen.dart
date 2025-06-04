@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
-import 'dart:ui'; // TextDirection을 위해 필요
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../data/dummy_coins.dart';
 import '../../model/coin_model.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
-import '../../core/theme.dart';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
-import '../../core/constants.dart';
 import '../widgets/chart_offline_indicator.dart';
 import '../widgets/chart_offline_toggle.dart';
 import '../../viewmodel/chart_viewmodel.dart';
@@ -72,8 +68,8 @@ class _ChartScreenState extends State<ChartScreen> {
 
   // 확대/축소 관련 변수
   double _zoomLevel = 1.0;
-  double _minZoomLevel = 0.5;
-  double _maxZoomLevel = 2.0;
+  final double _minZoomLevel = 0.5;
+  final double _maxZoomLevel = 2.0;
 
   @override
   void initState() {
@@ -83,14 +79,30 @@ class _ChartScreenState extends State<ChartScreen> {
     _initChart();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // CryptoViewModel과 연결하여 데이터 자동 갱신
-      final cryptoViewModel = Provider.of<CryptoViewModel>(
-        context,
-        listen: false,
-      );
-
       // 설정된 새로고침 간격으로 타이머 설정
       _setupRefreshTimer();
+
+      // 차트 화면이 직접 열릴 때만 비트코인으로 설정 (selectedCoin이 null인 경우)
+      if (widget.selectedCoin == null) {
+        // 차트 뷰모델에 비트코인 선택
+        final chartViewModel = Provider.of<ChartViewModel>(
+          context,
+          listen: false,
+        );
+        final cryptoViewModel = Provider.of<CryptoViewModel>(
+          context,
+          listen: false,
+        );
+
+        // 비트코인 코인 객체 찾기
+        final bitcoinCoin = cryptoViewModel.visibleCoins.firstWhere(
+          (coin) => coin.symbol.toUpperCase() == 'BTC',
+          orElse: () => cryptoViewModel.visibleCoins.first,
+        );
+
+        // 비트코인 선택
+        chartViewModel.selectCoin(bitcoinCoin);
+      }
     });
   }
 
@@ -296,9 +308,31 @@ class _ChartScreenState extends State<ChartScreen> {
       });
     }
 
+    // 현재 선택된 코인 이름 가져오기
+    String coinName = '차트';
+    if (widget.selectedCoin != null) {
+      coinName = widget.selectedCoin!.name;
+    } else {
+      // 비트코인이 선택된 경우 이름 표시
+      if (chartViewModel.selectedSymbol.toUpperCase() == 'BTC') {
+        coinName = '비트코인';
+      } else {
+        // 다른 코인인 경우 심볼 표시
+        coinName = chartViewModel.selectedSymbol.toUpperCase();
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.selectedCoin?.name ?? '차트'),
+        // 뒤로가기 버튼 제거
+        automaticallyImplyLeading: false,
+        title: Row(
+          children: [
+            Text(coinName),
+            const SizedBox(width: 8),
+            _buildCoinSelector(context),
+          ],
+        ),
         actions: [
           // 오프라인 모드 토글 버튼
           const ChartOfflineToggle(),
@@ -324,149 +358,206 @@ class _ChartScreenState extends State<ChartScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // 오프라인 모드 표시
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [ChartOfflineIndicator()],
-            ),
-          ),
-
-          // 차트 타입 선택 탭
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _buildChartTypeSelector(context),
-          ),
-
-          // 시간 프레임 선택 탭
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: _buildTimeframeSelector(context),
-          ),
-
-          // 차트 영역
-          Expanded(child: _buildChartArea(context)),
-        ],
-      ),
-    );
-  }
-
-  // 차트 타입 선택 위젯
-  Widget _buildChartTypeSelector(BuildContext context) {
-    final chartViewModel = Provider.of<ChartViewModel>(context);
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _buildChartTypeButton(
-          context,
-          ChartType.candlestick,
-          chartViewModel.selectedChartType == ChartType.candlestick,
-        ),
-        const SizedBox(width: 16),
-        _buildChartTypeButton(
-          context,
-          ChartType.line,
-          chartViewModel.selectedChartType == ChartType.line,
-        ),
-      ],
-    );
-  }
-
-  // 차트 타입 버튼
-  Widget _buildChartTypeButton(
-    BuildContext context,
-    ChartType type,
-    bool isSelected,
-  ) {
-    final chartViewModel = Provider.of<ChartViewModel>(context);
-
-    return ElevatedButton(
-      onPressed: () => chartViewModel.selectChartType(type),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected
-            ? Theme.of(context).colorScheme.primary
-            : Theme.of(context).colorScheme.surface,
-        foregroundColor: isSelected
-            ? Theme.of(context).colorScheme.onPrimary
-            : Theme.of(context).colorScheme.onSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      ),
-      child: Text(chartViewModel.getChartTypeString(type)),
-    );
-  }
-
-  // 시간 프레임 선택 위젯
-  Widget _buildTimeframeSelector(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-        child: Row(
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 시간 프레임 그룹: 분 단위
-            _buildTimeframeGroup(context, '분', [
-              ChartTimeframe.minutes1,
-              ChartTimeframe.minutes3,
-              ChartTimeframe.minutes5,
-              ChartTimeframe.minutes10,
-              ChartTimeframe.minutes15,
-              ChartTimeframe.minutes30,
-              ChartTimeframe.minutes60,
-            ]),
+            // 오프라인 모드 표시
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [ChartOfflineIndicator()],
+                ),
+              ),
+            ),
 
-            const SizedBox(width: 12),
+            // 가격 정보 표시 영역
+            _buildPriceInfoArea(context),
 
-            // 시간 프레임 그룹: 일/주/월 단위
-            _buildTimeframeGroup(context, '일/주/월', [
-              ChartTimeframe.minutes240,
-              ChartTimeframe.days1,
-              ChartTimeframe.days7,
-              ChartTimeframe.days30,
-            ]),
+            // 시간 프레임 선택 탭
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: _buildTimeframeSelector(context),
+            ),
+
+            // 차트 영역
+            Expanded(child: _buildChartArea(context)),
           ],
         ),
       ),
     );
   }
 
-  // 시간 프레임 그룹 위젯
-  Widget _buildTimeframeGroup(
-    BuildContext context,
-    String groupName,
-    List<ChartTimeframe> timeframes,
-  ) {
+  // 코인 선택 드롭다운
+  Widget _buildCoinSelector(BuildContext context) {
+    final chartViewModel = Provider.of<ChartViewModel>(context);
+    final cryptoViewModel = Provider.of<CryptoViewModel>(
+      context,
+      listen: false,
+    );
+
+    return DropdownButton<String>(
+      value: chartViewModel.selectedSymbol,
+      icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+      underline: Container(),
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.9),
+        fontWeight: FontWeight.w500,
+        fontSize: 14,
+      ),
+      dropdownColor: Theme.of(context).colorScheme.primary,
+      items: cryptoViewModel.visibleCoins.map((coin) {
+        return DropdownMenuItem<String>(
+          value: coin.symbol,
+          child: Text(coin.symbol),
+        );
+      }).toList(),
+      onChanged: (symbol) {
+        if (symbol != null) {
+          final selectedCoin = cryptoViewModel.visibleCoins.firstWhere(
+            (coin) => coin.symbol == symbol,
+            orElse: () => cryptoViewModel.visibleCoins.first,
+          );
+          chartViewModel.selectCoin(selectedCoin);
+        }
+      },
+    );
+  }
+
+  // 가격 정보 영역
+  Widget _buildPriceInfoArea(BuildContext context) {
     final chartViewModel = Provider.of<ChartViewModel>(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 그룹 이름
-        Padding(
-          padding: const EdgeInsets.only(left: 4.0, bottom: 4.0),
-          child: Text(
-            groupName,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.white70
-                  : Colors.black54,
-            ),
+    // 현재 선택된 코인 데이터
+    final currentPrice = chartViewModel.currentPrice;
+    final highPrice = chartViewModel.highPrice;
+    final lowPrice = chartViewModel.lowPrice;
+    final priceChange = chartViewModel.priceChange;
+    final priceChangePercent = chartViewModel.priceChangePercent;
+
+    final isPositiveChange = priceChange >= 0;
+    final changeColor = isPositiveChange
+        ? Colors.green.shade700
+        : Colors.red.shade700;
+
+    // 천 단위 콤마 포맷터
+    final priceFormat = NumberFormat.currency(symbol: '', decimalDigits: 2);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 현재가
+          Row(
+            children: [
+              Text(
+                priceFormat.format(currentPrice),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: changeColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isPositiveChange
+                          ? Icons.arrow_upward
+                          : Icons.arrow_downward,
+                      size: 14,
+                      color: changeColor,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      '${isPositiveChange ? "+" : ""}${priceFormat.format(priceChange)} (${priceChangePercent.toStringAsFixed(2)}%)',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: changeColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 8),
+
+          // 고가/저가
+          Row(
+            children: [
+              Text(
+                '고가: ${priceFormat.format(highPrice)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.7),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                '저가: ${priceFormat.format(lowPrice)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.7),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 시간 프레임 선택 위젯
+  Widget _buildTimeframeSelector(BuildContext context) {
+    return SizedBox(
+      width: MediaQuery.of(context).size.width, // 화면 너비로 제한
+      height: 60, // 높이 축소
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 제한된 시간 프레임 옵션만 표시
+              _buildTimeframeButton(context, ChartTimeframe.minutes15),
+              _buildTimeframeButton(context, ChartTimeframe.minutes60),
+              _buildTimeframeButton(context, ChartTimeframe.minutes240),
+              _buildTimeframeButton(context, ChartTimeframe.days1),
+              _buildTimeframeButton(context, ChartTimeframe.days7),
+            ],
           ),
         ),
-
-        // 시간 프레임 버튼들
-        Row(
-          children: timeframes.map((timeframe) {
-            return _buildTimeframeButton(context, timeframe);
-          }).toList(),
-        ),
-      ],
+      ),
     );
   }
 
@@ -475,43 +566,17 @@ class _ChartScreenState extends State<ChartScreen> {
     final chartViewModel = Provider.of<ChartViewModel>(context);
     final isSelected = chartViewModel.selectedTimeframe == timeframe;
 
-    // 시간 프레임에 따라 요청 데이터 개수 최적화
-    int dataPoints;
-    switch (timeframe) {
-      case ChartTimeframe.minutes1:
-      case ChartTimeframe.minutes3:
-        dataPoints = 60; // 1시간 분량
-        break;
-      case ChartTimeframe.minutes5:
-      case ChartTimeframe.minutes10:
-      case ChartTimeframe.minutes15:
-        dataPoints = 72; // 6시간 분량
-        break;
-      case ChartTimeframe.minutes30:
-      case ChartTimeframe.minutes60:
-        dataPoints = 48; // 1일 분량
-        break;
-      case ChartTimeframe.minutes240:
-        dataPoints = 30; // 5일 분량
-        break;
-      case ChartTimeframe.days1:
-        dataPoints = 90; // 3개월 분량
-        break;
-      case ChartTimeframe.days7:
-        dataPoints = 12; // 3개월 분량
-        break;
-      case ChartTimeframe.days30:
-        dataPoints = 12; // 1년 분량
-        break;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Tooltip(
-        message:
-            '${chartViewModel.getTimeframeString(timeframe)} (약 $dataPoints개 데이터)',
+    return SizedBox(
+      width: 70, // 명시적인 너비 설정
+      height: 36, // 명시적인 높이 설정
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4.0),
         child: ElevatedButton(
-          onPressed: () => chartViewModel.selectTimeframe(timeframe),
+          onPressed: () {
+            if (!isSelected) {
+              chartViewModel.selectTimeframe(timeframe);
+            }
+          },
           style: ElevatedButton.styleFrom(
             backgroundColor: isSelected
                 ? Theme.of(context).colorScheme.primary
@@ -519,13 +584,23 @@ class _ChartScreenState extends State<ChartScreen> {
             foregroundColor: isSelected
                 ? Theme.of(context).colorScheme.onPrimary
                 : Theme.of(context).colorScheme.onSurface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             elevation: isSelected ? 2 : 0,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+            minimumSize: const Size(40, 30),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.outline,
+                width: 1,
+              ),
+            ),
           ),
-          child: Text(chartViewModel.getTimeframeString(timeframe)),
+          child: Text(
+            chartViewModel.getTimeframeString(timeframe),
+            style: const TextStyle(fontSize: 12),
+          ),
         ),
       ),
     );
@@ -536,44 +611,60 @@ class _ChartScreenState extends State<ChartScreen> {
     final chartViewModel = Provider.of<ChartViewModel>(context);
 
     if (chartViewModel.isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('차트 데이터를 불러오는 중...', style: TextStyle(fontSize: 14)),
-          ],
+      return SizedBox(
+        width: double.infinity,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('차트 데이터를 불러오는 중...', style: TextStyle(fontSize: 14)),
+            ],
+          ),
         ),
       );
     }
 
     if (chartViewModel.error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              chartViewModel.error!,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              textAlign: TextAlign.center,
+      return SizedBox(
+        width: double.infinity,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.8,
             ),
-            const SizedBox(height: 24),
-            if (!chartViewModel.isOfflineMode && chartViewModel.isConnected)
-              ElevatedButton.icon(
-                onPressed: () => chartViewModel.refreshChartData(),
-                icon: const Icon(Icons.refresh),
-                label: const Text('다시 시도'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  chartViewModel.error!,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
                   ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-          ],
+                const SizedBox(height: 24),
+                if (!chartViewModel.isOfflineMode && chartViewModel.isConnected)
+                  ElevatedButton.icon(
+                    onPressed: () => chartViewModel.refreshChartData(),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('다시 시도'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       );
     }
@@ -581,14 +672,18 @@ class _ChartScreenState extends State<ChartScreen> {
     // 차트 타입에 따라 다른 차트 위젯 반환
     if (chartViewModel.selectedChartType == ChartType.candlestick) {
       if (chartViewModel.candleChartData == null) {
-        return const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.bar_chart, size: 48, color: Colors.grey),
-              SizedBox(height: 16),
-              Text('캔들스틱 차트 데이터가 없습니다.'),
-            ],
+        return SizedBox(
+          width: double.infinity,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.bar_chart, size: 48, color: Colors.grey),
+                SizedBox(height: 16),
+                Text('캔들스틱 차트 데이터가 없습니다.'),
+              ],
+            ),
           ),
         );
       }
@@ -631,14 +726,18 @@ class _ChartScreenState extends State<ChartScreen> {
       );
     } else {
       if (chartViewModel.lineChartData == null) {
-        return const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.show_chart, size: 48, color: Colors.grey),
-              SizedBox(height: 16),
-              Text('라인 차트 데이터가 없습니다.'),
-            ],
+        return SizedBox(
+          width: double.infinity,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.show_chart, size: 48, color: Colors.grey),
+                SizedBox(height: 16),
+                Text('라인 차트 데이터가 없습니다.'),
+              ],
+            ),
           ),
         );
       }
@@ -688,65 +787,159 @@ class _ChartScreenState extends State<ChartScreen> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('차트 설정'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 오프라인 모드 설정
-              StatefulBuilder(
-                builder: (context, setState) {
-                  return SwitchListTile(
-                    title: const Text('오프라인 모드'),
-                    subtitle: const Text('인터넷 연결 없이 캐시된 데이터 사용'),
-                    value: chartViewModel.isOfflineMode,
-                    onChanged: (value) {
-                      chartViewModel.setOfflineMode(value);
-                      setState(() {});
-                    },
-                  );
-                },
-              ),
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('차트 설정'),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.8,
+                  maxHeight: MediaQuery.of(context).size.height * 0.6,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 차트 타입 선택
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8.0),
+                        child: Text(
+                          '차트 타입',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      _buildChartTypeSelector(context),
+                      const Divider(height: 24),
 
-              // 캐시 정보
-              FutureBuilder<int>(
-                future: Provider.of<ChartCacheService>(
-                  context,
-                  listen: false,
-                ).getCacheSize(),
-                builder: (context, snapshot) {
-                  final cacheSize = snapshot.data ?? 0;
-                  final cacheSizeInMB = (cacheSize / (1024 * 1024))
-                      .toStringAsFixed(2);
+                      // 오프라인 모드 설정
+                      SwitchListTile(
+                        title: const Text('오프라인 모드'),
+                        subtitle: const Text('인터넷 연결 없이 캐시된 데이터 사용'),
+                        value: chartViewModel.isOfflineMode,
+                        onChanged: (value) {
+                          chartViewModel.setOfflineMode(value);
+                          setState(() {});
+                        },
+                      ),
 
-                  return ListTile(
-                    title: const Text('캐시 크기'),
-                    subtitle: Text('$cacheSizeInMB MB'),
-                    trailing: TextButton(
-                      onPressed: () async {
-                        await Provider.of<ChartCacheService>(
+                      // 캐시 정보
+                      FutureBuilder<int>(
+                        future: Provider.of<ChartCacheService>(
                           context,
                           listen: false,
-                        ).clearAllCache();
-                        if (context.mounted) {
-                          Navigator.of(context).pop();
-                        }
-                      },
-                      child: const Text('캐시 삭제'),
-                    ),
-                  );
-                },
+                        ).getCacheSize(),
+                        builder: (context, snapshot) {
+                          final cacheSize = snapshot.data ?? 0;
+                          final cacheSizeInMB = (cacheSize / (1024 * 1024))
+                              .toStringAsFixed(2);
+
+                          return ListTile(
+                            title: const Text('캐시 크기'),
+                            subtitle: Text('$cacheSizeInMB MB'),
+                            trailing: TextButton(
+                              onPressed: () async {
+                                await Provider.of<ChartCacheService>(
+                                  context,
+                                  listen: false,
+                                ).clearAllCache();
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                }
+                              },
+                              child: const Text('캐시 삭제'),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('닫기'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('닫기'),
+                ),
+              ],
+            );
+          },
         );
       },
+    );
+  }
+
+  // 차트 타입 선택 위젯
+  Widget _buildChartTypeSelector(BuildContext context) {
+    final chartViewModel = Provider.of<ChartViewModel>(context);
+
+    return SizedBox(
+      width: MediaQuery.of(context).size.width * 0.8, // 화면 너비의 80%로 제한
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildChartTypeButton(
+            context,
+            ChartType.candlestick,
+            chartViewModel.selectedChartType == ChartType.candlestick,
+          ),
+          const SizedBox(width: 16),
+          _buildChartTypeButton(
+            context,
+            ChartType.line,
+            chartViewModel.selectedChartType == ChartType.line,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 차트 타입 버튼
+  Widget _buildChartTypeButton(
+    BuildContext context,
+    ChartType chartType,
+    bool isSelected,
+  ) {
+    final chartViewModel = Provider.of<ChartViewModel>(context);
+
+    final icon = chartType == ChartType.candlestick
+        ? Icons.candlestick_chart
+        : Icons.show_chart;
+
+    final label = chartType == ChartType.candlestick ? '캔들' : '라인';
+
+    return SizedBox(
+      width: 100, // 명시적인 너비 설정
+      height: 40, // 명시적인 높이 설정
+      child: ElevatedButton.icon(
+        onPressed: () {
+          if (!isSelected) {
+            chartViewModel.selectChartType(chartType);
+          }
+        },
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.surface,
+          foregroundColor: isSelected
+              ? Theme.of(context).colorScheme.onPrimary
+              : Theme.of(context).colorScheme.onSurface,
+          elevation: isSelected ? 2 : 0,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.outline,
+              width: 1,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
