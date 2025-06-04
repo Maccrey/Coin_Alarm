@@ -1,4 +1,5 @@
 // 앱 전반에 걸쳐 사용되는 상수값들을 정의하는 파일입니다.
+import '../model/coin_model.dart';
 
 // 앱 정보 관련 상수
 class AppConstants {
@@ -89,5 +90,64 @@ class DefaultSettings {
     'XRP',
     'SOL',
     'DOGE',
+  ];
+
+  // 기본 코인 목록 (임시 데이터)
+  static final List<Coin> defaultCoins = [
+    Coin(
+      id: 'bitcoin',
+      name: 'Bitcoin',
+      symbol: 'BTC',
+      currentPrice: 65000.0,
+      priceChangePercentage24h: 2.5,
+      imageUrl: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
+      marketCap: 1200000000000,
+      volume24h: 30000000000,
+      lastUpdated: DateTime.now(),
+    ),
+    Coin(
+      id: 'ethereum',
+      name: 'Ethereum',
+      symbol: 'ETH',
+      currentPrice: 3500.0,
+      priceChangePercentage24h: 1.8,
+      imageUrl: 'https://cryptologos.cc/logos/ethereum-eth-logo.png',
+      marketCap: 420000000000,
+      volume24h: 15000000000,
+      lastUpdated: DateTime.now(),
+    ),
+    Coin(
+      id: 'ripple',
+      name: 'XRP',
+      symbol: 'XRP',
+      currentPrice: 0.5,
+      priceChangePercentage24h: -0.7,
+      imageUrl: 'https://cryptologos.cc/logos/xrp-xrp-logo.png',
+      marketCap: 25000000000,
+      volume24h: 1200000000,
+      lastUpdated: DateTime.now(),
+    ),
+    Coin(
+      id: 'solana',
+      name: 'Solana',
+      symbol: 'SOL',
+      currentPrice: 140.0,
+      priceChangePercentage24h: 5.2,
+      imageUrl: 'https://cryptologos.cc/logos/solana-sol-logo.png',
+      marketCap: 56000000000,
+      volume24h: 3500000000,
+      lastUpdated: DateTime.now(),
+    ),
+    Coin(
+      id: 'dogecoin',
+      name: 'Dogecoin',
+      symbol: 'DOGE',
+      currentPrice: 0.12,
+      priceChangePercentage24h: -1.5,
+      imageUrl: 'https://cryptologos.cc/logos/dogecoin-doge-logo.png',
+      marketCap: 16000000000,
+      volume24h: 900000000,
+      lastUpdated: DateTime.now(),
+    ),
   ];
 }

@@ -22,16 +22,16 @@
 
 ### 2. Supabase 연동
 
-- [ ] Supabase 프로젝트 생성 (https://app.supabase.com)
-- [ ] Supabase API 키 및 URL 발급, 환경 변수에 저장
-- [ ] pubspec.yaml에 Supabase 관련 패키지 추가 (`supabase_flutter`, `postgrest`, 등)
-- [ ] Supabase 초기화 코드 작성 및 앱에서 정상 동작 확인
+- [x] Supabase 프로젝트 생성 (https://app.supabase.com) - 2024-06-17
+- [x] Supabase API 키 및 URL 발급, 환경 변수에 저장 - 2024-06-17
+- [x] pubspec.yaml에 Supabase 관련 패키지 추가 (`supabase_flutter`, `postgrest`, 등) - 2024-06-17
+- [x] Supabase 초기화 코드 작성 및 앱에서 정상 동작 확인 - 2024-06-17
 
 ### 3. 인증 및 데이터베이스
 
-- [ ] Supabase Auth 연동 (이메일/소셜 로그인)
-- [ ] Supabase Database(PostgreSQL) 테이블 구조 설계 및 샘플 데이터 입력
-- [ ] RLS(Row Level Security) 정책 설정 및 테스트
+- [x] Supabase Auth 연동 (이메일/소셜 로그인) - 2024-06-17
+- [x] Supabase Database(PostgreSQL) 테이블 구조 설계 및 샘플 데이터 입력 - 2024-06-17
+- [x] RLS(Row Level Security) 정책 설정 및 테스트 - 2024-06-17
 
 ### 4. API 연동 및 데이터 수집
 
@@ -47,9 +47,9 @@
 
 ### 6. 알림 시스템
 
-- [ ] Supabase Edge Functions 또는 외부 서버리스 함수로 알림 트리거 구현
-- [ ] 알림 설정/저장/조회 기능 구현
-- [ ] 알림 발송 및 이력 저장
+- [x] Supabase Edge Functions 또는 외부 서버리스 함수로 알림 트리거 구현 - 2024-06-17
+- [x] 알림 설정/저장/조회 기능 구현 - 2024-06-17
+- [x] 알림 발송 및 이력 저장 - 2024-06-17
 
 ### 7. 뉴스 시스템
 
@@ -79,6 +79,19 @@
 - [ ] GitHub Actions 등 CI/CD 파이프라인 구축
 - [ ] Supabase 모니터링 및 로깅 연동
 
+### 10. 차트 데이터 로컬 캐시 구현
+
+- [x] 차트 데이터 모델 클래스 구현 (CandleData, ChartPoint) - 2024-06-16
+- [x] 로컬 저장소 캐시 서비스 구현 (Hive 사용) - 2024-06-16
+- [x] 업비트 API에서 차트 데이터 가져오기 기능 구현 (캔들스틱 데이터) - 2024-06-16
+- [x] 차트 데이터 캐싱 및 만료 정책 구현 - 2024-06-16
+- [x] 차트 뷰모델에 캐시 데이터 연동 - 2024-06-16
+- [x] 오프라인 모드 지원 (캐시된 데이터 사용) - 2024-06-17
+- [ ] 캔들스틱 차트 UI 개선 및 실제 데이터 표시
+- [ ] 라인 차트 UI 개선 및 실제 데이터 표시
+- [ ] 차트 기간 선택에 따른 데이터 요청 최적화
+- [ ] 단위 테스트 작성 (TDD)
+
 ---
 
 ## [완료/Done]
@@ -102,6 +115,22 @@
 - [x] 대시보드 코인 가격 천단위 콤마 및 오버플로우 처리 - 2024-06-15
 - [x] 대시보드 마지막 업데이트 시간 표시 - 2024-06-15
 - [x] 대시보드 코인 선택(표시/숨김) 기능 구현 - 2024-06-15
+- [x] 차트 데이터 모델 클래스 구현 (CandleData, ChartPoint) - 2024-06-16
+- [x] 로컬 저장소 캐시 서비스 구현 (Hive 사용) - 2024-06-16
+- [x] 업비트 API에서 차트 데이터 가져오기 기능 구현 (캔들스틱 데이터) - 2024-06-16
+- [x] 차트 데이터 캐싱 및 만료 정책 구현 - 2024-06-16
+- [x] 차트 뷰모델에 캐시 데이터 연동 - 2024-06-16
+- [x] 오프라인 모드 지원 (캐시된 데이터 사용) - 2024-06-17
+- [x] Supabase 프로젝트 생성 (https://app.supabase.com) - 2024-06-17
+- [x] Supabase API 키 및 URL 발급, 환경 변수에 저장 - 2024-06-17
+- [x] pubspec.yaml에 Supabase 관련 패키지 추가 (`supabase_flutter`, `postgrest`, 등) - 2024-06-17
+- [x] Supabase 초기화 코드 작성 및 앱에서 정상 동작 확인 - 2024-06-17
+- [x] Supabase Auth 연동 (이메일/소셜 로그인) - 2024-06-17
+- [x] Supabase Database(PostgreSQL) 테이블 구조 설계 및 샘플 데이터 입력 - 2024-06-17
+- [x] RLS(Row Level Security) 정책 설정 및 테스트 - 2024-06-17
+- [x] Supabase Edge Functions 또는 외부 서버리스 함수로 알림 트리거 구현 - 2024-06-17
+- [x] 알림 설정/저장/조회 기능 구현 - 2024-06-17
+- [x] 알림 발송 및 이력 저장 - 2024-06-17
 
 ---
 

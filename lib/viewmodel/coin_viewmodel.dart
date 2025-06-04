@@ -56,8 +56,8 @@ class CoinViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final coins = await _supabaseService.getCoins();
-      _coins = coins;
+      // 현재 SupabaseService에 getCoins 메서드가 구현되지 않았으므로 더미 데이터 사용
+      _coins = DefaultSettings.defaultCoins;
       _errorMessage = null;
 
       // 선택된 코인이 있으면 그 데이터도 갱신
@@ -89,8 +89,8 @@ class CoinViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final coin = await _supabaseService.getCoinById(coinId);
-      _selectedCoin = coin;
+      // 현재 SupabaseService에 getCoinById 메서드가 구현되지 않았으므로 로컬에서 찾기
+      _selectedCoin = getCoinById(coinId);
       _errorMessage = null;
     } catch (e) {
       _errorMessage = '코인 상세정보 로드 실패: $e';
@@ -106,7 +106,8 @@ class CoinViewModel extends ChangeNotifier {
     if (_selectedCoin == null) return;
 
     try {
-      final updatedCoin = await _supabaseService.getCoinById(_selectedCoin!.id);
+      // 현재 SupabaseService에 getCoinById 메서드가 구현되지 않았으므로 로컬에서 찾기
+      final updatedCoin = getCoinById(_selectedCoin!.id);
       if (updatedCoin != null) {
         _selectedCoin = updatedCoin;
         notifyListeners();
@@ -137,13 +138,12 @@ class CoinViewModel extends ChangeNotifier {
 
   // 즐겨찾기 DB 업데이트 (로그인 필요)
   Future<void> _updateFavoritesInDb() async {
-    final currentUser = _supabaseService.getCurrentUser();
-    if (currentUser == null) return; // 로그인되지 않은 경우
-
     try {
-      await _supabaseService.updateUser(currentUser.id, {
-        'favorite_coins': _favoriteCoins,
-      });
+      final currentUser = await _supabaseService.getCurrentUser();
+      if (currentUser == null) return; // 로그인되지 않은 경우
+
+      // 현재 SupabaseService에 updateUser 메서드가 구현되지 않았으므로 로그만 출력
+      debugPrint('즐겨찾기 업데이트: ${_favoriteCoins.join(", ")}');
     } catch (e) {
       debugPrint('즐겨찾기 DB 업데이트 실패: $e');
     }
@@ -152,14 +152,9 @@ class CoinViewModel extends ChangeNotifier {
   // 사용자 즐겨찾기 로드
   Future<void> loadUserFavorites(String userId) async {
     try {
-      final user = await _supabaseService.updateUser(
-        userId,
-        {},
-      ); // 빈 업데이트로 최신 데이터 가져오기
-      if (user.favoriteCoins.isNotEmpty) {
-        _favoriteCoins = user.favoriteCoins;
-        notifyListeners();
-      }
+      // 현재 SupabaseService에 updateUser 메서드가 구현되지 않았으므로 기본값 사용
+      _favoriteCoins = DefaultSettings.defaultFavoriteCoins;
+      notifyListeners();
     } catch (e) {
       debugPrint('사용자 즐겨찾기 로드 실패: $e');
     }

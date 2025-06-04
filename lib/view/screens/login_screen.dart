@@ -4,6 +4,7 @@ import '../../core/theme.dart';
 import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/settings_viewmodel.dart';
 import 'home_screen.dart';
+import 'register_screen.dart';
 
 // 로그인 화면
 class LoginScreen extends StatefulWidget {
@@ -281,12 +282,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: authViewModel.isLoading
                                 ? null
                                 : () {
-                                    // 회원가입 기능은 아직 구현되지 않음
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          '회원가입 기능은 아직 구현되지 않았습니다.',
-                                        ),
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const RegisterScreen(),
                                       ),
                                     );
                                   },

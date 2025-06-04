@@ -32,8 +32,8 @@ class PriceAlertViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final alerts = await _supabaseService.getUserPriceAlerts(userId);
-      _alerts = alerts;
+      final alerts = await _supabaseService.getAlertSettings(userId: userId);
+      _alerts = alerts.map((data) => PriceAlert.fromJson(data)).toList();
       _errorMessage = null;
     } catch (e) {
       _errorMessage = '가격 알림 로드 실패: $e';
@@ -71,10 +71,16 @@ class PriceAlertViewModel extends ChangeNotifier {
       );
 
       // DB에 저장
-      final createdAlert = await _supabaseService.createPriceAlert(newAlert);
+      await _supabaseService.saveAlertSetting(
+        userId: userId,
+        symbol: coinSymbol,
+        targetPrice: priceTarget,
+        isAbove: isAbove,
+        isActive: true,
+      );
 
       // 로컬 목록에 추가
-      _alerts.add(createdAlert);
+      _alerts.add(newAlert);
       _errorMessage = null;
       notifyListeners();
       return true;
@@ -94,7 +100,7 @@ class PriceAlertViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _supabaseService.deletePriceAlert(alertId);
+      await _supabaseService.deleteAlertSetting(alertId: int.parse(alertId));
 
       // 로컬 목록에서 제거
       _alerts.removeWhere((alert) => alert.id == alertId);

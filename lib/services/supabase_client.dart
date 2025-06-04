@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'settings_service.dart';
 
 /// Supabase 클라이언트 서비스
 ///
@@ -31,15 +32,37 @@ class SupabaseClientService {
 
   /// Supabase 클라이언트 초기화
   ///
-  /// .env 파일에서 SUPABASE_URL과 SUPABASE_ANON_KEY를 로드하여
-  /// Supabase 클라이언트를 초기화합니다.
+  /// 1. 먼저 설정 서비스에서 저장된 API 키를 확인합니다.
+  /// 2. 저장된 키가 없으면 .env 파일에서 환경 변수를 로드합니다.
+  /// 3. Supabase 클라이언트를 초기화합니다.
   Future<void> initialize() async {
     if (_initialized) return;
 
     try {
-      // .env 파일에서 환경 변수 로드
-      final supabaseUrl = dotenv.env['SUPABASE_URL'];
-      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+      String? supabaseUrl;
+      String? supabaseAnonKey;
+
+      // 설정 서비스에서 저장된 API 키 확인
+      final settingsService = SettingsService();
+      final savedUrl = settingsService
+          .getUpbitAccessKey(); // 임시로 Upbit API 키 필드 사용
+      final savedAnonKey = settingsService
+          .getUpbitSecretKey(); // 임시로 Upbit Secret 키 필드 사용
+
+      // 저장된 키가 있으면 사용
+      if (savedUrl != null &&
+          savedUrl.isNotEmpty &&
+          savedAnonKey != null &&
+          savedAnonKey.isNotEmpty) {
+        supabaseUrl = savedUrl;
+        supabaseAnonKey = savedAnonKey;
+        debugPrint('SupabaseClientService: 저장된 API 키 사용');
+      } else {
+        // 저장된 키가 없으면 .env 파일에서 환경 변수 로드
+        supabaseUrl = dotenv.env['SUPABASE_URL'];
+        supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+        debugPrint('SupabaseClientService: .env 파일의 API 키 사용');
+      }
 
       // 환경 변수가 설정되어 있는지 확인
       if (supabaseUrl == null || supabaseAnonKey == null) {
@@ -58,6 +81,15 @@ class SupabaseClientService {
       _initialized = true;
 
       debugPrint('SupabaseClientService: 초기화 완료');
+
+      // API 키가 .env에서 로드된 경우 설정 서비스에 저장
+      if (savedUrl == null ||
+          savedUrl.isEmpty ||
+          savedAnonKey == null ||
+          savedAnonKey.isEmpty) {
+        await settingsService.setUpbitApiKeys(supabaseUrl, supabaseAnonKey);
+        debugPrint('SupabaseClientService: API 키를 설정 서비스에 저장');
+      }
     } catch (e) {
       debugPrint('SupabaseClientService: 초기화 실패 - $e');
       rethrow;
@@ -79,4 +111,80 @@ class SupabaseClientService {
       rethrow;
     }
   }
+
+  // TODO: Supabase Realtime 기능은 나중에 구현
+  // 현재 버전의 Supabase Flutter SDK에서 호환성 문제가 있어 구현 보류
+
+  /*
+  /// Supabase Realtime 채널 구독
+  /// 
+  /// 지정된 테이블의 변경 사항을 실시간으로 구독합니다.
+  /// 콜백 함수를 통해 변경 사항을 처리할 수 있습니다.
+  /// 
+  /// [tableName] 구독할 테이블 이름
+  /// [event] 구독할 이벤트 유형 (INSERT, UPDATE, DELETE, *)
+  /// [callback] 이벤트 발생 시 호출할 콜백 함수
+  RealtimeChannel subscribeToTable(
+    String tableName,
+    String event,
+    Function(Map<String, dynamic>) callback,
+  ) {
+    if (!_initialized) {
+      throw Exception(
+        'SupabaseClientService가 초기화되지 않았습니다. initialize() 메소드를 먼저 호출하세요.',
+      );
+    }
+
+    final channel = _client.channel('public:$tableName');
+    
+    channel.on(
+      RealtimeListenTypes.postgresChanges,
+      ChannelFilter(
+        event: event,
+        schema: 'public',
+        table: tableName,
+      ),
+      (payload, [ref]) {
+        debugPrint('Realtime 이벤트 수신: $payload');
+        callback(payload as Map<String, dynamic>);
+      },
+    ).subscribe();
+    
+    return channel;
+  }
+
+  /// Supabase Realtime 채널 구독 해제
+  /// 
+  /// [channel] 구독 해제할 채널
+  Future<void> unsubscribeFromChannel(RealtimeChannel channel) async {
+    await channel.unsubscribe();
+  }
+
+  /// 가격 알림 채널 구독
+  /// 
+  /// 가격 알림 트리거 이벤트를 구독합니다.
+  /// [callback] 알림 트리거 시 호출할 콜백 함수
+  RealtimeChannel subscribeToPriceAlerts(
+    Function(Map<String, dynamic>) callback,
+  ) {
+    if (!_initialized) {
+      throw Exception(
+        'SupabaseClientService가 초기화되지 않았습니다. initialize() 메소드를 먼저 호출하세요.',
+      );
+    }
+
+    final channel = _client.channel('price_alerts');
+    
+    channel.on(
+      RealtimeListenTypes.broadcast,
+      ChannelFilter(event: 'price_alert_triggered'),
+      (payload, [ref]) {
+        debugPrint('가격 알림 트리거: $payload');
+        callback(payload as Map<String, dynamic>);
+      },
+    ).subscribe();
+    
+    return channel;
+  }
+  */
 }

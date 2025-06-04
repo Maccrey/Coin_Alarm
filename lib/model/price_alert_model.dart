@@ -28,17 +28,17 @@ class PriceAlert {
   // JSON에서 변환
   factory PriceAlert.fromJson(Map<String, dynamic> json) {
     return PriceAlert(
-      id: json['id'],
+      id: json['id'].toString(),
       userId: json['user_id'],
-      coinId: json['coin_id'],
-      coinSymbol: json['coin_symbol'],
-      priceTarget: json['price_target'].toDouble(),
-      isAbove: json['is_above'],
-      isTriggered: json['is_triggered'],
-      createdAt: DateTime.parse(json['created_at']),
-      triggeredAt: json['triggered_at'] != null
-          ? DateTime.parse(json['triggered_at'])
-          : null,
+      coinId: json['symbol'] ?? '',
+      coinSymbol: json['symbol'] ?? '',
+      priceTarget: (json['target_price'] ?? 0.0).toDouble(),
+      isAbove: json['is_above'] ?? false,
+      isTriggered: false, // Supabase에서는 아직 이 필드를 관리하지 않음
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
+      triggeredAt: null, // Supabase에서는 아직 이 필드를 관리하지 않음
       notes: json['notes'],
     );
   }

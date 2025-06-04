@@ -15,6 +15,8 @@ import 'viewmodel/crypto_viewmodel.dart';
 import 'view/screens/splash_screen.dart';
 import 'services/supabase_client.dart';
 import 'view/screens/settings_screen.dart';
+import 'viewmodel/chart_viewmodel.dart';
+import 'services/chart_cache_service.dart';
 
 // 앱 진입점
 void main() async {
@@ -38,6 +40,10 @@ void main() async {
   // .env 파일 로드
   await dotenv.load();
 
+  // 설정 서비스 초기화
+  final settingsService = SettingsService();
+  await settingsService.initialize();
+
   // Supabase 클라이언트 초기화
   // 추후 실제 Supabase 연동 시 SupabaseService 대신 사용
   try {
@@ -49,12 +55,22 @@ void main() async {
     // 에러가 있더라도 앱은 실행 (더미데이터 사용)
   }
 
-  // 서비스 초기화 (현재는 더미 데이터 사용)
+  // 서비스 초기화 (실제 Supabase 연동 시도)
   final supabaseService = SupabaseService();
-  await supabaseService.initialize();
+  try {
+    // 실제 Supabase 연동 시도
+    await supabaseService.initialize(useRealSupabase: true);
+    debugPrint('실제 Supabase 연동 성공');
+  } catch (e) {
+    debugPrint('실제 Supabase 연동 실패: $e');
+    // 실패 시 더미 데이터로 초기화
+    await supabaseService.initialize(useRealSupabase: false);
+    debugPrint('더미 데이터로 초기화됨');
+  }
 
-  final settingsService = SettingsService();
-  await settingsService.initialize();
+  // 차트 캐시 서비스 초기화
+  final chartCacheService = ChartCacheService();
+  await chartCacheService.initialize();
 
   runApp(
     MyApp(supabaseService: supabaseService, settingsService: settingsService),
@@ -77,6 +93,9 @@ class MyApp extends StatelessWidget {
     // 다양한 ViewModel 제공을 위한 MultiProvider 설정
     return MultiProvider(
       providers: [
+        // 서비스 제공
+        Provider<ChartCacheService>(create: (_) => ChartCacheService()),
+
         // 인증 관련 ViewModel
         ChangeNotifierProvider(create: (_) => AuthViewModel(supabaseService)),
         // 코인 관련 ViewModel
@@ -95,6 +114,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => CryptoViewModel(settingsService: settingsService),
         ),
+        // 차트 데이터 ViewModel
+        ChangeNotifierProvider(create: (_) => ChartViewModel()),
       ],
       builder: (context, child) {
         // SettingsViewModel에서 테마 모드 가져오기
