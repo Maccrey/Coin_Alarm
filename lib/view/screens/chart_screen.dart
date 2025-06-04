@@ -22,6 +22,22 @@ class ChartScreen extends StatefulWidget {
   State<ChartScreen> createState() => _ChartScreenState();
 }
 
+// 캔들스틱 데이터 구조 (전역)
+class CandleData {
+  final double x;
+  final double open;
+  final double high;
+  final double low;
+  final double close;
+  CandleData({
+    required this.x,
+    required this.open,
+    required this.high,
+    required this.low,
+    required this.close,
+  });
+}
+
 class _ChartScreenState extends State<ChartScreen> {
   // 선택된 코인
   late Coin _selectedCoin;
@@ -38,8 +54,11 @@ class _ChartScreenState extends State<ChartScreen> {
   final List<String> _indicators = ['이동평균선', 'MACD', 'RSI', 'OBV'];
   final Set<String> _selectedIndicators = {'이동평균선'};
 
-  // 차트 데이터 (임시 데이터)
+  // 차트 데이터 (과거+현재)
   List<Point<double>> _chartData = [];
+
+  // 캔들스틱 데이터 리스트
+  List<CandleData> _candleDataList = [];
 
   // 타이머
   Timer? _refreshTimer;
@@ -76,26 +95,24 @@ class _ChartScreenState extends State<ChartScreen> {
 
   // 새로고침 타이머 설정
   void _setupRefreshTimer() {
-    // 이전 타이머 취소
     _refreshTimer?.cancel();
-
-    // SettingsService에서 새로고침 간격 가져오기
     final cryptoViewModel = Provider.of<CryptoViewModel>(
       context,
       listen: false,
     );
     final settingsInterval = cryptoViewModel.refreshInterval;
-
     debugPrint('ChartScreen: 새로고침 타이머 설정 - $settingsInterval초');
-
-    // 타이머 설정
     _refreshTimer = Timer.periodic(Duration(seconds: settingsInterval), (
       timer,
     ) {
       if (mounted) {
         setState(() {
-          // 차트 데이터 업데이트
-          _generateChartData();
+          final coin = cryptoViewModel.topCoins.firstWhere(
+            (c) => c.symbol == _selectedCoin.symbol,
+            orElse: () => _selectedCoin,
+          );
+          _updateCurrentPrice(coin.currentPrice); // 라인 차트용
+          _updateCurrentCandle(coin.currentPrice); // 캔들스틱 차트용
         });
       }
     });
@@ -103,35 +120,141 @@ class _ChartScreenState extends State<ChartScreen> {
 
   // 차트 초기화
   void _initChart() {
-    // 초기 코인 설정
     if (widget.selectedCoin != null) {
       _selectedCoin = widget.selectedCoin!;
     } else {
-      // 기본 코인은 DummyCoins에서 가져옴
       _selectedCoin = DummyCoins.popularCoins.first;
     }
-
-    // 임시 차트 데이터 생성
-    _generateChartData();
+    _initChartData(); // 라인 차트용
+    _initCandleDataList(); // 캔들스틱 차트용
   }
 
-  // 차트 데이터 생성 (더미 데이터)
-  void _generateChartData() {
+  // 과거 데이터 고정, 현재가만 실시간 업데이트
+  void _initChartData() {
     final random = Random();
     final pointCount = _getPointCount();
-
-    // 기존 데이터 초기화
     _chartData = [];
-
-    // 랜덤 데이터 생성
-    for (var i = 0; i < pointCount; i++) {
-      final x = i.toDouble();
+    // 과거 데이터: 랜덤 변동 (마지막 전까지)
+    for (int i = 0; i < pointCount - 1; i++) {
       final y =
           _selectedCoin.currentPrice * (0.97 + 0.06 * random.nextDouble());
-      _chartData.add(Point(x, y));
+      _chartData.add(Point(i.toDouble(), y));
     }
+    // 마지막 포인트(현재가)
+    _chartData.add(
+      Point((pointCount - 1).toDouble(), _selectedCoin.currentPrice),
+    );
+  }
 
-    debugPrint('ChartScreen: 차트 데이터 업데이트됨 - ${DateTime.now().toString()}');
+  // 캔들스틱 데이터 초기화 (과거+현재)
+  void _initCandleDataList() {
+    final random = Random();
+    final pointCount = _getPointCount();
+    _candleDataList = [];
+    double prevClose =
+        _selectedCoin.currentPrice * (0.97 + 0.06 * random.nextDouble());
+    for (int i = 0; i < pointCount - 1; i++) {
+      final open = prevClose;
+      final close = open * (0.98 + 0.04 * random.nextDouble());
+      final high = max(open, close) * (1 + random.nextDouble() * 0.01);
+      final low = min(open, close) * (1 - random.nextDouble() * 0.01);
+      _candleDataList.add(
+        CandleData(
+          x: i.toDouble(),
+          open: open,
+          high: high,
+          low: low,
+          close: close,
+        ),
+      );
+      prevClose = close;
+    }
+    // 마지막 캔들(현재가)
+    final open = prevClose;
+    final close = _selectedCoin.currentPrice;
+    final high = max(open, close) * (1 + random.nextDouble() * 0.01);
+    final low = min(open, close) * (1 - random.nextDouble() * 0.01);
+    _candleDataList.add(
+      CandleData(
+        x: (pointCount - 1).toDouble(),
+        open: open,
+        high: high,
+        low: low,
+        close: close,
+      ),
+    );
+  }
+
+  // 실시간 가격만 마지막 포인트로 업데이트 (라인 차트용)
+  void _updateCurrentPrice(double newPrice) {
+    if (_chartData.isNotEmpty) {
+      _chartData[_chartData.length - 1] = Point(
+        (_chartData.length - 1).toDouble(),
+        newPrice,
+      );
+    }
+  }
+
+  // 실시간 가격만 마지막 캔들에 반영
+  void _updateCurrentCandle(double newPrice) {
+    if (_candleDataList.isNotEmpty) {
+      final last = _candleDataList.last;
+      final open = last.open;
+      final close = newPrice;
+      final high = max(last.high, max(open, close));
+      final low = min(last.low, min(open, close));
+      _candleDataList[_candleDataList.length - 1] = CandleData(
+        x: last.x,
+        open: open,
+        high: high,
+        low: low,
+        close: close,
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(ChartScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 위젯이 업데이트되면서 선택된 코인이 변경되었는지 확인
+    if (widget.selectedCoin != null &&
+        widget.selectedCoin != oldWidget.selectedCoin) {
+      _updateSelectedCoin(widget.selectedCoin!);
+    }
+  }
+
+  // 코인 변경 시 차트 업데이트
+  void _updateSelectedCoin(Coin coin) {
+    setState(() {
+      _selectedCoin = coin;
+      _initChartData();
+      _initCandleDataList();
+      _zoomLevel = 1.0;
+    });
+  }
+
+  // 기간 변경 시 차트 업데이트
+  void _updateTimeframe(String timeframe) {
+    setState(() {
+      _selectedTimeframe = timeframe;
+      _initChartData();
+      _initCandleDataList();
+      _zoomLevel = 1.0;
+    });
+  }
+
+  // 차트 유형 변경
+  void _updateChartType(String chartType) {
+    setState(() {
+      _selectedChartType = chartType;
+    });
+  }
+
+  // 확대/축소 레벨 업데이트
+  void _updateZoomLevel(double delta) {
+    setState(() {
+      _zoomLevel = (_zoomLevel + delta).clamp(_minZoomLevel, _maxZoomLevel);
+    });
   }
 
   // 기간별 데이터 포인트 수 결정
@@ -155,48 +278,6 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   @override
-  void didUpdateWidget(ChartScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // 위젯이 업데이트되면서 선택된 코인이 변경되었는지 확인
-    if (widget.selectedCoin != null &&
-        widget.selectedCoin != oldWidget.selectedCoin) {
-      _updateSelectedCoin(widget.selectedCoin!);
-    }
-  }
-
-  // 코인 변경 시 차트 업데이트
-  void _updateSelectedCoin(Coin coin) {
-    setState(() {
-      _selectedCoin = coin;
-      _generateChartData();
-      _zoomLevel = 1.0; // 코인 변경 시 줌 레벨 초기화
-    });
-  }
-
-  // 기간 변경 시 차트 업데이트
-  void _updateTimeframe(String timeframe) {
-    setState(() {
-      _selectedTimeframe = timeframe;
-      _generateChartData();
-      _zoomLevel = 1.0; // 기간 변경 시 줌 레벨 초기화
-    });
-  }
-
-  // 차트 유형 변경
-  void _updateChartType(String chartType) {
-    setState(() {
-      _selectedChartType = chartType;
-    });
-  }
-
-  // 확대/축소 레벨 업데이트
-  void _updateZoomLevel(double delta) {
-    setState(() {
-      _zoomLevel = (_zoomLevel + delta).clamp(_minZoomLevel, _maxZoomLevel);
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Consumer<CryptoViewModel>(
       builder: (context, cryptoViewModel, child) {
@@ -207,10 +288,11 @@ class _ChartScreenState extends State<ChartScreen> {
             orElse: () => _selectedCoin,
           );
 
-          // 코인 데이터가 업데이트되었으면 차트 데이터도 업데이트
+          // [개선] 코인 데이터가 업데이트되었으면 현재가만 갱신
           if (apiCoin.lastUpdated != _selectedCoin.lastUpdated) {
             _selectedCoin = apiCoin;
-            _generateChartData();
+            _updateCurrentPrice(apiCoin.currentPrice);
+            _updateCurrentCandle(apiCoin.currentPrice);
           }
         }
 
@@ -247,12 +329,11 @@ class _ChartScreenState extends State<ChartScreen> {
                 children: [
                   // 차트 영역
                   _buildChartArea(),
+                  // 시세 정보
+                  _buildPriceInfo(),
 
                   // 차트 설정 영역
                   _buildChartSettings(),
-
-                  // 시세 정보
-                  _buildPriceInfo(),
                 ],
               ),
             ),
@@ -282,18 +363,16 @@ class _ChartScreenState extends State<ChartScreen> {
               color: Theme.of(context).colorScheme.surfaceVariant,
               borderRadius: BorderRadius.circular(16),
             ),
-            child:
-                _selectedCoin.imageUrl != null
-                    ? ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        _selectedCoin.imageUrl!,
-                        errorBuilder:
-                            (context, error, stackTrace) =>
-                                const Icon(Icons.currency_bitcoin),
-                      ),
-                    )
-                    : const Icon(Icons.currency_bitcoin),
+            child: _selectedCoin.imageUrl != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.network(
+                      _selectedCoin.imageUrl!,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(Icons.currency_bitcoin),
+                    ),
+                  )
+                : const Icon(Icons.currency_bitcoin),
           ),
           const SizedBox(width: 12),
 
@@ -304,16 +383,15 @@ class _ChartScreenState extends State<ChartScreen> {
               isExpanded: true,
               underline: const SizedBox(),
               icon: const Icon(Icons.keyboard_arrow_down),
-              items:
-                  cryptoViewModel.topCoins.map((coin) {
-                    return DropdownMenuItem<String>(
-                      value: coin.symbol,
-                      child: Text(
-                        '${coin.name} (${coin.symbol})',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    );
-                  }).toList(),
+              items: cryptoViewModel.topCoins.map((coin) {
+                return DropdownMenuItem<String>(
+                  value: coin.symbol,
+                  child: Text(
+                    '${coin.name} (${coin.symbol})',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                );
+              }).toList(),
               onChanged: (value) {
                 if (value != null) {
                   final coin = cryptoViewModel.topCoins.firstWhere(
@@ -332,18 +410,14 @@ class _ChartScreenState extends State<ChartScreen> {
 
   // 차트 영역
   Widget _buildChartArea() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      height: 350, // 고정 높이로 설정
-      child: Column(
-        children: [
-          // 확대/축소 컨트롤
-          _buildZoomControls(),
-
-          // 차트
-          Expanded(child: _buildChart()),
-        ],
-      ),
+    return Column(
+      children: [
+        _buildZoomControls(),
+        if (_selectedChartType == '라인')
+          SizedBox(height: 200, child: _buildChart())
+        else
+          SizedBox(height: 200, child: _buildCandleChart()),
+      ],
     );
   }
 
@@ -362,8 +436,9 @@ class _ChartScreenState extends State<ChartScreen> {
           iconSize: 20,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          onPressed:
-              _zoomLevel > _minZoomLevel ? () => _updateZoomLevel(-0.1) : null,
+          onPressed: _zoomLevel > _minZoomLevel
+              ? () => _updateZoomLevel(-0.1)
+              : null,
         ),
         const SizedBox(width: 4),
         IconButton(
@@ -371,8 +446,9 @@ class _ChartScreenState extends State<ChartScreen> {
           iconSize: 20,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          onPressed:
-              _zoomLevel < _maxZoomLevel ? () => _updateZoomLevel(0.1) : null,
+          onPressed: _zoomLevel < _maxZoomLevel
+              ? () => _updateZoomLevel(0.1)
+              : null,
         ),
         const SizedBox(width: 8),
         TextButton(
@@ -407,23 +483,29 @@ class _ChartScreenState extends State<ChartScreen> {
       if (point.y > maxY) maxY = point.y;
     }
 
-    // 차트 범위 여유 추가
+    // [개선1] 차트 범위 여유(버퍼) 더 크게, min/max가 너무 가까우면 고정 폭 적용
     final range = maxY - minY;
-    minY -= range * 0.05;
-    maxY += range * 0.05;
+    double buffer = range * 0.15;
+    if (buffer < minY * 0.05) buffer = minY * 0.05; // 최소 버퍼
+    if (range < minY * 0.05) {
+      // 변동이 거의 없을 때
+      minY -= minY * 0.05;
+      maxY += minY * 0.05;
+    } else {
+      minY -= buffer;
+      maxY += buffer;
+    }
 
     // 확대/축소 적용 - 가격 범위 조정
-    final zoomedRange = range / _zoomLevel;
+    final zoomedRange = (maxY - minY) / _zoomLevel;
     final mid = (maxY + minY) / 2;
     final zoomedMinY = mid - zoomedRange / 2;
     final zoomedMaxY = mid + zoomedRange / 2;
 
     // 가격 상승/하락에 따른 차트 색상 결정
-    final chartColor =
-        (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
-            ? AppTheme
-                .positiveColor // 파란색
-            : Colors.red;
+    final chartColor = (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
+        ? AppTheme.positiveColor
+        : Colors.red;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -439,71 +521,81 @@ class _ChartScreenState extends State<ChartScreen> {
               });
             }
           },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Y축 최대값
-              Text(
-                '₩${_formatPrice(zoomedMaxY)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).hintColor,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white, // [개선3] 차트 배경 밝게
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-
-              // 실제 차트
-              SizedBox(
-                width: width,
-                height: height,
-                child: CustomPaint(
-                  painter:
-                      _selectedChartType == '라인'
-                          ? LineChartPainter(
-                            points: _chartData,
-                            minX: 0,
-                            maxX: _chartData.length - 1.0,
-                            minY: zoomedMinY,
-                            maxY: zoomedMaxY,
-                            color: chartColor,
-                          )
-                          : CandleStickChartPainter(
-                            points: _chartData,
-                            minX: 0,
-                            maxX: _chartData.length - 1.0,
-                            minY: zoomedMinY,
-                            maxY: zoomedMaxY,
-                          ),
+              ],
+            ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 0,
+            ), // [개선4] 패딩 조정
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Y축 최대값
+                Text(
+                  '₩${_formatPrice(zoomedMaxY)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).hintColor,
+                    fontWeight: FontWeight.bold, // [개선3] 폰트 진하게
+                  ),
                 ),
-              ),
-
-              // X축 및 Y축 최소값
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _getStartTimeLabel(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).hintColor,
+                // 실제 차트
+                SizedBox(
+                  width: width,
+                  height: height,
+                  child: CustomPaint(
+                    painter: SmoothLineChartPainter(
+                      points: _chartData,
+                      minX: 0,
+                      maxX: _chartData.length - 1.0,
+                      minY: zoomedMinY,
+                      maxY: zoomedMaxY,
+                      color: chartColor,
                     ),
                   ),
-                  Text(
-                    '₩${_formatPrice(zoomedMinY)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).hintColor,
+                ),
+                // X축 및 Y축 최소값
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _getStartTimeLabel(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).hintColor,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  Text(
-                    '현재',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).hintColor,
+                    Text(
+                      '₩${_formatPrice(zoomedMinY)}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).hintColor,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    Text(
+                      '현재',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).hintColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -531,22 +623,21 @@ class _ChartScreenState extends State<ChartScreen> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children:
-                        _timeframes.map((timeframe) {
-                          final isSelected = timeframe == _selectedTimeframe;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(timeframe),
-                              selected: isSelected,
-                              onSelected: (selected) {
-                                if (selected) {
-                                  _updateTimeframe(timeframe);
-                                }
-                              },
-                            ),
-                          );
-                        }).toList(),
+                    children: _timeframes.map((timeframe) {
+                      final isSelected = timeframe == _selectedTimeframe;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(timeframe),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            if (selected) {
+                              _updateTimeframe(timeframe);
+                            }
+                          },
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
               ),
@@ -586,17 +677,15 @@ class _ChartScreenState extends State<ChartScreen> {
   // 시세 정보 영역
   Widget _buildPriceInfo() {
     // 가격 변화 표시
-    final priceChangeText =
-        (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
-            ? '+${_selectedCoin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%'
-            : '${_selectedCoin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%';
+    final priceChangeText = (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
+        ? '+${_selectedCoin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%'
+        : '${_selectedCoin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%';
 
     // 가격 변화 색상
-    final priceChangeColor =
-        (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
-            ? AppTheme
-                .positiveColor // 파란색으로 변경
-            : Colors.red;
+    final priceChangeColor = (_selectedCoin.priceChangePercentage24h ?? 0) >= 0
+        ? AppTheme
+              .positiveColor // 파란색으로 변경
+        : Colors.red;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -741,10 +830,51 @@ class _ChartScreenState extends State<ChartScreen> {
         return '';
     }
   }
+
+  // 캔들스틱 차트 영역
+  Widget _buildCandleChart() {
+    if (_candleDataList.isEmpty) {
+      return const Center(child: Text('차트 데이터가 없습니다'));
+    }
+    // min/max 계산 (빈 데이터 방어)
+    double minY = _candleDataList.isNotEmpty
+        ? _candleDataList.map((c) => c.low).reduce((a, b) => a < b ? a : b)
+        : 0;
+    double maxY = _candleDataList.isNotEmpty
+        ? _candleDataList.map((c) => c.high).reduce((a, b) => a > b ? a : b)
+        : 1;
+    final range = maxY - minY;
+    double buffer = range * 0.15;
+    if (buffer < minY * 0.05) buffer = minY * 0.05;
+    if (range < minY * 0.05) {
+      minY -= minY * 0.05;
+      maxY += minY * 0.05;
+    } else {
+      minY -= buffer;
+      maxY += buffer;
+    }
+    final zoomedRange = (maxY - minY) / _zoomLevel;
+    final mid = (maxY + minY) / 2;
+    final zoomedMinY = mid - zoomedRange / 2;
+    final zoomedMaxY = mid + zoomedRange / 2;
+    return SizedBox(
+      width: double.infinity,
+      height: double.infinity,
+      child: CustomPaint(
+        painter: ExchangeStyleCandleStickPainter(
+          candles: _candleDataList,
+          minX: 0,
+          maxX: _candleDataList.length - 1.0,
+          minY: zoomedMinY,
+          maxY: zoomedMaxY,
+        ),
+      ),
+    );
+  }
 }
 
-// 라인 차트 페인터
-class LineChartPainter extends CustomPainter {
+// [개선2] 부드러운 라인 차트 페인터
+class SmoothLineChartPainter extends CustomPainter {
   final List<Point<double>> points;
   final double minX;
   final double maxX;
@@ -752,7 +882,7 @@ class LineChartPainter extends CustomPainter {
   final double maxY;
   final Color color;
 
-  LineChartPainter({
+  SmoothLineChartPainter({
     required this.points,
     required this.minX,
     required this.maxX,
@@ -763,69 +893,60 @@ class LineChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
 
-    final fillPaint =
-        Paint()
-          ..color = color.withOpacity(0.2)
-          ..style = PaintingStyle.fill;
+    final fillPaint = Paint()
+      ..color = color.withOpacity(0.15)
+      ..style = PaintingStyle.fill;
 
     final path = Path();
     final fillPath = Path();
 
-    bool isFirst = true;
+    if (points.isEmpty) return;
 
-    for (int i = 0; i < points.length; i++) {
-      final point = points[i];
+    // 첫 포인트
+    final first = points.first;
+    double x0 = ((first.x - minX) / (maxX - minX)) * size.width;
+    double y0 = size.height - ((first.y - minY) / (maxY - minY)) * size.height;
+    path.moveTo(x0, y0);
+    fillPath.moveTo(x0, size.height);
+    fillPath.lineTo(x0, y0);
 
-      // X, Y 좌표 계산
-      final x = ((point.x - minX) / (maxX - minX)) * size.width;
-      final y = size.height - ((point.y - minY) / (maxY - minY)) * size.height;
-
-      // 범위를 벗어난 경우 처리
-      if (y.isNaN || y.isInfinite || y < 0 || y > size.height) {
-        continue;
-      }
-
-      if (isFirst) {
-        path.moveTo(x, y);
-        fillPath.moveTo(x, size.height);
-        fillPath.lineTo(x, y);
-        isFirst = false;
-      } else {
-        path.lineTo(x, y);
-        fillPath.lineTo(x, y);
-      }
+    for (int i = 1; i < points.length; i++) {
+      final prev = points[i - 1];
+      final curr = points[i];
+      final x1 = ((curr.x - minX) / (maxX - minX)) * size.width;
+      final y1 = size.height - ((curr.y - minY) / (maxY - minY)) * size.height;
+      final xm = (x0 + x1) / 2;
+      final ym = (y0 + y1) / 2;
+      // quadraticBezierTo로 부드럽게 연결
+      path.quadraticBezierTo(x0, y0, xm, ym);
+      fillPath.quadraticBezierTo(x0, y0, xm, ym);
+      x0 = x1;
+      y0 = y1;
     }
-
-    // 채우기 경로 완성
-    if (points.isNotEmpty) {
-      final lastX = ((points.last.x - minX) / (maxX - minX)) * size.width;
-      fillPath.lineTo(lastX, size.height);
-      fillPath.close();
-    }
+    // 마지막 점까지 연결
+    path.lineTo(x0, y0);
+    fillPath.lineTo(x0, y0);
+    fillPath.lineTo(x0, size.height);
+    fillPath.close();
 
     // 그리기
     canvas.drawPath(fillPath, fillPaint);
     canvas.drawPath(path, paint);
 
-    // 가로 격자선
-    final gridPaint =
-        Paint()
-          ..color = Colors.grey.withOpacity(0.3)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.5;
-
+    // [개선3] 연한 격자선
+    final gridPaint = Paint()
+      ..color = Colors.grey.withOpacity(0.15)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5;
     for (int i = 1; i < 5; i++) {
       final y = i * size.height / 5;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
-
-    // 세로 격자선
     for (int i = 1; i < 5; i++) {
       final x = i * size.width / 5;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
@@ -833,140 +954,95 @@ class LineChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// 캔들스틱 차트 페인터
-class CandleStickChartPainter extends CustomPainter {
-  final List<Point<double>> points;
+// 거래소 스타일 캔들스틱 차트 페인터
+class ExchangeStyleCandleStickPainter extends CustomPainter {
+  final List<CandleData> candles;
   final double minX;
   final double maxX;
   final double minY;
   final double maxY;
-
-  CandleStickChartPainter({
-    required this.points,
+  ExchangeStyleCandleStickPainter({
+    required this.candles,
     required this.minX,
     required this.maxX,
     required this.minY,
     required this.maxY,
   });
-
   @override
   void paint(Canvas canvas, Size size) {
-    final random = Random(42); // 일관된 랜덤 시드 사용
-
-    // 배경 그리기
+    // 배경
     canvas.drawRect(
       Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = Colors.black.withOpacity(0.03),
+      Paint()..color = Colors.white,
     );
-
-    // 그리드 그리기
-    final gridPaint =
-        Paint()
-          ..color = Colors.grey.withOpacity(0.3)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.5;
-
-    // 수평 그리드 (가격 레벨)
+    // 연한 격자
+    final gridPaint = Paint()
+      ..color = Colors.grey.withOpacity(0.13)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5;
     for (int i = 1; i < 5; i++) {
       final y = i * size.height / 5;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-
-      // 가격 레이블 추가 - 텍스트 페인터 사용 제거
-      // 간단한 가격 표시로 대체
-      final priceLevel = minY + (maxY - minY) * (1 - i / 5);
-      final paint = Paint()..color = Colors.grey.withOpacity(0.7);
-
-      // 단순히 선으로 표시
-      canvas.drawLine(Offset(0, y), Offset(10, y), paint..strokeWidth = 2);
     }
-
-    // 수직 그리드 (시간 간격)
     for (int i = 1; i < 5; i++) {
       final x = i * size.width / 5;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
     }
-
     // 캔들스틱 그리기
-    final candleWidth = (size.width / (points.length + 1)).clamp(2.0, 20.0);
+    final candleWidth = (size.width / (candles.length + 1)).clamp(6.0, 18.0);
     final candleSpacing =
-        (size.width - candleWidth * points.length) / (points.length + 1);
-
-    for (int i = 0; i < points.length; i++) {
-      final point = points[i];
-
-      // X 좌표 계산
+        (size.width - candleWidth * candles.length) / (candles.length + 1);
+    for (int i = 0; i < candles.length; i++) {
+      final c = candles[i];
       final x =
           candleSpacing + i * (candleWidth + candleSpacing) + candleWidth / 2;
-
-      // 캔들스틱 데이터 생성 (더미)
-      final currentValue = point.y;
-      final openValue =
-          currentValue * (1 + (random.nextDouble() * 0.02 - 0.01));
-      final highValue =
-          max(currentValue, openValue) * (1 + random.nextDouble() * 0.01);
-      final lowValue =
-          min(currentValue, openValue) * (1 - random.nextDouble() * 0.01);
-
-      // Y 좌표 계산
+      // Y좌표
       final yOpen =
-          size.height - ((openValue - minY) / (maxY - minY)) * size.height;
-      final yCurrent =
-          size.height - ((currentValue - minY) / (maxY - minY)) * size.height;
+          size.height - ((c.open - minY) / (maxY - minY)) * size.height;
+      final yClose =
+          size.height - ((c.close - minY) / (maxY - minY)) * size.height;
       final yHigh =
-          size.height - ((highValue - minY) / (maxY - minY)) * size.height;
-      final yLow =
-          size.height - ((lowValue - minY) / (maxY - minY)) * size.height;
-
-      // 범위를 벗어난 경우 처리
-      if (yOpen.isNaN ||
-          yOpen.isInfinite ||
-          yCurrent.isNaN ||
-          yCurrent.isInfinite ||
-          yHigh.isNaN ||
-          yHigh.isInfinite ||
-          yLow.isNaN ||
-          yLow.isInfinite) {
-        continue;
-      }
-
-      // 캔들 색상 (상승/하락)
-      final isUp = currentValue >= openValue;
-      final candleColor = isUp ? AppTheme.positiveColor : Colors.red;
-
-      // 그림자 선 그리기 (고가-저가)
+          size.height - ((c.high - minY) / (maxY - minY)) * size.height;
+      final yLow = size.height - ((c.low - minY) / (maxY - minY)) * size.height;
+      // 상승/하락
+      final isUp = c.close >= c.open;
+      final bodyColor = isUp ? Color(0xFF1976D2) : Color(0xFFD32F2F); // 파랑/빨강
+      final borderColor = isUp ? Color(0xFF1976D2) : Color(0xFFD32F2F);
+      // 꼬리(고가-저가)
       canvas.drawLine(
         Offset(x, yHigh.clamp(0, size.height)),
         Offset(x, yLow.clamp(0, size.height)),
         Paint()
-          ..color = candleColor
-          ..strokeWidth = 1,
+          ..color = borderColor
+          ..strokeWidth = 2.0,
       );
-
-      // 캔들 바디 그리기
-      final candleRect = Rect.fromLTRB(
+      // 바디
+      final rect = Rect.fromLTRB(
         x - candleWidth / 2,
-        min(yOpen, yCurrent).clamp(0, size.height),
+        min(yOpen, yClose).clamp(0, size.height),
         x + candleWidth / 2,
-        max(yOpen, yCurrent).clamp(0, size.height),
+        max(yOpen, yClose).clamp(0, size.height),
       );
-
       canvas.drawRect(
-        candleRect,
+        rect,
         Paint()
-          ..color = candleColor
-          ..style = isUp ? PaintingStyle.stroke : PaintingStyle.fill
-          ..strokeWidth = 1,
+          ..color = bodyColor.withOpacity(isUp ? 0.85 : 0.5)
+          ..style = PaintingStyle.fill,
+      );
+      // 바디 테두리
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..color = borderColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
       );
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

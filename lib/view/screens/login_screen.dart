@@ -225,7 +225,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   },
                             activeColor: AppTheme.primaryColor,
                           ),
-                          const Text('로그인 정보 저장'),
+                          const Text(
+                            '로그인 정보 저장',
+                            style: TextStyle(fontSize: 12),
+                          ),
                           const Spacer(),
                           // 비밀번호 찾기 링크
                           TextButton(
@@ -241,7 +244,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     );
                                   },
-                            child: const Text('비밀번호를 잊으셨나요?'),
+                            child: const Text(
+                              '비밀번호를 잊으셨나요?',
+                              style: TextStyle(fontSize: 12),
+                            ),
                           ),
                         ],
                       ),
