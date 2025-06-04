@@ -119,22 +119,34 @@ class _ChartScreenState extends State<ChartScreen> {
       context,
       listen: false,
     );
-    final settingsInterval = cryptoViewModel.refreshInterval;
-    debugPrint('ChartScreen: 새로고침 타이머 설정 - $settingsInterval초');
-    _refreshTimer = Timer.periodic(Duration(seconds: settingsInterval), (
-      timer,
-    ) {
-      if (mounted) {
-        setState(() {
-          final coin = cryptoViewModel.topCoins.firstWhere(
-            (c) => c.symbol == _selectedCoin.symbol,
-            orElse: () => _selectedCoin,
+
+    // 차트 데이터는 1분마다 새로고침
+    const chartRefreshInterval = 60; // 1분 = 60초
+    debugPrint('ChartScreen: 차트 새로고침 타이머 설정 - $chartRefreshInterval초');
+
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: chartRefreshInterval),
+      (timer) {
+        if (mounted) {
+          // 차트 데이터 새로고침
+          final chartViewModel = Provider.of<ChartViewModel>(
+            context,
+            listen: false,
           );
-          _updateCurrentPrice(coin.currentPrice); // 라인 차트용
-          _updateCurrentCandle(coin.currentPrice); // 캔들스틱 차트용
-        });
-      }
-    });
+          chartViewModel.refreshChartData();
+
+          // 현재가 업데이트
+          setState(() {
+            final coin = cryptoViewModel.topCoins.firstWhere(
+              (c) => c.symbol == _selectedCoin.symbol,
+              orElse: () => _selectedCoin,
+            );
+            _updateCurrentPrice(coin.currentPrice); // 라인 차트용
+            _updateCurrentCandle(coin.currentPrice); // 캔들스틱 차트용
+          });
+        }
+      },
+    );
   }
 
   // 차트 초기화

@@ -136,32 +136,34 @@ class ChartCacheService {
     return null;
   }
 
-  /// 특정 심볼의 모든 캐시 데이터 삭제
+  /// 특정 심볼의 캐시 데이터 삭제
   Future<void> clearSymbolCache(String symbol) async {
-    await _ensureInitialized();
+    debugPrint('ChartCacheService: $symbol 심볼의 캐시 데이터 삭제 시작');
 
     try {
-      // 라인 차트 데이터 삭제
-      final lineKeysToDelete = _lineChartBox.keys
-          .where((key) => (key as String).startsWith(symbol))
-          .toList();
+      // 라인 차트 캐시 삭제
+      final lineChartBox = await _lineChartBox;
+      final lineChartKeys = lineChartBox.keys.cast<String>();
 
-      for (final key in lineKeysToDelete) {
-        await _lineChartBox.delete(key);
+      for (final key in lineChartKeys) {
+        if (key.startsWith('${symbol.toUpperCase()}_')) {
+          await lineChartBox.delete(key);
+        }
       }
 
-      // 캔들 차트 데이터 삭제
-      final candleKeysToDelete = _candleChartBox.keys
-          .where((key) => (key as String).startsWith(symbol))
-          .toList();
+      // 캔들 차트 캐시 삭제
+      final candleChartBox = await _candleChartBox;
+      final candleChartKeys = candleChartBox.keys.cast<String>();
 
-      for (final key in candleKeysToDelete) {
-        await _candleChartBox.delete(key);
+      for (final key in candleChartKeys) {
+        if (key.startsWith('${symbol.toUpperCase()}_')) {
+          await candleChartBox.delete(key);
+        }
       }
 
-      debugPrint('ChartCacheService: $symbol 심볼의 모든 캐시 데이터 삭제 완료');
+      debugPrint('ChartCacheService: $symbol 심볼의 캐시 데이터 삭제 완료');
     } catch (e) {
-      debugPrint('ChartCacheService: 캐시 삭제 오류 - $e');
+      debugPrint('ChartCacheService: $symbol 심볼의 캐시 데이터 삭제 오류 - $e');
     }
   }
 

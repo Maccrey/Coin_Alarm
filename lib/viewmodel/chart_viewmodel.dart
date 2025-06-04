@@ -303,8 +303,13 @@ class ChartViewModel extends ChangeNotifier {
     _priceChangePercent = (lastPoint.price / firstPoint.price - 1) * 100;
   }
 
-  // 차트 데이터 새로고침
+  /// 차트 데이터 새로고침
   Future<void> refreshChartData() async {
+    if (_isLoading) {
+      debugPrint('ChartViewModel: 이미 로딩 중이므로 새로고침 무시');
+      return;
+    }
+
     // 오프라인 모드이거나 네트워크 연결이 없는 경우 새로고침 불가
     if (_isOfflineMode || !_isConnected) {
       _error = '오프라인 상태에서는 새로고침할 수 없습니다.';
@@ -312,9 +317,122 @@ class ChartViewModel extends ChangeNotifier {
       return;
     }
 
-    // 캐시 삭제 후 데이터 다시 로드
-    await _cacheService.clearSymbolCache(_selectedSymbol);
-    await loadChartData();
+    debugPrint('ChartViewModel: 차트 데이터 새로고침 시작');
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      // API 서비스 가져오기
+      final apiService = _serviceFactory.getPreferredService();
+
+      if (apiService == null) {
+        throw Exception('사용 가능한 차트 API 서비스가 없습니다.');
+      }
+
+      // 캐시 삭제 후 데이터 다시 로드
+      await _cacheService.clearSymbolCache(_selectedSymbol);
+
+      // 선택된 타임프레임에 따라 차트 데이터 로드
+      if (_selectedChartType == ChartType.candlestick) {
+        _candleChartData = await apiService.getCandleData(
+          _selectedSymbol,
+          _selectedTimeframe,
+        );
+
+        // 라인 차트 데이터도 함께 업데이트 (필요시 전환할 수 있도록)
+        _lineChartData = await apiService.getLineData(
+          _selectedSymbol,
+          _selectedTimeframe,
+        );
+      } else {
+        _lineChartData = await apiService.getLineData(
+          _selectedSymbol,
+          _selectedTimeframe,
+        );
+
+        // 캔들 차트 데이터도 함께 업데이트 (필요시 전환할 수 있도록)
+        _candleChartData = await apiService.getCandleData(
+          _selectedSymbol,
+          _selectedTimeframe,
+        );
+      }
+
+      // 데이터가 없는 경우 에러 처리
+      if (_selectedChartType == ChartType.candlestick &&
+          _candleChartData == null) {
+        throw Exception('캔들 차트 데이터를 불러올 수 없습니다.');
+      } else if (_selectedChartType == ChartType.line &&
+          _lineChartData == null) {
+        throw Exception('라인 차트 데이터를 불러올 수 없습니다.');
+      }
+
+      // 가격 정보 업데이트 (최고가, 최저가, 변동률 등)
+      _updatePriceInfoFromChartData();
+
+      debugPrint('ChartViewModel: 차트 데이터 새로고침 완료');
+    } catch (e) {
+      debugPrint('ChartViewModel: 차트 데이터 새로고침 오류 - $e');
+      _error = '차트 데이터를 불러올 수 없습니다.\n$e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// 차트 데이터에서 가격 정보 업데이트
+  void _updatePriceInfoFromChartData() {
+    if (_selectedChartType == ChartType.candlestick &&
+        _candleChartData != null) {
+      final candles = _candleChartData!.candles;
+      if (candles.isNotEmpty) {
+        // 최신 데이터 (마지막 캔들)
+        final lastCandle = candles.last;
+        _currentPrice = lastCandle.close;
+
+        // 고가, 저가 계산
+        _highPrice = double.negativeInfinity;
+        _lowPrice = double.infinity;
+
+        for (final candle in candles) {
+          if (candle.high > _highPrice) {
+            _highPrice = candle.high;
+          }
+          if (candle.low < _lowPrice) {
+            _lowPrice = candle.low;
+          }
+        }
+
+        // 변동률 계산 (첫 캔들과 마지막 캔들 비교)
+        final firstCandle = candles.first;
+        _priceChange = lastCandle.close - firstCandle.open;
+        _priceChangePercent = (_priceChange / firstCandle.open) * 100;
+      }
+    } else if (_lineChartData != null) {
+      final points = _lineChartData!.points;
+      if (points.isNotEmpty) {
+        // 최신 데이터 (마지막 포인트)
+        _currentPrice = points.last.price;
+
+        // 고가, 저가 계산
+        _highPrice = double.negativeInfinity;
+        _lowPrice = double.infinity;
+
+        for (final point in points) {
+          if (point.price > _highPrice) {
+            _highPrice = point.price;
+          }
+          if (point.price < _lowPrice) {
+            _lowPrice = point.price;
+          }
+        }
+
+        // 변동률 계산 (첫 포인트와 마지막 포인트 비교)
+        final firstPoint = points.first;
+        _priceChange = points.last.price - firstPoint.price;
+        _priceChangePercent = (_priceChange / firstPoint.price) * 100;
+      }
+    }
   }
 
   // 자동 갱신 타이머 설정

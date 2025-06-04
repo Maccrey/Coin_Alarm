@@ -399,6 +399,16 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
     // 표시할 레이블 개수 (5개로 고정)
     const int labelCount = 5;
 
+    // 최신 데이터가 있는지 확인 (오늘 또는 현재 시간과 일치하는지)
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final hasCurrentData =
+        visibleCandles.isNotEmpty &&
+        (visibleCandles.last.timestamp.isAfter(today) ||
+            (visibleCandles.last.timestamp.year == today.year &&
+                visibleCandles.last.timestamp.month == today.month &&
+                visibleCandles.last.timestamp.day == today.day));
+
     return Container(
       height: 20,
       color: backgroundColor,
@@ -409,10 +419,22 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
           // 균등하게 분포된 인덱스 계산
           final List<int> labelIndices = [];
           if (visibleCandles.length >= labelCount) {
-            final step = (visibleCandles.length - 1) / (labelCount - 1);
-            for (int i = 0; i < labelCount; i++) {
-              labelIndices.add((i * step).round());
+            // 마지막 캔들(최신 데이터)은 항상 포함
+            labelIndices.add(visibleCandles.length - 1);
+
+            // 나머지 인덱스 계산
+            if (labelCount > 1) {
+              final step = (visibleCandles.length - 1) / (labelCount - 1);
+              for (int i = 0; i < labelCount - 1; i++) {
+                final idx = (i * step).round();
+                if (!labelIndices.contains(idx)) {
+                  labelIndices.add(idx);
+                }
+              }
             }
+
+            // 인덱스 정렬
+            labelIndices.sort();
           } else {
             // 캔들이 5개 미만인 경우 모든 캔들에 레이블 표시
             for (int i = 0; i < visibleCandles.length; i++) {
@@ -429,14 +451,28 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2.0),
                     child: Text(
-                      _isMinutesTimeframe(timeframe)
-                          ? timeFormat.format(
-                              visibleCandles[labelIndices[i]].timestamp,
-                            )
-                          : dateFormat.format(
-                              visibleCandles[labelIndices[i]].timestamp,
-                            ),
-                      style: TextStyle(fontSize: 10, color: textColor),
+                      _formatDateLabel(
+                        visibleCandles[labelIndices[i]].timestamp,
+                        timeframe,
+                        isLatest:
+                            labelIndices[i] == visibleCandles.length - 1 &&
+                            hasCurrentData,
+                      ),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color:
+                            labelIndices[i] == visibleCandles.length - 1 &&
+                                hasCurrentData
+                            ? Colors
+                                  .green // 최신 데이터는 녹색으로 강조
+                            : textColor,
+                        fontWeight:
+                            labelIndices[i] == visibleCandles.length - 1 &&
+                                hasCurrentData
+                            ? FontWeight
+                                  .bold // 최신 데이터는 볼드체로 강조
+                            : FontWeight.normal,
+                      ),
                       textAlign: TextAlign.center,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -447,6 +483,64 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
         },
       ),
     );
+  }
+
+  // 날짜 레이블 포맷팅
+  String _formatDateLabel(
+    DateTime timestamp,
+    ChartTimeframe timeframe, {
+    bool isLatest = false,
+  }) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    // 최신 데이터인 경우 특별 표시
+    if (isLatest) {
+      if (timeframe == ChartTimeframe.days1 ||
+          timeframe == ChartTimeframe.days7 ||
+          timeframe == ChartTimeframe.days30) {
+        if (timestamp.year == today.year &&
+            timestamp.month == today.month &&
+            timestamp.day == today.day) {
+          return '오늘';
+        }
+      } else {
+        // 분 단위 타임프레임에서는 '현재'로 표시
+        final diff = now.difference(timestamp);
+        if (diff.inMinutes < 15) {
+          return '현재';
+        }
+      }
+    }
+
+    // 일반 포맷팅
+    if (timestamp.year == today.year &&
+        timestamp.month == today.month &&
+        timestamp.day == today.day) {
+      // 오늘인 경우
+      if (_isMinutesTimeframe(timeframe)) {
+        return DateFormat('HH:mm').format(timestamp);
+      } else {
+        return '오늘';
+      }
+    } else if (timestamp.year == yesterday.year &&
+        timestamp.month == yesterday.month &&
+        timestamp.day == yesterday.day) {
+      // 어제인 경우
+      if (_isMinutesTimeframe(timeframe)) {
+        return DateFormat('HH:mm').format(timestamp);
+      } else {
+        return '어제';
+      }
+    } else {
+      // 그 외
+      if (_isMinutesTimeframe(timeframe)) {
+        return DateFormat('HH:mm').format(timestamp);
+      } else {
+        return DateFormat('MM/dd').format(timestamp);
+      }
+    }
   }
 
   // 툴팁 위젯

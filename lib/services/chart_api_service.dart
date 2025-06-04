@@ -183,12 +183,14 @@ class UpbitChartApiService implements ChartApiService {
     // 마지막 캔들과 현재 시간의 시간 차이 계산
     final timeDifference = now.difference(candles.last.timestamp).inMinutes;
 
-    // 시간 차이가 너무 크거나 15분, 1시간, 4시간 차트인 경우 항상 시간 조정
+    // 1일과 1주 타임프레임의 경우 항상 조정하도록 설정
     final needsAdjustment =
         timeDifference > 30 ||
         timeframe == ChartTimeframe.minutes15 ||
         timeframe == ChartTimeframe.minutes60 ||
-        timeframe == ChartTimeframe.minutes240;
+        timeframe == ChartTimeframe.minutes240 ||
+        timeframe == ChartTimeframe.days1 ||
+        timeframe == ChartTimeframe.days7;
 
     if (needsAdjustment) {
       debugPrint(
@@ -233,8 +235,31 @@ class UpbitChartApiService implements ChartApiService {
           break;
       }
 
-      // 현재 시간에서 간격 * 개수만큼 빼서 시작 시간 계산
-      DateTime startTime = now.subtract(interval * (candles.length - 1));
+      // 현재 날짜에서 역순으로 계산하여 최신 데이터가 항상 현재 날짜까지 표시되도록 함
+      final endTime = now;
+      DateTime startTime = endTime.subtract(interval * (candles.length - 1));
+
+      // 특별히 일간 및 주간 차트를 위한 시간 조정
+      if (timeframe == ChartTimeframe.days1) {
+        // 일간 차트의 경우, 각 캔들이 날짜의 0시(자정)를 기준으로 시작하도록 조정
+        final today = DateTime(now.year, now.month, now.day, 0, 0);
+        startTime = today.subtract(Duration(days: candles.length - 1));
+      } else if (timeframe == ChartTimeframe.days7) {
+        // 주간 차트의 경우, 주의 시작일(월요일)에 맞추어 조정
+        // 오늘이 월요일이 아니라면, 가장 최근 월요일로 맞춤
+        final daysToMonday =
+            (now.weekday - 1) % 7; // 0(월)~6(일) -> 0(월)이 될 때까지의 일수
+        final thisMonday = DateTime(
+          now.year,
+          now.month,
+          now.day - daysToMonday,
+          0,
+          0,
+        );
+        startTime = thisMonday.subtract(
+          Duration(days: 7 * (candles.length - 1)),
+        );
+      }
 
       // 시간 프레임에 맞게 시간 정렬
       switch (timeframe) {
