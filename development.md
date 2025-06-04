@@ -18,3 +18,5 @@
 - 레이아웃 구현 시 무한 너비 제약 조건 오류(BoxConstraints forces an infinite width)를 방지하기 위해 Row와 Column에 적절한 크기 제약을 설정한다.
 - 위젯이 무한한 크기를 가지지 않도록 mainAxisSize: MainAxisSize.min을 사용하거나 Expanded, Flexible 등으로 감싸준다.
 - 스크롤 가능한 위젯 내부에서는 SingleChildScrollView나 ListView를 사용하여 오버플로우를 방지한다.
+- 차트 데이터는 1분마다 자동으로 새로고침되어 최신 데이터를 표시한다.
+- 네트워크 연결이 없는 경우에도 캐시된 데이터를 활용하여 차트를 표시한다.
