@@ -455,6 +455,31 @@ class SupabaseService {
       );
     }
   }
+
+  /// 비밀번호 재설정 이메일 전송
+  ///
+  /// 사용자가 입력한 이메일로 비밀번호 재설정 링크를 전송합니다.
+  /// Supabase의 resetPasswordForEmail API를 사용하거나, 더미 모드에서는 가상의 처리를 수행합니다.
+  ///
+  /// [email] 비밀번호를 재설정할 사용자의 이메일 주소
+  Future<void> resetPassword(String email) async {
+    if (!_initialized) {
+      throw Exception('Supabase가 초기화되지 않았습니다.');
+    }
+
+    if (_useRealSupabase) {
+      try {
+        await _client.auth.resetPasswordForEmail(email);
+        debugPrint('비밀번호 재설정 이메일 전송 완료: $email');
+      } catch (e) {
+        throw Exception('비밀번호 재설정 이메일 전송 실패: $e');
+      }
+    } else {
+      // 더미 비밀번호 재설정 처리
+      await Future.delayed(const Duration(seconds: 1));
+      debugPrint('더미 비밀번호 재설정 이메일 전송 완료: $email');
+    }
+  }
 }
 
 /// 더미 Supabase 클라이언트 클래스

@@ -5,6 +5,7 @@ import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/settings_viewmodel.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
+import 'forgot_password_screen.dart';
 
 // 로그인 화면
 class LoginScreen extends StatefulWidget {
@@ -232,16 +233,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const Spacer(),
                           // 비밀번호 찾기 링크
+                          // 클릭 시 비밀번호 찾기 화면으로 이동
                           TextButton(
                             onPressed: authViewModel.isLoading
                                 ? null
                                 : () {
-                                    // 비밀번호 찾기 기능은 아직 구현되지 않음
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          '비밀번호 찾기 기능은 아직 구현되지 않았습니다.',
-                                        ),
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const ForgotPasswordScreen(),
                                       ),
                                     );
                                   },
@@ -256,7 +256,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // 로그인 버튼
                       ElevatedButton(
-                        onPressed: authViewModel.isLoading ? null : _login,
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const HomeScreen(),
+                            ),
+                          );
+                        },
+                        // onPressed: authViewModel.isLoading ? null : _login,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),

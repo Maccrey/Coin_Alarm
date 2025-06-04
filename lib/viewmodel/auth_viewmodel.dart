@@ -102,18 +102,24 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  // 비밀번호 재설정
-  Future<bool> resetPassword(String email) async {
+  /// 비밀번호 재설정 이메일 전송
+  ///
+  /// 사용자가 입력한 이메일로 비밀번호 재설정 링크를 전송합니다.
+  /// Supabase 서비스를 통해 비밀번호 재설정 이메일을 발송하고 결과를 반환합니다.
+  ///
+  /// [email] 비밀번호를 재설정할 사용자의 이메일 주소
+  /// [return] 이메일 전송 성공 여부 (true: 성공, false: 실패)
+  Future<bool> sendPasswordResetEmail(String email) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      // 현재 SupabaseService에 비밀번호 재설정 기능이 없으므로 임시로 성공 반환
-      debugPrint('비밀번호 재설정 기능은 아직 구현되지 않았습니다.');
+      // Supabase 서비스를 통해 비밀번호 재설정 이메일 전송
+      await _supabaseService.resetPassword(email);
       return true;
     } catch (e) {
-      _errorMessage = '비밀번호 재설정 요청 실패: $e';
+      _errorMessage = '비밀번호 재설정 이메일 전송 실패: $e';
       debugPrint(_errorMessage);
       return false;
     } finally {

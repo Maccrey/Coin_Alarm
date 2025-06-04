@@ -106,10 +106,15 @@ class DummySupabaseAuth {
     _currentUser = null;
   }
 
-  // 비밀번호 재설정 이메일 전송 (더미)
+  /// 비밀번호 재설정 이메일 전송 (더미)
+  ///
+  /// 사용자가 입력한 이메일로 비밀번호 재설정 링크를 전송하는 것처럼 동작합니다.
+  /// 실제로는 이메일을 전송하지 않고 지연 시간만 시뮬레이션합니다.
+  ///
+  /// [email] 비밀번호를 재설정할 사용자의 이메일 주소
   Future<void> resetPassword(String email) async {
     await Future.delayed(const Duration(seconds: 1));
-    // 항상 성공으로 가정
+    print('더미 비밀번호 재설정 이메일 전송 완료: $email');
   }
 
   // 소셜 로그인 (더미)
