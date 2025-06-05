@@ -214,37 +214,47 @@ class ChartViewModel extends ChangeNotifier {
         'ChartViewModel: 차트 데이터 로드 시작 - $_selectedSymbol (${_selectedTimeframe.name})',
       );
 
+      // 이전 데이터 유지 (새로고침 중에도 화면에 표시하기 위해)
+      CandleChartData? newCandleData;
+      ChartData? newLineData;
+
       if (_selectedChartType == ChartType.candlestick) {
-        _candleChartData = await _apiService!.getCandleData(
+        newCandleData = await _apiService!.getCandleData(
           _selectedSymbol,
           _selectedTimeframe,
         );
 
-        if (_candleChartData == null) {
+        if (newCandleData == null) {
           _error = '캔들스틱 차트 데이터를 가져올 수 없습니다.';
         } else {
           debugPrint(
-            'ChartViewModel: 캔들스틱 데이터 로드 완료 - ${_candleChartData!.candles.length}개',
+            'ChartViewModel: 캔들스틱 데이터 로드 완료 - ${newCandleData.candles.length}개',
           );
 
+          // 데이터가 성공적으로 로드된 경우에만 업데이트
+          _candleChartData = newCandleData;
+
           // 가격 정보 업데이트
-          _updateCandleChartPriceInfo(_candleChartData!);
+          _updateCandleChartPriceInfo(newCandleData);
         }
       } else {
-        _lineChartData = await _apiService!.getLineData(
+        newLineData = await _apiService!.getLineData(
           _selectedSymbol,
           _selectedTimeframe,
         );
 
-        if (_lineChartData == null) {
+        if (newLineData == null) {
           _error = '라인 차트 데이터를 가져올 수 없습니다.';
         } else {
           debugPrint(
-            'ChartViewModel: 라인 차트 데이터 로드 완료 - ${_lineChartData!.points.length}개',
+            'ChartViewModel: 라인 차트 데이터 로드 완료 - ${newLineData.points.length}개',
           );
 
+          // 데이터가 성공적으로 로드된 경우에만 업데이트
+          _lineChartData = newLineData;
+
           // 가격 정보 업데이트
-          _updateLineChartPriceInfo(_lineChartData!);
+          _updateLineChartPriceInfo(newLineData);
         }
       }
 
@@ -445,35 +455,124 @@ class ChartViewModel extends ChangeNotifier {
       return;
     }
 
-    // 시간 프레임에 따라 갱신 주기 조정
-    int refreshIntervalSeconds;
-
-    switch (_selectedTimeframe) {
-      case ChartTimeframe.minutes1:
-        refreshIntervalSeconds = 30; // 30초
-        break;
-      case ChartTimeframe.minutes3:
-      case ChartTimeframe.minutes5:
-        refreshIntervalSeconds = 60; // 1분
-        break;
-      case ChartTimeframe.minutes10:
-      case ChartTimeframe.minutes15:
-        refreshIntervalSeconds = 120; // 2분
-        break;
-      case ChartTimeframe.minutes30:
-      case ChartTimeframe.minutes60:
-        refreshIntervalSeconds = 300; // 5분
-        break;
-      default:
-        refreshIntervalSeconds = 600; // 10분
-    }
+    // 1분마다 자동 갱신 (60초)
+    const refreshIntervalSeconds = 60;
 
     debugPrint('ChartViewModel: 자동 갱신 타이머 설정 - $refreshIntervalSeconds초');
 
     _refreshTimer = Timer.periodic(
-      Duration(seconds: refreshIntervalSeconds),
-      (_) => loadChartData(),
+      const Duration(seconds: refreshIntervalSeconds),
+      (_) {
+        // 화면이 깜빡이지 않도록 조용히 데이터만 갱신
+        _refreshChartDataSilently();
+      },
     );
+  }
+
+  // 화면 깜빡임 없이 차트 데이터 조용히 갱신
+  Future<void> _refreshChartDataSilently() async {
+    if (_apiService == null || _isOfflineMode || !_isConnected) {
+      return;
+    }
+
+    try {
+      debugPrint('ChartViewModel: 차트 데이터 조용히 갱신 시작');
+
+      // 현재 선택된 차트 타입에 따라 데이터 갱신
+      if (_selectedChartType == ChartType.candlestick) {
+        final newCandleData = await _apiService!.getCandleData(
+          _selectedSymbol,
+          _selectedTimeframe,
+        );
+
+        if (newCandleData != null) {
+          // 이전 데이터와 새 데이터를 비교하여 변경 사항이 있는 경우에만 업데이트
+          if (_candleChartData == null ||
+              _hasCandleDataChanged(_candleChartData!, newCandleData)) {
+            // 새 타임스탬프로 객체 복사 (lastUpdated가 final이므로 새 객체 생성)
+            _candleChartData = CandleChartData(
+              symbol: newCandleData.symbol,
+              timeframe: newCandleData.timeframe,
+              candles: newCandleData.candles,
+              lastUpdated: DateTime.now(), // 현재 시간으로 업데이트
+            );
+
+            _updateCandleChartPriceInfo(_candleChartData!);
+            debugPrint('ChartViewModel: 캔들스틱 데이터 조용히 갱신 완료');
+
+            // UI 업데이트
+            notifyListeners();
+          } else {
+            debugPrint('ChartViewModel: 캔들스틱 데이터 변경 없음, 업데이트 생략');
+          }
+        }
+      } else {
+        final newLineData = await _apiService!.getLineData(
+          _selectedSymbol,
+          _selectedTimeframe,
+        );
+
+        if (newLineData != null) {
+          // 이전 데이터와 새 데이터를 비교하여 변경 사항이 있는 경우에만 업데이트
+          if (_lineChartData == null ||
+              _hasLineDataChanged(_lineChartData!, newLineData)) {
+            // 새 타임스탬프로 객체 복사 (lastUpdated가 final이므로 새 객체 생성)
+            _lineChartData = ChartData(
+              symbol: newLineData.symbol,
+              timeframe: newLineData.timeframe,
+              points: newLineData.points,
+              lastUpdated: DateTime.now(), // 현재 시간으로 업데이트
+              type: newLineData.type,
+            );
+
+            _updateLineChartPriceInfo(_lineChartData!);
+            debugPrint('ChartViewModel: 라인 차트 데이터 조용히 갱신 완료');
+
+            // UI 업데이트
+            notifyListeners();
+          } else {
+            debugPrint('ChartViewModel: 라인 차트 데이터 변경 없음, 업데이트 생략');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('ChartViewModel: 차트 데이터 조용히 갱신 오류 - $e');
+      // 오류 발생 시 사용자에게 알리지 않음 (다음 갱신 시도에서 성공할 수 있음)
+    }
+  }
+
+  // 캔들 차트 데이터 변경 여부 확인
+  bool _hasCandleDataChanged(CandleChartData oldData, CandleChartData newData) {
+    if (oldData.candles.length != newData.candles.length) {
+      return true;
+    }
+
+    // 마지막 캔들만 비교 (실시간 업데이트에서는 주로 마지막 캔들만 변경됨)
+    final oldLastCandle = oldData.candles.last;
+    final newLastCandle = newData.candles.last;
+
+    // 종가 기준으로 변경 여부 확인 (일정 비율 이상 변경된 경우에만 업데이트)
+    final priceDifference = (newLastCandle.close - oldLastCandle.close).abs();
+    final changeThreshold = oldLastCandle.close * 0.0001; // 0.01% 이상 변경 시 업데이트
+
+    return priceDifference > changeThreshold;
+  }
+
+  // 라인 차트 데이터 변경 여부 확인
+  bool _hasLineDataChanged(ChartData oldData, ChartData newData) {
+    if (oldData.points.length != newData.points.length) {
+      return true;
+    }
+
+    // 마지막 포인트만 비교
+    final oldLastPoint = oldData.points.last;
+    final newLastPoint = newData.points.last;
+
+    // 가격 기준으로 변경 여부 확인 (일정 비율 이상 변경된 경우에만 업데이트)
+    final priceDifference = (newLastPoint.price - oldLastPoint.price).abs();
+    final changeThreshold = oldLastPoint.price * 0.0001; // 0.01% 이상 변경 시 업데이트
+
+    return priceDifference > changeThreshold;
   }
 
   // 시간 프레임 문자열 변환

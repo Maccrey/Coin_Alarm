@@ -622,17 +622,60 @@ class _ChartScreenState extends State<ChartScreen> {
   Widget _buildChartArea(BuildContext context) {
     final chartViewModel = Provider.of<ChartViewModel>(context);
 
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      switchInCurve: Curves.easeInOutCubic,
+      switchOutCurve: Curves.easeInOutCubic,
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
+        return Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            ...previousChildren,
+            if (currentChild != null) currentChild,
+          ],
+        );
+      },
+      child: _buildChartContent(context, chartViewModel),
+    );
+  }
+
+  // 차트 내용 위젯 (AnimatedSwitcher의 자식으로 사용)
+  Widget _buildChartContent(
+    BuildContext context,
+    ChartViewModel chartViewModel,
+  ) {
     if (chartViewModel.isLoading) {
       return SizedBox(
+        key: const ValueKey('loading'),
         width: double.infinity,
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('차트 데이터를 불러오는 중...', style: TextStyle(fontSize: 14)),
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                '차트 데이터를 수신 중입니다...',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '잠시만 기다려주세요',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.7),
+                ),
+              ),
             ],
           ),
         ),
@@ -641,6 +684,7 @@ class _ChartScreenState extends State<ChartScreen> {
 
     if (chartViewModel.error != null) {
       return SizedBox(
+        key: const ValueKey('error'),
         width: double.infinity,
         child: Center(
           child: ConstrainedBox(
@@ -685,6 +729,7 @@ class _ChartScreenState extends State<ChartScreen> {
     if (chartViewModel.selectedChartType == ChartType.candlestick) {
       if (chartViewModel.candleChartData == null) {
         return SizedBox(
+          key: const ValueKey('no_candle_data'),
           width: double.infinity,
           child: Center(
             child: Column(
@@ -702,6 +747,9 @@ class _ChartScreenState extends State<ChartScreen> {
 
       // 캔들스틱 차트 구현
       return Padding(
+        key: ValueKey(
+          'candle_chart_${chartViewModel.candleChartData!.lastUpdated.millisecondsSinceEpoch}',
+        ),
         padding: const EdgeInsets.all(8.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -722,15 +770,21 @@ class _ChartScreenState extends State<ChartScreen> {
 
             // 차트
             Expanded(
-              child: CandleChartWidget(
-                chartData: chartViewModel.candleChartData!,
-                showVolume: true,
-                showGrid: true,
-                showTooltip: true,
-                upColor: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF4CAF50) // 다크 모드에서는 녹색
-                    : const Color(0xFF1976D2), // 라이트 모드에서는 파란색
-                downColor: const Color(0xFFD32F2F), // 빨간색
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: CandleChartWidget(
+                  key: ValueKey(
+                    'candle_data_${chartViewModel.candleChartData!.lastUpdated.millisecondsSinceEpoch}',
+                  ),
+                  chartData: chartViewModel.candleChartData!,
+                  showVolume: true,
+                  showGrid: true,
+                  showTooltip: true,
+                  upColor: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF4CAF50) // 다크 모드에서는 녹색
+                      : const Color(0xFF1976D2), // 라이트 모드에서는 파란색
+                  downColor: const Color(0xFFD32F2F), // 빨간색
+                ),
               ),
             ),
           ],
@@ -739,6 +793,7 @@ class _ChartScreenState extends State<ChartScreen> {
     } else {
       if (chartViewModel.lineChartData == null) {
         return SizedBox(
+          key: const ValueKey('no_line_data'),
           width: double.infinity,
           child: Center(
             child: Column(
@@ -756,6 +811,9 @@ class _ChartScreenState extends State<ChartScreen> {
 
       // 라인 차트 구현
       return Padding(
+        key: ValueKey(
+          'line_chart_${chartViewModel.lineChartData!.lastUpdated.millisecondsSinceEpoch}',
+        ),
         padding: const EdgeInsets.all(8.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -776,14 +834,20 @@ class _ChartScreenState extends State<ChartScreen> {
 
             // 차트
             Expanded(
-              child: LineChartWidget(
-                chartData: chartViewModel.lineChartData!,
-                showGrid: true,
-                showTooltip: true,
-                showGradient: true,
-                lineColor: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF4CAF50) // 다크 모드에서는 녹색
-                    : const Color(0xFF1976D2), // 라이트 모드에서는 파란색
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: LineChartWidget(
+                  key: ValueKey(
+                    'line_data_${chartViewModel.lineChartData!.lastUpdated.millisecondsSinceEpoch}',
+                  ),
+                  chartData: chartViewModel.lineChartData!,
+                  showGrid: true,
+                  showTooltip: true,
+                  showGradient: true,
+                  lineColor: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF4CAF50) // 다크 모드에서는 녹색
+                      : const Color(0xFF1976D2), // 라이트 모드에서는 파란색
+                ),
               ),
             ),
           ],

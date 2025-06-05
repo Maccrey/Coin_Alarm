@@ -34,7 +34,8 @@ class CandleChartWidget extends StatefulWidget {
   State<CandleChartWidget> createState() => _CandleChartWidgetState();
 }
 
-class _CandleChartWidgetState extends State<CandleChartWidget> {
+class _CandleChartWidgetState extends State<CandleChartWidget>
+    with SingleTickerProviderStateMixin {
   // 줌 및 스크롤 관련 변수
   double _scale = 1.0;
   double _previousScale = 1.0;
@@ -47,6 +48,10 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
   double _maxPrice = 0;
   double _minPrice = 0;
   double _maxVolume = 0;
+
+  // 애니메이션 컨트롤러
+  late AnimationController _animationController;
+  late Animation<double> _animation;
 
   // 날짜 포맷터
   final DateFormat _dateFormat = DateFormat('MM-dd HH:mm');
@@ -64,20 +69,37 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
     _scrollController = ScrollController();
     _scrollController.addListener(_updateVisibleIndices);
 
+    // 애니메이션 컨트롤러 초기화
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _animation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    );
+
     // 초기 표시 범위 계산
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _calculateInitialVisibleIndices();
+      _animationController.forward(from: 0.0);
     });
   }
 
   @override
   void didUpdateWidget(CandleChartWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // 데이터가 변경된 경우에만 애니메이션 실행
     if (widget.chartData != oldWidget.chartData) {
-      // 데이터가 변경되면 표시 범위 재계산
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _calculateInitialVisibleIndices();
-      });
+      // 표시 범위 재계산
+      _calculateInitialVisibleIndices();
+
+      // 부드러운 업데이트를 위한 애니메이션
+      if (!_animationController.isAnimating) {
+        _animationController.reset();
+        _animationController.forward();
+      }
     }
   }
 
@@ -85,6 +107,7 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
   void dispose() {
     _scrollController.removeListener(_updateVisibleIndices);
     _scrollController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -202,124 +225,130 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
         final volumeHeight =
             constraints.maxHeight * (widget.showVolume ? 0.2 : 0.0);
 
-        return GestureDetector(
-          onScaleStart: (details) {
-            _previousScale = _scale;
-            _startScrollOffset = _scrollOffset;
-          },
-          onScaleUpdate: (details) {
-            setState(() {
-              // 확대/축소
-              _scale = (_previousScale * details.scale).clamp(1.0, 5.0);
+        return AnimatedBuilder(
+          animation: _animation,
+          builder: (context, child) {
+            return GestureDetector(
+              onScaleStart: (details) {
+                _previousScale = _scale;
+                _startScrollOffset = _scrollOffset;
+              },
+              onScaleUpdate: (details) {
+                setState(() {
+                  // 확대/축소
+                  _scale = (_previousScale * details.scale).clamp(1.0, 5.0);
 
-              // 스크롤 위치 조정
-              if (details.scale == 1.0) {
-                final delta = details.focalPointDelta.dx;
-                _scrollOffset = (_scrollOffset - delta).clamp(
-                  0.0,
-                  max(0.0, totalWidth * _scale - visibleWidth),
+                  // 스크롤 위치 조정
+                  if (details.scale == 1.0) {
+                    final delta = details.focalPointDelta.dx;
+                    _scrollOffset = (_scrollOffset - delta).clamp(
+                      0.0,
+                      max(0.0, totalWidth * _scale - visibleWidth),
+                    );
+                  }
+                });
+              },
+              onTapUp: (details) {
+                final localPosition = details.localPosition;
+                final candleIndex = _getCandleIndexAtPosition(
+                  localPosition.dx,
+                  totalCandleWidth,
                 );
-              }
-            });
-          },
-          onTapUp: (details) {
-            final localPosition = details.localPosition;
-            final candleIndex = _getCandleIndexAtPosition(
-              localPosition.dx,
-              totalCandleWidth,
-            );
 
-            setState(() {
-              _selectedCandleIndex = candleIndex;
-            });
-          },
-          child: Stack(
-            children: [
-              // 배경
-              Container(
-                width: constraints.maxWidth,
-                height: constraints.maxHeight,
-                color: backgroundColor,
-              ),
-
-              // 차트 영역 (가격 레이블 공간을 제외한 영역)
-              Positioned(
-                left: 0,
-                top: 0,
-                width: visibleWidth,
-                height: constraints.maxHeight,
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  scrollDirection: Axis.horizontal,
-                  physics: const NeverScrollableScrollPhysics(),
-                  child: SizedBox(
-                    width: max(totalWidth * _scale, visibleWidth),
+                setState(() {
+                  _selectedCandleIndex = candleIndex;
+                });
+              },
+              child: Stack(
+                children: [
+                  // 배경
+                  Container(
+                    width: constraints.maxWidth,
                     height: constraints.maxHeight,
-                    child: CustomPaint(
-                      painter: CandlestickChartPainter(
-                        candles: candles,
-                        upColor: widget.upColor,
-                        downColor: widget.downColor,
-                        gridColor: gridColor,
-                        textColor: textColor,
-                        showGrid: widget.showGrid,
-                        showVolume: widget.showVolume,
-                        candleWidth: effectiveCandleWidth,
-                        candleSpacing: effectiveCandleSpacing,
-                        scale: _scale,
-                        scrollOffset: _scrollOffset,
-                        selectedCandleIndex: _selectedCandleIndex,
-                        chartHeight: chartHeight,
-                        volumeHeight: volumeHeight,
-                        isDarkMode: isDarkMode,
-                        visibleStartIndex: _visibleStartIndex,
-                        visibleEndIndex: _visibleEndIndex,
+                    color: backgroundColor,
+                  ),
+
+                  // 차트 영역 (가격 레이블 공간을 제외한 영역)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    width: visibleWidth,
+                    height: constraints.maxHeight,
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      scrollDirection: Axis.horizontal,
+                      physics: const NeverScrollableScrollPhysics(),
+                      child: SizedBox(
+                        width: totalWidth,
+                        height: constraints.maxHeight,
+                        child: CustomPaint(
+                          painter: CandleStickChartPainter(
+                            candles: candles,
+                            minPrice: _minPrice,
+                            maxPrice: _maxPrice,
+                            maxVolume: _maxVolume,
+                            candleWidth: effectiveCandleWidth,
+                            spacing: effectiveCandleSpacing,
+                            upColor: widget.upColor,
+                            downColor: widget.downColor,
+                            gridColor: widget.gridColor,
+                            showGrid: widget.showGrid,
+                            showVolume: widget.showVolume,
+                            chartHeight: chartHeight,
+                            volumeHeight: volumeHeight,
+                            selectedIndex: _selectedCandleIndex,
+                            animationValue: _animation.value,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
 
-              // 툴팁 (선택된 캔들이 있는 경우)
-              if (widget.showTooltip &&
-                  _selectedCandleIndex != null &&
-                  _selectedCandleIndex! < candles.length)
-                Positioned(
-                  top: 8,
-                  right: priceLabelsWidth + 8, // 가격 레이블 공간을 고려한 위치 조정
-                  child: _buildTooltip(
-                    candles[_selectedCandleIndex!],
-                    isDarkMode,
+                  // 툴팁 (선택된 캔들이 있는 경우)
+                  if (widget.showTooltip &&
+                      _selectedCandleIndex != null &&
+                      _selectedCandleIndex! < candles.length)
+                    Positioned(
+                      top: 8,
+                      right: priceLabelsWidth + 8, // 가격 레이블 공간을 고려한 위치 조정
+                      child: _buildTooltip(
+                        candles[_selectedCandleIndex!],
+                        isDarkMode,
+                      ),
+                    ),
+
+                  // 가격 레이블 (우측)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    width: priceLabelsWidth,
+                    bottom: 0,
+                    child: _buildPriceLabels(
+                      _minPrice,
+                      _maxPrice,
+                      labelBackgroundColor,
+                      textColor,
+                      chartHeight,
+                      volumeHeight,
+                    ),
                   ),
-                ),
 
-              // 가격 레이블 (우측)
-              Positioned(
-                top: 0,
-                right: 0,
-                width: priceLabelsWidth,
-                bottom: widget.showVolume ? volumeHeight : 0,
-                child: _buildPriceLabels(
-                  candles,
-                  chartHeight,
-                  labelBackgroundColor,
-                  textColor,
-                ),
+                  // 날짜 레이블 (하단)
+                  Positioned(
+                    left: 0,
+                    right: priceLabelsWidth, // 가격 레이블 공간을 제외
+                    bottom: 0,
+                    child: _buildDateLabels(
+                      candles,
+                      totalCandleWidth,
+                      labelBackgroundColor,
+                      textColor,
+                    ),
+                  ),
+                ],
               ),
-
-              // 날짜 레이블 (하단)
-              Positioned(
-                left: 0,
-                right: priceLabelsWidth, // 가격 레이블 공간을 제외
-                bottom: 0,
-                child: _buildDateLabels(
-                  candles,
-                  labelBackgroundColor,
-                  textColor,
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -327,16 +356,18 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
 
   // 가격 레이블 위젯
   Widget _buildPriceLabels(
-    List<CandleData> candles,
-    double chartHeight,
+    double minPrice,
+    double maxPrice,
     Color backgroundColor,
     Color textColor,
+    double chartHeight,
+    double volumeHeight,
   ) {
     // 최대/최소 가격 계산
     double minPrice = double.infinity;
     double maxPrice = -double.infinity;
 
-    for (final candle in candles) {
+    for (final candle in widget.chartData.candles) {
       minPrice = min(minPrice, candle.low);
       maxPrice = max(maxPrice, candle.high);
     }
@@ -383,6 +414,7 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
   // 날짜 레이블 위젯
   Widget _buildDateLabels(
     List<CandleData> candles,
+    double candleWidth,
     Color backgroundColor,
     Color textColor,
   ) {
@@ -460,18 +492,8 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
                       ),
                       style: TextStyle(
                         fontSize: 10,
-                        color:
-                            labelIndices[i] == visibleCandles.length - 1 &&
-                                hasCurrentData
-                            ? Colors
-                                  .green // 최신 데이터는 녹색으로 강조
-                            : textColor,
-                        fontWeight:
-                            labelIndices[i] == visibleCandles.length - 1 &&
-                                hasCurrentData
-                            ? FontWeight
-                                  .bold // 최신 데이터는 볼드체로 강조
-                            : FontWeight.normal,
+                        color: textColor,
+                        fontWeight: FontWeight.normal,
                       ),
                       textAlign: TextAlign.center,
                       overflow: TextOverflow.ellipsis,
@@ -495,51 +517,13 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
 
-    // 최신 데이터인 경우 특별 표시
-    if (isLatest) {
-      if (timeframe == ChartTimeframe.days1 ||
-          timeframe == ChartTimeframe.days7 ||
-          timeframe == ChartTimeframe.days30) {
-        if (timestamp.year == today.year &&
-            timestamp.month == today.month &&
-            timestamp.day == today.day) {
-          return '오늘';
-        }
-      } else {
-        // 분 단위 타임프레임에서는 '현재'로 표시
-        final diff = now.difference(timestamp);
-        if (diff.inMinutes < 15) {
-          return '현재';
-        }
-      }
-    }
-
-    // 일반 포맷팅
-    if (timestamp.year == today.year &&
-        timestamp.month == today.month &&
-        timestamp.day == today.day) {
-      // 오늘인 경우
-      if (_isMinutesTimeframe(timeframe)) {
-        return DateFormat('HH:mm').format(timestamp);
-      } else {
-        return '오늘';
-      }
-    } else if (timestamp.year == yesterday.year &&
-        timestamp.month == yesterday.month &&
-        timestamp.day == yesterday.day) {
-      // 어제인 경우
-      if (_isMinutesTimeframe(timeframe)) {
-        return DateFormat('HH:mm').format(timestamp);
-      } else {
-        return '어제';
-      }
+    // 시간 프레임에 따라 포맷 변경
+    if (_isMinutesTimeframe(timeframe)) {
+      // 분 단위 타임프레임은 시간:분 형식으로 표시
+      return DateFormat('HH:mm').format(timestamp);
     } else {
-      // 그 외
-      if (_isMinutesTimeframe(timeframe)) {
-        return DateFormat('HH:mm').format(timestamp);
-      } else {
-        return DateFormat('MM/dd').format(timestamp);
-      }
+      // 일 단위 이상 타임프레임은 월/일 형식으로 표시
+      return DateFormat('MM/dd').format(timestamp);
     }
   }
 
@@ -670,43 +654,39 @@ class _CandleChartWidgetState extends State<CandleChartWidget> {
 }
 
 /// 캔들스틱 차트 페인터
-class CandlestickChartPainter extends CustomPainter {
+class CandleStickChartPainter extends CustomPainter {
   final List<CandleData> candles;
+  final double minPrice;
+  final double maxPrice;
+  final double maxVolume;
+  final double candleWidth;
+  final double spacing;
   final Color upColor;
   final Color downColor;
   final Color gridColor;
-  final Color textColor;
   final bool showGrid;
   final bool showVolume;
-  final double candleWidth;
-  final double candleSpacing;
-  final double scale;
-  final double scrollOffset;
-  final int? selectedCandleIndex;
   final double chartHeight;
   final double volumeHeight;
-  final bool isDarkMode;
-  final int visibleStartIndex;
-  final int visibleEndIndex;
+  final int? selectedIndex;
+  final double animationValue;
 
-  CandlestickChartPainter({
+  CandleStickChartPainter({
     required this.candles,
+    required this.minPrice,
+    required this.maxPrice,
+    required this.maxVolume,
+    required this.candleWidth,
+    required this.spacing,
     required this.upColor,
     required this.downColor,
     required this.gridColor,
-    required this.textColor,
     required this.showGrid,
     required this.showVolume,
-    required this.candleWidth,
-    required this.candleSpacing,
-    required this.scale,
-    required this.scrollOffset,
-    required this.selectedCandleIndex,
     required this.chartHeight,
     required this.volumeHeight,
-    required this.isDarkMode,
-    required this.visibleStartIndex,
-    required this.visibleEndIndex,
+    this.selectedIndex,
+    this.animationValue = 1.0,
   });
 
   @override
@@ -736,13 +716,13 @@ class CandlestickChartPainter extends CustomPainter {
     }
 
     // 캔들스틱 그리기
-    final effectiveCandleWidth = candleWidth * scale;
-    final effectiveCandleSpacing = candleSpacing * scale;
+    final effectiveCandleWidth = candleWidth * animationValue;
+    final effectiveCandleSpacing = spacing * animationValue;
     final totalCandleWidth = effectiveCandleWidth + effectiveCandleSpacing;
 
-    for (int i = visibleStartIndex; i <= visibleEndIndex; i++) {
+    for (int i = 0; i < candles.length; i++) {
       final candle = candles[i];
-      final x = i * totalCandleWidth - scrollOffset;
+      final x = i * totalCandleWidth;
 
       // 화면에 보이는 캔들만 그리기 (성능 최적화)
       if (x + effectiveCandleWidth < 0 ||
@@ -775,7 +755,7 @@ class CandlestickChartPainter extends CustomPainter {
       }
 
       // 선택된 캔들 강조 표시
-      if (selectedCandleIndex == i) {
+      if (selectedIndex == i) {
         _drawSelectedCandle(
           canvas,
           x,
@@ -917,9 +897,7 @@ class CandlestickChartPainter extends CustomPainter {
 
     // 선택된 캔들 배경
     final highlightPaint = Paint()
-      ..color = isDarkMode
-          ? Colors.white.withOpacity(0.1)
-          : Colors.yellow.withOpacity(0.2)
+      ..color = Colors.yellow.withOpacity(0.2)
       ..style = PaintingStyle.fill;
 
     canvas.drawRect(
@@ -929,9 +907,7 @@ class CandlestickChartPainter extends CustomPainter {
 
     // 가격 선
     final pricePaint = Paint()
-      ..color = isDarkMode
-          ? Colors.white.withOpacity(0.3)
-          : Colors.black.withOpacity(0.3)
+      ..color = Colors.black.withOpacity(0.3)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
@@ -951,13 +927,21 @@ class CandlestickChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CandlestickChartPainter oldDelegate) {
+  bool shouldRepaint(covariant CandleStickChartPainter oldDelegate) {
     return oldDelegate.candles != candles ||
-        oldDelegate.scale != scale ||
-        oldDelegate.scrollOffset != scrollOffset ||
-        oldDelegate.selectedCandleIndex != selectedCandleIndex ||
-        oldDelegate.isDarkMode != isDarkMode ||
-        oldDelegate.visibleStartIndex != visibleStartIndex ||
-        oldDelegate.visibleEndIndex != visibleEndIndex;
+        oldDelegate.minPrice != minPrice ||
+        oldDelegate.maxPrice != maxPrice ||
+        oldDelegate.maxVolume != maxVolume ||
+        oldDelegate.candleWidth != candleWidth ||
+        oldDelegate.spacing != spacing ||
+        oldDelegate.upColor != upColor ||
+        oldDelegate.downColor != downColor ||
+        oldDelegate.gridColor != gridColor ||
+        oldDelegate.showGrid != showGrid ||
+        oldDelegate.showVolume != showVolume ||
+        oldDelegate.chartHeight != chartHeight ||
+        oldDelegate.volumeHeight != volumeHeight ||
+        oldDelegate.selectedIndex != selectedIndex ||
+        oldDelegate.animationValue != animationValue;
   }
 }

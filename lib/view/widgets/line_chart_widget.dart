@@ -32,7 +32,8 @@ class LineChartWidget extends StatefulWidget {
   State<LineChartWidget> createState() => _LineChartWidgetState();
 }
 
-class _LineChartWidgetState extends State<LineChartWidget> {
+class _LineChartWidgetState extends State<LineChartWidget>
+    with SingleTickerProviderStateMixin {
   // 줌 및 스크롤 관련 변수
   double _scale = 1.0;
   double _previousScale = 1.0;
@@ -45,10 +46,27 @@ class _LineChartWidgetState extends State<LineChartWidget> {
   int _visibleStartIndex = 0;
   int _visibleEndIndex = 0;
 
+  // 애니메이션 컨트롤러
+  late AnimationController _animationController;
+  late Animation<double> _animation;
+
   @override
   void initState() {
     super.initState();
     _calculateVisibleIndices();
+
+    // 애니메이션 컨트롤러 초기화
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _animation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    );
+
+    // 초기 애니메이션 실행
+    _animationController.forward(from: 0.0);
   }
 
   @override
@@ -56,6 +74,12 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     super.didUpdateWidget(oldWidget);
     if (widget.chartData != oldWidget.chartData) {
       _calculateVisibleIndices();
+
+      // 부드러운 업데이트를 위한 애니메이션
+      if (!_animationController.isAnimating) {
+        _animationController.reset();
+        _animationController.forward();
+      }
     }
   }
 
@@ -74,6 +98,7 @@ class _LineChartWidgetState extends State<LineChartWidget> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -123,119 +148,125 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         final visibleWidth =
             constraints.maxWidth - priceLabelsWidth; // 가격 레이블 공간 제외
 
-        return GestureDetector(
-          onScaleStart: (details) {
-            _previousScale = _scale;
-            _startScrollOffset = _scrollOffset;
-          },
-          onScaleUpdate: (details) {
-            setState(() {
-              // 확대/축소
-              _scale = (_previousScale * details.scale).clamp(1.0, 5.0);
+        return AnimatedBuilder(
+          animation: _animation,
+          builder: (context, child) {
+            return GestureDetector(
+              onScaleStart: (details) {
+                _previousScale = _scale;
+                _startScrollOffset = _scrollOffset;
+              },
+              onScaleUpdate: (details) {
+                setState(() {
+                  // 확대/축소
+                  _scale = (_previousScale * details.scale).clamp(1.0, 5.0);
 
-              // 스크롤 위치 조정
-              if (details.scale == 1.0) {
-                final delta = details.focalPointDelta.dx;
-                _scrollOffset = (_scrollOffset - delta).clamp(
-                  0.0,
-                  max(0.0, totalWidth - visibleWidth),
+                  // 스크롤 위치 조정
+                  if (details.scale == 1.0) {
+                    final delta = details.focalPointDelta.dx;
+                    _scrollOffset = (_scrollOffset - delta).clamp(
+                      0.0,
+                      max(0.0, totalWidth - visibleWidth),
+                    );
+                  }
+                });
+              },
+              onTapUp: (details) {
+                final localPosition = details.localPosition;
+                final pointIndex = _getPointIndexAtPosition(
+                  localPosition.dx,
+                  pointWidth,
                 );
-              }
-            });
-          },
-          onTapUp: (details) {
-            final localPosition = details.localPosition;
-            final pointIndex = _getPointIndexAtPosition(
-              localPosition.dx,
-              pointWidth,
-            );
 
-            setState(() {
-              _selectedPointIndex = pointIndex;
-            });
-          },
-          child: Stack(
-            children: [
-              // 배경
-              Container(
-                width: constraints.maxWidth,
-                height: constraints.maxHeight,
-                color: backgroundColor,
-              ),
-
-              // 차트 영역 (가격 레이블 공간을 제외한 영역)
-              Positioned(
-                left: 0,
-                top: 0,
-                width: visibleWidth,
-                height: constraints.maxHeight,
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  scrollDirection: Axis.horizontal,
-                  physics: const NeverScrollableScrollPhysics(),
-                  child: SizedBox(
-                    width: totalWidth,
+                setState(() {
+                  _selectedPointIndex = pointIndex;
+                });
+              },
+              child: Stack(
+                children: [
+                  // 배경
+                  Container(
+                    width: constraints.maxWidth,
                     height: constraints.maxHeight,
-                    child: CustomPaint(
-                      painter: LineChartPainter(
-                        points: visiblePoints,
-                        lineColor: lineColor,
-                        gridColor: gridColor,
-                        textColor: textColor,
-                        showGrid: widget.showGrid,
-                        showGradient: widget.showGradient,
-                        gradientStartColor: gradientStartColor,
-                        gradientEndColor: gradientEndColor,
-                        pointWidth: pointWidth,
-                        scale: _scale,
-                        scrollOffset: _scrollOffset,
-                        selectedPointIndex: _selectedPointIndex,
-                        isDarkMode: isDarkMode,
+                    color: backgroundColor,
+                  ),
+
+                  // 차트 영역 (가격 레이블 공간을 제외한 영역)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    width: visibleWidth,
+                    height: constraints.maxHeight,
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      scrollDirection: Axis.horizontal,
+                      physics: const NeverScrollableScrollPhysics(),
+                      child: SizedBox(
+                        width: totalWidth,
+                        height: constraints.maxHeight,
+                        child: CustomPaint(
+                          painter: LineChartPainter(
+                            points: visiblePoints,
+                            lineColor: lineColor,
+                            gridColor: gridColor,
+                            textColor: textColor,
+                            showGrid: widget.showGrid,
+                            showGradient: widget.showGradient,
+                            gradientStartColor: gradientStartColor,
+                            gradientEndColor: gradientEndColor,
+                            pointWidth: pointWidth,
+                            scale: _scale,
+                            scrollOffset: _scrollOffset,
+                            selectedPointIndex: _selectedPointIndex,
+                            isDarkMode: isDarkMode,
+                            animationValue: _animation.value,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
 
-              // 툴팁 (선택된 포인트가 있는 경우)
-              if (widget.showTooltip &&
-                  _selectedPointIndex != null &&
-                  _selectedPointIndex! < visiblePoints.length)
-                Positioned(
-                  top: 8,
-                  right: priceLabelsWidth + 8, // 가격 레이블 공간을 고려한 위치 조정
-                  child: _buildTooltip(
-                    visiblePoints[_selectedPointIndex!],
-                    isDarkMode,
+                  // 툴팁 (선택된 포인트가 있는 경우)
+                  if (widget.showTooltip &&
+                      _selectedPointIndex != null &&
+                      _selectedPointIndex! < visiblePoints.length)
+                    Positioned(
+                      top: 8,
+                      right: priceLabelsWidth + 8, // 가격 레이블 공간을 고려한 위치 조정
+                      child: _buildTooltip(
+                        visiblePoints[_selectedPointIndex!],
+                        isDarkMode,
+                      ),
+                    ),
+
+                  // 가격 레이블 (우측)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    width: priceLabelsWidth,
+                    bottom: 0,
+                    child: _buildPriceLabels(
+                      visiblePoints,
+                      labelBackgroundColor,
+                      textColor,
+                    ),
                   ),
-                ),
 
-              // 가격 레이블 (우측)
-              Positioned(
-                top: 0,
-                right: 0,
-                width: priceLabelsWidth,
-                bottom: 0,
-                child: _buildPriceLabels(
-                  visiblePoints,
-                  labelBackgroundColor,
-                  textColor,
-                ),
+                  // 날짜 레이블 (하단)
+                  Positioned(
+                    left: 0,
+                    right: priceLabelsWidth, // 가격 레이블 공간을 제외
+                    bottom: 0,
+                    child: _buildDateLabels(
+                      visiblePoints,
+                      labelBackgroundColor,
+                      textColor,
+                    ),
+                  ),
+                ],
               ),
-
-              // 날짜 레이블 (하단)
-              Positioned(
-                left: 0,
-                right: priceLabelsWidth, // 가격 레이블 공간을 제외
-                bottom: 0,
-                child: _buildDateLabels(
-                  visiblePoints,
-                  labelBackgroundColor,
-                  textColor,
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -369,18 +400,8 @@ class _LineChartWidgetState extends State<LineChartWidget> {
                       ),
                       style: TextStyle(
                         fontSize: 10,
-                        color:
-                            labelIndices[i] == points.length - 1 &&
-                                hasCurrentData
-                            ? Colors
-                                  .green // 최신 데이터는 녹색으로 강조
-                            : textColor,
-                        fontWeight:
-                            labelIndices[i] == points.length - 1 &&
-                                hasCurrentData
-                            ? FontWeight
-                                  .bold // 최신 데이터는 볼드체로 강조
-                            : FontWeight.normal,
+                        color: textColor,
+                        fontWeight: FontWeight.normal,
                       ),
                       textAlign: TextAlign.center,
                       overflow: TextOverflow.ellipsis,
@@ -404,51 +425,13 @@ class _LineChartWidgetState extends State<LineChartWidget> {
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
 
-    // 최신 데이터인 경우 특별 표시
-    if (isLatest) {
-      if (timeframe == ChartTimeframe.days1 ||
-          timeframe == ChartTimeframe.days7 ||
-          timeframe == ChartTimeframe.days30) {
-        if (timestamp.year == today.year &&
-            timestamp.month == today.month &&
-            timestamp.day == today.day) {
-          return '오늘';
-        }
-      } else {
-        // 분 단위 타임프레임에서는 '현재'로 표시
-        final diff = now.difference(timestamp);
-        if (diff.inMinutes < 15) {
-          return '현재';
-        }
-      }
-    }
-
-    // 일반 포맷팅
-    if (timestamp.year == today.year &&
-        timestamp.month == today.month &&
-        timestamp.day == today.day) {
-      // 오늘인 경우
-      if (_isMinutesTimeframe(timeframe)) {
-        return DateFormat('HH:mm').format(timestamp);
-      } else {
-        return '오늘';
-      }
-    } else if (timestamp.year == yesterday.year &&
-        timestamp.month == yesterday.month &&
-        timestamp.day == yesterday.day) {
-      // 어제인 경우
-      if (_isMinutesTimeframe(timeframe)) {
-        return DateFormat('HH:mm').format(timestamp);
-      } else {
-        return '어제';
-      }
+    // 시간 프레임에 따라 포맷 변경
+    if (_isMinutesTimeframe(timeframe)) {
+      // 분 단위 타임프레임은 시간:분 형식으로 표시
+      return DateFormat('HH:mm').format(timestamp);
     } else {
-      // 그 외
-      if (_isMinutesTimeframe(timeframe)) {
-        return DateFormat('HH:mm').format(timestamp);
-      } else {
-        return DateFormat('MM/dd').format(timestamp);
-      }
+      // 일 단위 이상 타임프레임은 월/일 형식으로 표시
+      return DateFormat('MM/dd').format(timestamp);
     }
   }
 
@@ -526,15 +509,12 @@ class _LineChartWidgetState extends State<LineChartWidget> {
         timeframe == ChartTimeframe.minutes240;
   }
 
-  // 특정 위치의 포인트 인덱스 계산
-  int? _getPointIndexAtPosition(double position, double pointWidth) {
-    final adjustedPosition = position + _scrollOffset;
-    final index = (adjustedPosition / (pointWidth * _scale)).floor();
-
-    if (index >= 0 && index < widget.chartData.points.length) {
-      return index;
-    }
-    return null;
+  // 위치에 해당하는 포인트 인덱스 계산
+  int? _getPointIndexAtPosition(double x, double pointWidth) {
+    if (pointWidth <= 0) return null;
+    final index = (x / pointWidth).floor();
+    if (index < 0 || index >= widget.chartData.points.length) return null;
+    return index;
   }
 }
 
@@ -553,6 +533,7 @@ class LineChartPainter extends CustomPainter {
   final double scrollOffset;
   final int? selectedPointIndex;
   final bool isDarkMode;
+  final double animationValue;
 
   LineChartPainter({
     required this.points,
@@ -566,221 +547,220 @@ class LineChartPainter extends CustomPainter {
     required this.pointWidth,
     required this.scale,
     required this.scrollOffset,
-    required this.selectedPointIndex,
+    this.selectedPointIndex,
     required this.isDarkMode,
+    this.animationValue = 1.0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
 
-    // 가격 범위 계산
+    // 최소/최대 가격 계산
     double minPrice = double.infinity;
     double maxPrice = -double.infinity;
-
     for (final point in points) {
       minPrice = min(minPrice, point.price);
       maxPrice = max(maxPrice, point.price);
     }
 
-    // 가격 범위에 여유 공간 추가
-    final range = maxPrice - minPrice;
-    final buffer = range * 0.05;
-    minPrice -= buffer;
-    maxPrice += buffer;
+    // 가격 범위에 여백 추가
+    final priceRange = maxPrice - minPrice;
+    maxPrice += priceRange * 0.05;
+    minPrice -= priceRange * 0.05;
+
+    // 애니메이션 적용된 투명도
+    final opacity = animationValue;
 
     // 그리드 그리기
     if (showGrid) {
-      _drawGrid(canvas, size);
+      _drawGrid(canvas, size, minPrice, maxPrice);
     }
 
     // 라인 그리기
-    final effectivePointWidth = pointWidth * scale;
-    final path = Path();
-    final fillPath = Path();
+    _drawLine(canvas, size, minPrice, maxPrice, opacity);
 
-    // 첫 번째 포인트
-    double startX = 0 - scrollOffset;
-    double startY = _calculateY(
-      points.first.price,
-      minPrice,
-      maxPrice,
-      size.height,
-    );
-    path.moveTo(startX, startY);
-    fillPath.moveTo(startX, size.height);
-    fillPath.lineTo(startX, startY);
-
-    // 나머지 포인트
-    for (int i = 0; i < points.length; i++) {
-      final point = points[i];
-      final x = i * effectivePointWidth - scrollOffset;
-      final y = _calculateY(point.price, minPrice, maxPrice, size.height);
-
-      // 화면에 보이는 포인트만 그리기 (성능 최적화)
-      if (x < -effectivePointWidth || x > size.width + effectivePointWidth) {
-        continue;
-      }
-
-      // 부드러운 곡선으로 연결 (이전 포인트와 현재 포인트 사이의 중간점을 사용)
-      if (i > 0) {
-        final prevPoint = points[i - 1];
-        final prevX = (i - 1) * effectivePointWidth - scrollOffset;
-        final prevY = _calculateY(
-          prevPoint.price,
-          minPrice,
-          maxPrice,
-          size.height,
-        );
-
-        final midX = (prevX + x) / 2;
-
-        path.quadraticBezierTo(prevX, prevY, midX, (prevY + y) / 2);
-        fillPath.quadraticBezierTo(prevX, prevY, midX, (prevY + y) / 2);
-      } else {
-        path.lineTo(x, y);
-        fillPath.lineTo(x, y);
-      }
-
-      // 선택된 포인트 표시
-      if (selectedPointIndex == i) {
-        _drawSelectedPoint(canvas, x, y, size);
-      }
-    }
-
-    // 마지막 포인트
-    final lastX = (points.length - 1) * effectivePointWidth - scrollOffset;
-    final lastY = _calculateY(
-      points.last.price,
-      minPrice,
-      maxPrice,
-      size.height,
-    );
-    path.lineTo(lastX, lastY);
-    fillPath.lineTo(lastX, lastY);
-    fillPath.lineTo(lastX, size.height);
-    fillPath.close();
-
-    // 그라데이션 채우기
-    if (showGradient) {
-      final gradient = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [gradientStartColor, gradientEndColor],
+    // 선택된 포인트 표시
+    if (selectedPointIndex != null && selectedPointIndex! < points.length) {
+      _drawSelectedPoint(
+        canvas,
+        size,
+        points[selectedPointIndex!],
+        minPrice,
+        maxPrice,
+        opacity,
       );
-
-      final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-      final paint = Paint()
-        ..shader = gradient.createShader(rect)
-        ..style = PaintingStyle.fill;
-
-      canvas.drawPath(fillPath, paint);
     }
-
-    // 라인 그리기
-    final linePaint = Paint()
-      ..color = lineColor
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round;
-
-    canvas.drawPath(path, linePaint);
   }
 
   // 그리드 그리기
-  void _drawGrid(Canvas canvas, Size size) {
+  void _drawGrid(Canvas canvas, Size size, double minPrice, double maxPrice) {
     final gridPaint = Paint()
       ..color = gridColor
+      ..style = PaintingStyle.stroke
       ..strokeWidth = 0.5;
 
-    // 수평 그리드 (가격 레벨)
-    for (int i = 0; i <= 4; i++) {
-      final y = size.height * i / 4;
+    // 수평선
+    final priceStep = (maxPrice - minPrice) / 5;
+    for (int i = 0; i <= 5; i++) {
+      final price = minPrice + i * priceStep;
+      final y =
+          size.height -
+          ((price - minPrice) / (maxPrice - minPrice)) * size.height;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    // 수직 그리드 (시간)
-    for (int i = 0; i <= 4; i++) {
-      final x = size.width * i / 4;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+    // 수직선
+    final step = points.length ~/ 5;
+    if (step > 0) {
+      for (int i = 0; i <= 5; i++) {
+        final index = i * step;
+        if (index < points.length) {
+          final x = index * pointWidth * scale;
+          canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+        }
+      }
     }
+  }
+
+  // 라인 그리기
+  void _drawLine(
+    Canvas canvas,
+    Size size,
+    double minPrice,
+    double maxPrice,
+    double opacity,
+  ) {
+    final linePaint = Paint()
+      ..color = lineColor.withOpacity(opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final path = Path();
+    final fillPath = Path();
+
+    // 첫 포인트
+    final firstPoint = points.first;
+    final firstX = 0.0;
+    final firstY =
+        size.height -
+        ((firstPoint.price - minPrice) / (maxPrice - minPrice)) * size.height;
+    path.moveTo(firstX, firstY);
+    fillPath.moveTo(firstX, size.height);
+    fillPath.lineTo(firstX, firstY);
+
+    // 나머지 포인트
+    for (int i = 1; i < points.length; i++) {
+      final point = points[i];
+      final x = i * pointWidth * scale;
+      final y =
+          size.height -
+          ((point.price - minPrice) / (maxPrice - minPrice)) * size.height;
+
+      // 애니메이션 적용 (포인트별로 순차적으로 나타나는 효과)
+      final pointProgress = min(1.0, animationValue * points.length / i);
+      if (pointProgress < 1.0) continue;
+
+      // 부드러운 곡선으로 연결
+      if (i == 1) {
+        path.lineTo(x, y);
+        fillPath.lineTo(x, y);
+      } else {
+        final prevPoint = points[i - 1];
+        final prevX = (i - 1) * pointWidth * scale;
+        final prevY =
+            size.height -
+            ((prevPoint.price - minPrice) / (maxPrice - minPrice)) *
+                size.height;
+
+        final cpX1 = prevX + (x - prevX) / 2;
+        final cpX2 = prevX + (x - prevX) / 2;
+
+        path.cubicTo(cpX1, prevY, cpX2, y, x, y);
+        fillPath.cubicTo(cpX1, prevY, cpX2, y, x, y);
+      }
+    }
+
+    // 그라데이션 영역 완성
+    if (showGradient) {
+      final lastPoint = points.last;
+      final lastX = (points.length - 1) * pointWidth * scale;
+      final lastY =
+          size.height -
+          ((lastPoint.price - minPrice) / (maxPrice - minPrice)) * size.height;
+
+      fillPath.lineTo(lastX, size.height);
+      fillPath.close();
+
+      final gradient = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          gradientStartColor.withOpacity(opacity),
+          gradientEndColor.withOpacity(opacity),
+        ],
+      );
+
+      final gradientPaint = Paint()
+        ..shader = gradient.createShader(
+          Rect.fromLTWH(0, 0, size.width, size.height),
+        )
+        ..style = PaintingStyle.fill;
+
+      canvas.drawPath(fillPath, gradientPaint);
+    }
+
+    // 라인 그리기
+    canvas.drawPath(path, linePaint);
   }
 
   // 선택된 포인트 표시
-  void _drawSelectedPoint(Canvas canvas, double x, double y, Size size) {
-    // 배경 원
-    final bgPaint = Paint()
-      ..color = isDarkMode ? Colors.black : Colors.white
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(x, y), 8, bgPaint);
-
-    // 테두리 원
-    final borderPaint = Paint()
-      ..color = lineColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    canvas.drawCircle(Offset(x, y), 8, borderPaint);
-
-    // 내부 원
-    final innerPaint = Paint()
-      ..color = lineColor
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(x, y), 4, innerPaint);
-
-    // 수직선
-    final linePaint = Paint()
-      ..color = isDarkMode
-          ? Colors.white.withOpacity(0.3)
-          : Colors.black.withOpacity(0.2)
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-
-    // 점선 효과를 위한 패턴
-    final dashWidth = 4.0;
-    final dashSpace = 4.0;
-
-    // 상단 점선
-    double startY = 0;
-    while (startY < y - 10) {
-      canvas.drawLine(
-        Offset(x, startY),
-        Offset(x, startY + dashWidth),
-        linePaint,
-      );
-      startY += dashWidth + dashSpace;
-    }
-
-    // 하단 점선
-    startY = y + 10;
-    while (startY < size.height) {
-      canvas.drawLine(
-        Offset(x, startY),
-        Offset(x, startY + dashWidth),
-        linePaint,
-      );
-      startY += dashWidth + dashSpace;
-    }
-  }
-
-  // 가격을 Y좌표로 변환
-  double _calculateY(
-    double price,
+  void _drawSelectedPoint(
+    Canvas canvas,
+    Size size,
+    ChartPoint point,
     double minPrice,
     double maxPrice,
-    double height,
+    double opacity,
   ) {
-    return height - ((price - minPrice) / (maxPrice - minPrice)) * height;
+    final x = selectedPointIndex! * pointWidth * scale;
+    final y =
+        size.height -
+        ((point.price - minPrice) / (maxPrice - minPrice)) * size.height;
+
+    // 선택된 포인트 표시
+    final dotPaint = Paint()
+      ..color = lineColor.withOpacity(opacity)
+      ..style = PaintingStyle.fill;
+
+    final borderPaint = Paint()
+      ..color = isDarkMode ? Colors.white : Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    // 포인트 그리기
+    canvas.drawCircle(Offset(x, y), 5.0, dotPaint);
+    canvas.drawCircle(Offset(x, y), 5.0, borderPaint);
+
+    // 수직선 그리기
+    final linePaint = Paint()
+      ..color = lineColor.withOpacity(0.3 * opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(Offset(x, 0), Offset(x, size.height), linePaint);
   }
 
   @override
   bool shouldRepaint(covariant LineChartPainter oldDelegate) {
     return oldDelegate.points != points ||
+        oldDelegate.lineColor != lineColor ||
+        oldDelegate.selectedPointIndex != selectedPointIndex ||
         oldDelegate.scale != scale ||
         oldDelegate.scrollOffset != scrollOffset ||
-        oldDelegate.selectedPointIndex != selectedPointIndex ||
-        oldDelegate.isDarkMode != isDarkMode;
+        oldDelegate.animationValue != animationValue;
   }
 }
