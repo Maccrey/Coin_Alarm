@@ -33,11 +33,23 @@
 - [x] Supabase Database(PostgreSQL) 테이블 구조 설계 및 샘플 데이터 입력 - 2024-06-17
 - [x] RLS(Row Level Security) 정책 설정 및 테스트 - 2024-06-17
 
+### 3-1. 로그인(Supabase 연동, MAS & TDD)
+
+- [ ] 기존 더미데이터 기반 로그인 코드/로직 정리 및 주석처리
+- [ ] Supabase Auth 연동을 위한 환경변수(.env) 적용 확인
+- [ ] Supabase Auth(이메일/비밀번호) 로그인 ViewModel/Repository 구현 (TDD)
+- [ ] 로그인 단위 테스트 코드 작성 및 통과 (TDD)
+- [ ] 로그인 UI에서 Supabase 연동 적용 및 기존 더미데이터 제거
+- [ ] 로그인 성공/실패/에러 처리 및 UI 반영
+- [ ] 로그인 상태 유지(세션) 기능 구현 및 테스트
+- [ ] 로그아웃 기능 Supabase 연동으로 전환 및 테스트
+- [ ] 관련 주석 및 문서(README, development.md, work.md) 업데이트
+
 ### 4. API 연동 및 데이터 수집
 
 - [x] Upbit/Binance API 연동 모듈 작성 - 2024-06-13
-- [ ] 실시간 가격 데이터 수집 및 Supabase DB 저장
-- [ ] 단위 테스트 코드 작성 (TDD)
+  <!-- - [ ] 실시간 가격 데이터 수집 및 Supabase DB 저장 -->
+  <!-- - [ ] 단위 테스트 코드 작성 (TDD) -->
 
 ### 5. 실시간 데이터 처리 및 분석
 
