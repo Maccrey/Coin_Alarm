@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/theme.dart';
 import 'services/supabase_service.dart';
@@ -45,14 +46,18 @@ void main() async {
   await settingsService.initialize();
 
   // Supabase 클라이언트 초기화
-  // 추후 실제 Supabase 연동 시 SupabaseService 대신 사용
-  try {
-    final supabaseClient = SupabaseClientService();
-    await supabaseClient.initialize();
-    debugPrint('Supabase 클라이언트 초기화 성공');
-  } catch (e) {
-    debugPrint('Supabase 클라이언트 초기화 실패: $e');
-    // 에러가 있더라도 앱은 실행 (더미데이터 사용)
+  final supabaseUrl = dotenv.env['SUPABASE_URL'];
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+
+  if (supabaseUrl == null || supabaseAnonKey == null) {
+    debugPrint('경고: SUPABASE_URL 또는 SUPABASE_ANON_KEY가 .env 파일에 설정되지 않았습니다.');
+  } else {
+    try {
+      await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+      debugPrint('Supabase 클라이언트 초기화 성공');
+    } catch (e) {
+      debugPrint('Supabase 초기화 오류: $e');
+    }
   }
 
   // 서비스 초기화 (실제 Supabase 연동 시도)

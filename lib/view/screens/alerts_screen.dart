@@ -471,35 +471,6 @@ class _AlertsScreenState extends State<AlertsScreen>
 
   // 새 알림 추가 다이얼로그
   void _showAddAlertDialog(List<Coin> coins, PriceAlertViewModel priceAlertVM) {
-    final coinItems = coins
-        .map<DropdownMenuItem<String>>(
-          (coin) => DropdownMenuItem<String>(
-            value: coin.id,
-            child: Row(
-              children: [
-                if (coin.imageUrl != null) ...[
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Image.network(
-                      coin.imageUrl!,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(Icons.currency_bitcoin, size: 16),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ] else
-                  const Icon(Icons.currency_bitcoin, size: 16),
-                Text('${coin.symbol} (${coin.name})'),
-              ],
-            ),
-          ),
-        )
-        .toList();
-    _selectedCoinId = coins.isNotEmpty ? coins.first.id : null;
-    _priceController.clear();
-    _notesController.clear();
-    _isAbove = true;
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -510,18 +481,11 @@ class _AlertsScreenState extends State<AlertsScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(
-                    labelText: '코인',
-                    border: OutlineInputBorder(),
-                  ),
-                  value: _selectedCoinId,
-                  items: coinItems,
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedCoinId = value;
-                    });
-                  },
+                const Text('코인 선택'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => _showCoinSelectionDialog(coins, setState),
+                  child: const Text('코인 선택'),
                 ),
                 const SizedBox(height: 16),
                 const Text('알림 조건'),
@@ -610,6 +574,73 @@ class _AlertsScreenState extends State<AlertsScreen>
                 Navigator.pop(context);
               },
               child: const Text('추가'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 코인 선택 다이얼로그
+  void _showCoinSelectionDialog(List<Coin> coins, StateSetter setState) {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('코인 선택'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextFormField(
+                  decoration: const InputDecoration(labelText: '코인 검색'),
+                  onChanged: (value) {
+                    setState(() {
+                      // 검색 로직 구현
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: coins.length,
+                    itemBuilder: (context, index) {
+                      final coin = coins[index];
+                      return ListTile(
+                        title: Text(coin.symbol),
+                        leading: coin.imageUrl != null
+                            ? SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    coin.imageUrl!,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            const Icon(Icons.currency_bitcoin),
+                                  ),
+                                ),
+                              )
+                            : Icon(Icons.currency_bitcoin),
+                        onTap: () {
+                          setState(() {
+                            _selectedCoinId = coin.id;
+                          });
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('닫기'),
             ),
           ],
         ),

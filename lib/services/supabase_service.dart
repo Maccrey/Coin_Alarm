@@ -41,18 +41,27 @@ class SupabaseService {
           );
         }
 
-        await supabase.Supabase.initialize(url: url, anonKey: anonKey);
-        _client = supabase.Supabase.instance.client;
-        debugPrint('SupabaseService: Supabase 초기화 완료');
+        // main.dart에서 이미 초기화된 클라이언트만 가져옴 (중복 초기화 방지)
+        try {
+          _client = supabase.Supabase.instance.client;
+          debugPrint('SupabaseClientService: 초기화 완료');
+        } catch (e) {
+          throw Exception('Supabase 클라이언트 접근 실패: $e');
+        }
       } else {
-        // 더미 Supabase 클라이언트 사용
+        // 더미 클라이언트
         _client = DummySupabaseClient();
         debugPrint('SupabaseService: 더미 Supabase 클라이언트 사용');
       }
 
       _initialized = true;
     } catch (e) {
-      throw Exception('Supabase 초기화 실패: $e');
+      debugPrint('실제 Supabase 연동 실패: $e');
+      // 실패 시 더미로 전환
+      _client = DummySupabaseClient();
+      _useRealSupabase = false;
+      _initialized = true;
+      debugPrint('SupabaseService: 더미 Supabase 클라이언트 사용');
     }
   }
 
@@ -441,9 +450,14 @@ class SupabaseService {
 
     if (_useRealSupabase) {
       try {
+        debugPrint('비밀번호 재설정 시도: $email (실제 Supabase 사용)');
+        debugPrint(
+          'Supabase URL: ${dotenv.env['SUPABASE_URL']?.substring(0, 10)}...',
+        );
         await _client.auth.resetPasswordForEmail(email);
         debugPrint('비밀번호 재설정 이메일 전송 완료: $email');
       } catch (e) {
+        debugPrint('비밀번호 재설정 이메일 전송 실패 상세 오류: $e');
         throw Exception('비밀번호 재설정 이메일 전송 실패: $e');
       }
     } else {
