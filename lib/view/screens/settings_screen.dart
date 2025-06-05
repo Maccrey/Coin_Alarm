@@ -66,7 +66,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('설정')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Align(alignment: Alignment.centerLeft, child: Text('설정')),
+      ),
       body: Consumer2<AuthViewModel, SettingsViewModel>(
         builder: (context, authViewModel, settingsViewModel, child) {
           return ListView(

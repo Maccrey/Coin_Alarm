@@ -7,6 +7,7 @@ import '../../data/dummy_coins.dart'; // DummyCoins 추가
 import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
 import '../../model/coin_model.dart';
+import '../../viewmodel/settings_viewmodel.dart' show SettingsViewModel;
 import 'login_screen.dart';
 import 'settings_screen.dart';
 import 'alerts_screen.dart';
@@ -303,38 +304,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppConstants.appName),
+        automaticallyImplyLeading: false,
+        title: Align(
+          alignment: Alignment.center,
+          child: Text(AppConstants.appName),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () async {
-              // 데이터 새로고침
-              final cryptoViewModel = Provider.of<CryptoViewModel>(
-                context,
-                listen: false,
-              );
-
-              // 로딩 표시
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('데이터를 새로고침 중입니다...'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-
-              // 강제 새로고침 실행
-              await cryptoViewModel.refresh();
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('데이터가 업데이트되었습니다.'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              }
-            },
-          ),
           IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
         ],
       ),

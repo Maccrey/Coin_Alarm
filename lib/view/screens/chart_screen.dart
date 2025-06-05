@@ -347,7 +347,7 @@ class _ChartScreenState extends State<ChartScreen> {
         ),
         actions: [
           // 오프라인 모드 토글 버튼
-          const ChartOfflineToggle(),
+          // const ChartOfflineToggle(),
 
           // 새로고침 버튼
           IconButton(
@@ -452,15 +452,15 @@ class _ChartScreenState extends State<ChartScreen> {
 
     final isPositiveChange = priceChange >= 0;
     final changeColor = isPositiveChange
-        ? Colors.green.shade700
+        ? Colors.blue.shade700
         : Colors.red.shade700;
 
     // 천 단위 콤마 포맷터
-    final priceFormat = NumberFormat.currency(symbol: '', decimalDigits: 2);
+    final priceFormat = NumberFormat.currency(symbol: '', decimalDigits: 0);
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         boxShadow: [
@@ -480,7 +480,7 @@ class _ChartScreenState extends State<ChartScreen> {
               Text(
                 priceFormat.format(currentPrice),
                 style: TextStyle(
-                  fontSize: 22,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).colorScheme.onSurface,
                 ),
@@ -499,14 +499,14 @@ class _ChartScreenState extends State<ChartScreen> {
                       isPositiveChange
                           ? Icons.arrow_upward
                           : Icons.arrow_downward,
-                      size: 14,
+                      size: 10,
                       color: changeColor,
                     ),
                     const SizedBox(width: 2),
                     Text(
-                      '${isPositiveChange ? "+" : ""}${priceFormat.format(priceChange)} (${priceChangePercent.toStringAsFixed(2)}%)',
+                      '${isPositiveChange ? "+" : ""}${priceFormat.format(priceChange)} (${priceChangePercent.toStringAsFixed(0)}%)',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 10,
                         fontWeight: FontWeight.w500,
                         color: changeColor,
                       ),
@@ -906,24 +906,53 @@ class _ChartScreenState extends State<ChartScreen> {
                           listen: false,
                         ).getCacheSize(),
                         builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const ListTile(
+                              title: Text('캐시 크기'),
+                              subtitle: Text('계산 중...'),
+                            );
+                          }
+
                           final cacheSize = snapshot.data ?? 0;
-                          final cacheSizeInMB = (cacheSize / (1024 * 1024))
-                              .toStringAsFixed(2);
+                          String cacheSizeText;
+
+                          if (cacheSize < 1024) {
+                            cacheSizeText = '$cacheSize B';
+                          } else if (cacheSize < 1024 * 1024) {
+                            cacheSizeText =
+                                '${(cacheSize / 1024).toStringAsFixed(2)} KB';
+                          } else {
+                            cacheSizeText =
+                                '${(cacheSize / (1024 * 1024)).toStringAsFixed(2)} MB';
+                          }
 
                           return ListTile(
                             title: const Text('캐시 크기'),
-                            subtitle: Text('$cacheSizeInMB MB'),
-                            trailing: TextButton(
-                              onPressed: () async {
-                                await Provider.of<ChartCacheService>(
-                                  context,
-                                  listen: false,
-                                ).clearAllCache();
-                                if (context.mounted) {
-                                  Navigator.of(context).pop();
-                                }
-                              },
-                              child: const Text('캐시 삭제'),
+                            subtitle: Text(cacheSizeText),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.refresh),
+                                  tooltip: '새로고침',
+                                  onPressed: () {
+                                    setState(() {});
+                                  },
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    await Provider.of<ChartCacheService>(
+                                      context,
+                                      listen: false,
+                                    ).clearAllCache();
+                                    if (context.mounted) {
+                                      setState(() {});
+                                    }
+                                  },
+                                  child: const Text('캐시 삭제'),
+                                ),
+                              ],
                             ),
                           );
                         },

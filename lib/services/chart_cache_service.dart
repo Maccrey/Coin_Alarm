@@ -218,20 +218,52 @@ class ChartCacheService {
     await _ensureInitialized();
 
     try {
+      // 애플리케이션 문서 디렉토리 가져오기
       final appDir = await getApplicationDocumentsDirectory();
+
+      // Hive 파일이 저장되는 경로
       final hivePath = '${appDir.path}/hive';
+      final lineChartBoxPath = '$hivePath/$_lineChartBoxName.hive';
+      final candleChartBoxPath = '$hivePath/$_candleChartBoxName.hive';
 
       int totalSize = 0;
-      final directory = Directory(hivePath);
 
+      // 라인 차트 박스 파일 크기 확인
+      final lineChartFile = File(lineChartBoxPath);
+      if (await lineChartFile.exists()) {
+        totalSize += await lineChartFile.length();
+        debugPrint(
+          'ChartCacheService: 라인 차트 캐시 크기 - ${await lineChartFile.length()} 바이트',
+        );
+      }
+
+      // 캔들 차트 박스 파일 크기 확인
+      final candleChartFile = File(candleChartBoxPath);
+      if (await candleChartFile.exists()) {
+        totalSize += await candleChartFile.length();
+        debugPrint(
+          'ChartCacheService: 캔들 차트 캐시 크기 - ${await candleChartFile.length()} 바이트',
+        );
+      }
+
+      // 추가 Hive 파일 확인 (인덱스 파일 등)
+      final directory = Directory(hivePath);
       if (await directory.exists()) {
-        await for (final file in directory.list(recursive: true)) {
-          if (file is File) {
-            totalSize += await file.length();
+        await for (final entity in directory.list()) {
+          if (entity is File &&
+              !entity.path.endsWith('$_lineChartBoxName.hive') &&
+              !entity.path.endsWith('$_candleChartBoxName.hive') &&
+              entity.path.contains('.hive')) {
+            final size = await entity.length();
+            totalSize += size;
+            debugPrint(
+              'ChartCacheService: 추가 Hive 파일 - ${entity.path}, 크기: $size 바이트',
+            );
           }
         }
       }
 
+      debugPrint('ChartCacheService: 총 캐시 크기 - $totalSize 바이트');
       return totalSize;
     } catch (e) {
       debugPrint('ChartCacheService: 캐시 크기 계산 오류 - $e');

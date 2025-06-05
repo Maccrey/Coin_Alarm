@@ -465,8 +465,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               : sortedCoins[i].priceChangePercent,
                           style: TextStyle(
                             color: sortedCoins[i].isPriceUp
-                                ? Colors.green
-                                : Colors.red,
+                                ? Colors.blue.shade700
+                                : Colors.red.shade700,
                             fontWeight: FontWeight.bold,
                           ),
                         ),

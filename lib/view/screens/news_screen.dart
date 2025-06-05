@@ -89,7 +89,8 @@ class _NewsScreenState extends State<NewsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('뉴스'),
+        automaticallyImplyLeading: false,
+        title: const Align(alignment: Alignment.centerLeft, child: Text('뉴스')),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(

@@ -60,7 +60,7 @@ class _CandleChartWidgetState extends State<CandleChartWidget>
   // 가격 포맷터
   final NumberFormat _priceFormat = NumberFormat.currency(
     symbol: '',
-    decimalDigits: 2,
+    decimalDigits: 0,
   );
 
   @override
@@ -621,11 +621,11 @@ class _CandleChartWidgetState extends State<CandleChartWidget>
   // 거래량 포맷팅
   String _formatVolume(double volume) {
     if (volume >= 1000000) {
-      return '${(volume / 1000000).toStringAsFixed(2)}M';
+      return '${(volume / 1000000).toStringAsFixed(0)}M';
     } else if (volume >= 1000) {
-      return '${(volume / 1000).toStringAsFixed(2)}K';
+      return '${(volume / 1000).toStringAsFixed(0)}K';
     } else {
-      return volume.toStringAsFixed(2);
+      return volume.toStringAsFixed(0);
     }
   }
 

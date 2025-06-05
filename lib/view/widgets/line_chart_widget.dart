@@ -487,12 +487,13 @@ class _LineChartWidgetState extends State<LineChartWidget>
   // 가격 포맷팅
   String _formatPrice(double price) {
     if (price >= 1000000) {
-      return '${(price / 1000000).toStringAsFixed(2)}M';
+      return '${(price / 1000000).toStringAsFixed(0)}M';
     } else if (price >= 1000) {
-      return '${(price / 1000).toStringAsFixed(2)}K';
+      return '${(price / 1000).toStringAsFixed(0)}K';
     } else if (price >= 1) {
-      return price.toStringAsFixed(2);
+      return price.toStringAsFixed(0);
     } else {
+      // 1보다 작은 값은 소수점 필요
       return price.toStringAsFixed(6);
     }
   }

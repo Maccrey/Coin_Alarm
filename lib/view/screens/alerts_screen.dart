@@ -83,7 +83,8 @@ class _AlertsScreenState extends State<AlertsScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('알림'),
+        automaticallyImplyLeading: false,
+        title: const Align(alignment: Alignment.centerLeft, child: Text('알림')),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -401,16 +402,16 @@ class _AlertsScreenState extends State<AlertsScreen>
                                     : Icons.arrow_downward,
                                 size: 14,
                                 color: alert.isAbove
-                                    ? Colors.green
-                                    : Colors.red,
+                                    ? Colors.blue.shade700
+                                    : Colors.red.shade700,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 '₩${_formatPrice(alert.priceTarget)}',
                                 style: TextStyle(
                                   color: alert.isAbove
-                                      ? Colors.green
-                                      : Colors.red,
+                                      ? Colors.blue.shade700
+                                      : Colors.red.shade700,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
