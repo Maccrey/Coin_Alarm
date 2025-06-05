@@ -1,3 +1,5 @@
+// 더 이상 사용하지 않음 - Supabase 연동으로 대체, 삭제 예정
+
 import '../model/coin_model.dart';
 
 // 더미 코인 데이터

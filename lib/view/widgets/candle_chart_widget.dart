@@ -22,8 +22,8 @@ class CandleChartWidget extends StatefulWidget {
     this.showVolume = true,
     this.showGrid = true,
     this.showTooltip = true,
-    this.upColor = const Color(0xFF1976D2), // 파란색
-    this.downColor = const Color(0xFFD32F2F), // 빨간색
+    this.upColor = Colors.red, // 상승: 빨강
+    this.downColor = Colors.blue, // 하락: 파랑
     this.gridColor = const Color(0x22000000), // 연한 회색
     this.textColor = const Color(0xFF757575), // 중간 회색
     this.candleWidth = 10.0,

@@ -246,8 +246,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             '₩${_formatPrice(coin.currentPrice)} · ${coin.priceChangePercentage24h?.toStringAsFixed(2) ?? '0.00'}%',
                             style: TextStyle(
                               color: (coin.priceChangePercentage24h ?? 0) >= 0
-                                  ? AppTheme.positiveColor
-                                  : Colors.red,
+                                  ? Colors.red
+                                  : Colors.blue,
                               fontSize: 12,
                             ),
                           ),

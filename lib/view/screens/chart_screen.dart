@@ -452,8 +452,10 @@ class _ChartScreenState extends State<ChartScreen> {
 
     final isPositiveChange = priceChange >= 0;
     final changeColor = isPositiveChange
-        ? Colors.blue.shade700
-        : Colors.red.shade700;
+        ? Colors
+              .red
+              .shade700 // 상승: 빨강
+        : Colors.blue.shade700; // 하락: 파랑
 
     // 천 단위 콤마 포맷터
     final priceFormat = NumberFormat.currency(symbol: '', decimalDigits: 0);
@@ -780,10 +782,8 @@ class _ChartScreenState extends State<ChartScreen> {
                   showVolume: true,
                   showGrid: true,
                   showTooltip: true,
-                  upColor: Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xFF4CAF50) // 다크 모드에서는 녹색
-                      : const Color(0xFF1976D2), // 라이트 모드에서는 파란색
-                  downColor: const Color(0xFFD32F2F), // 빨간색
+                  upColor: Colors.red, // 상승: 빨강
+                  downColor: Colors.blue, // 하락: 파랑
                 ),
               ),
             ),
@@ -844,9 +844,9 @@ class _ChartScreenState extends State<ChartScreen> {
                   showGrid: true,
                   showTooltip: true,
                   showGradient: true,
-                  lineColor: Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xFF4CAF50) // 다크 모드에서는 녹색
-                      : const Color(0xFF1976D2), // 라이트 모드에서는 파란색
+                  lineColor: chartViewModel.priceChange >= 0
+                      ? Colors.red
+                      : Colors.blue,
                 ),
               ),
             ),

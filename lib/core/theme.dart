@@ -26,8 +26,8 @@ class AppTheme {
   static const Color darkSecondaryTextColor = Color(0xFFB3B3B3);
 
   /// 가격 변동 색상
-  static const Color positiveColor = Color(0xFF1F7CEB); // 상승 (파란색)
-  static const Color negativeColor = Color(0xFFFF5252); // 하락 (빨간색)
+  static const Color positiveColor = Color(0xFFD32F2F); // 상승 (빨강)
+  static const Color negativeColor = Color(0xFF1976D2); // 하락 (파랑)
 
   /// 경고 및 알림 색상
   static const Color warningColor = Color(0xFFFFB74D);

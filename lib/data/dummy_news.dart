@@ -1,3 +1,5 @@
+// 더 이상 사용하지 않음 - Supabase 연동으로 대체, 삭제 예정
+
 import '../model/news_model.dart';
 
 // 더미 뉴스 데이터

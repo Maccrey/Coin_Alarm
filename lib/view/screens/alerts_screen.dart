@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../../model/price_alert_model.dart';
-import '../../data/dummy_alerts.dart';
-import '../../data/dummy_coins.dart';
+import '../../model/coin_model.dart';
+import '../../viewmodel/price_alert_viewmodel.dart';
+import '../../viewmodel/coin_viewmodel.dart';
 
 // 알림 화면
 class AlertsScreen extends StatefulWidget {
@@ -14,20 +16,11 @@ class AlertsScreen extends StatefulWidget {
 
 class _AlertsScreenState extends State<AlertsScreen>
     with SingleTickerProviderStateMixin {
-  // 탭 컨트롤러
   late TabController _tabController;
-
-  // 알림 추가 입력 컨트롤러
   final _priceController = TextEditingController();
   final _notesController = TextEditingController();
   String? _selectedCoinId;
   bool _isAbove = true;
-
-  // 더미 알림 데이터
-  late List<PriceAlert> _pendingAlerts;
-  late List<PriceAlert> _triggeredAlerts;
-
-  // 필터링
   String? _selectedFilter;
   String _selectedFilterName = '전체';
 
@@ -35,9 +28,18 @@ class _AlertsScreenState extends State<AlertsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-
-    // 더미 데이터 로드
-    _loadDummyData();
+    // 실제 사용자 ID로 교체 필요
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final priceAlertVM = Provider.of<PriceAlertViewModel>(
+        context,
+        listen: false,
+      );
+      final coinVM = Provider.of<CoinViewModel>(context, listen: false);
+      // TODO: 실제 로그인된 사용자 ID로 교체
+      final userId = 'user-id';
+      priceAlertVM.loadUserAlerts(userId);
+      coinVM.refreshCoins();
+    });
   }
 
   @override
@@ -48,38 +50,28 @@ class _AlertsScreenState extends State<AlertsScreen>
     super.dispose();
   }
 
-  // 더미 데이터 로드
-  void _loadDummyData() {
-    setState(() {
-      _pendingAlerts = DummyAlerts.getPendingAlerts();
-      _triggeredAlerts = DummyAlerts.getTriggeredAlerts();
-    });
-  }
-
   // 필터 적용
   void _applyFilter(String? coinId, String coinName) {
     setState(() {
       _selectedFilter = coinId;
       _selectedFilterName = coinName;
-
-      if (coinId == null) {
-        _pendingAlerts = DummyAlerts.getPendingAlerts();
-        _triggeredAlerts = DummyAlerts.getTriggeredAlerts();
-      } else {
-        _pendingAlerts = DummyAlerts.getPendingAlerts()
-            .where((alert) => alert.coinId == coinId)
-            .toList();
-        _triggeredAlerts = DummyAlerts.getTriggeredAlerts()
-            .where((alert) => alert.coinId == coinId)
-            .toList();
-      }
+      final priceAlertVM = Provider.of<PriceAlertViewModel>(
+        context,
+        listen: false,
+      );
+      priceAlertVM.setFilter(coinId);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // 테마 데이터
     final theme = Theme.of(context);
+    final priceAlertVM = Provider.of<PriceAlertViewModel>(context);
+    final coinVM = Provider.of<CoinViewModel>(context);
+    final alerts = priceAlertVM.alerts;
+    final pendingAlerts = alerts.where((a) => !a.isTriggered).toList();
+    final triggeredAlerts = alerts.where((a) => a.isTriggered).toList();
+    final coins = coinVM.coins;
 
     return Scaffold(
       appBar: AppBar(
@@ -93,7 +85,6 @@ class _AlertsScreenState extends State<AlertsScreen>
           ],
         ),
         actions: [
-          // 필터 버튼
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: PopupMenuButton<Map<String, dynamic>>(
@@ -133,10 +124,9 @@ class _AlertsScreenState extends State<AlertsScreen>
                 _applyFilter(option['id'] as String?, option['name'] as String);
               },
               itemBuilder: (context) {
-                // 코인 목록으로 필터 메뉴 아이템 생성
                 final allCoins = [
                   {'id': null, 'name': '전체', 'imageUrl': null},
-                  ...DummyCoins.popularCoins
+                  ...coins
                       .map(
                         (coin) => {
                           'id': coin.id,
@@ -146,17 +136,14 @@ class _AlertsScreenState extends State<AlertsScreen>
                       )
                       .toList(),
                 ];
-
                 return allCoins.map((coin) {
                   final bool isSelected =
                       (coin['id'] == _selectedFilter) ||
                       (coin['id'] == null && _selectedFilter == null);
-
                   return PopupMenuItem<Map<String, dynamic>>(
                     value: coin,
                     child: Row(
                       children: [
-                        // 선택 표시
                         if (isSelected)
                           Icon(
                             Icons.check_circle,
@@ -166,8 +153,6 @@ class _AlertsScreenState extends State<AlertsScreen>
                         else
                           const SizedBox(width: 18),
                         const SizedBox(width: 8),
-
-                        // 코인 아이콘
                         if (coin['imageUrl'] != null) ...[
                           SizedBox(
                             width: 24,
@@ -216,8 +201,6 @@ class _AlertsScreenState extends State<AlertsScreen>
                           ),
                           const SizedBox(width: 8),
                         ],
-
-                        // 코인 이름
                         Text(
                           coin['name'] as String,
                           style: TextStyle(
@@ -238,15 +221,12 @@ class _AlertsScreenState extends State<AlertsScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          // 대기중 알림 탭
-          _buildAlertsList(_pendingAlerts),
-
-          // 발생된 알림 탭
-          _buildAlertsList(_triggeredAlerts),
+          _buildAlertsList(pendingAlerts, coinVM, priceAlertVM),
+          _buildAlertsList(triggeredAlerts, coinVM, priceAlertVM),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddAlertDialog,
+        onPressed: () => _showAddAlertDialog(coins, priceAlertVM),
         tooltip: '새 알림 추가',
         child: const Icon(Icons.add),
       ),
@@ -254,7 +234,11 @@ class _AlertsScreenState extends State<AlertsScreen>
   }
 
   // 알림 목록 위젯
-  Widget _buildAlertsList(List<PriceAlert> alerts) {
+  Widget _buildAlertsList(
+    List<PriceAlert> alerts,
+    CoinViewModel coinVM,
+    PriceAlertViewModel priceAlertVM,
+  ) {
     if (alerts.isEmpty) {
       return Center(
         child: Column(
@@ -279,34 +263,29 @@ class _AlertsScreenState extends State<AlertsScreen>
             TextButton.icon(
               icon: const Icon(Icons.add),
               label: const Text('새 알림 추가'),
-              onPressed: _showAddAlertDialog,
+              onPressed: () => _showAddAlertDialog(coinVM.coins, priceAlertVM),
             ),
           ],
         ),
       );
     }
-
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: alerts.length,
       itemBuilder: (context, index) {
         final alert = alerts[index];
-        return _buildAlertItem(alert);
+        return _buildAlertItem(alert, coinVM, priceAlertVM);
       },
     );
   }
 
   // 알림 아이템 위젯
-  Widget _buildAlertItem(PriceAlert alert) {
-    // 관련 코인 정보 가져오기
-    final coin = DummyCoins.popularCoins.firstWhere(
-      (coin) => coin.id == alert.coinId,
-      orElse: () => DummyCoins.allCoins.firstWhere(
-        (coin) => coin.id == alert.coinId,
-        orElse: () => DummyCoins.popularCoins.first,
-      ),
-    );
-
+  Widget _buildAlertItem(
+    PriceAlert alert,
+    CoinViewModel coinVM,
+    PriceAlertViewModel priceAlertVM,
+  ) {
+    final coin = coinVM.getCoinById(alert.coinId);
     return Dismissible(
       key: Key(alert.id),
       background: Container(
@@ -316,47 +295,23 @@ class _AlertsScreenState extends State<AlertsScreen>
         child: const Icon(Icons.delete, color: Colors.white),
       ),
       direction: DismissDirection.endToStart,
-      onDismissed: (direction) {
-        // 알림 삭제 처리
-        setState(() {
-          if (alert.isTriggered) {
-            _triggeredAlerts.removeWhere((a) => a.id == alert.id);
-          } else {
-            _pendingAlerts.removeWhere((a) => a.id == alert.id);
-          }
-          // 실제 DummyAlerts에서도 제거 (실제 앱에서는 필요 없음)
-          DummyAlerts.userAlerts.removeWhere((a) => a.id == alert.id);
-        });
-
-        // 삭제 취소 스낵바
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('알림이 삭제되었습니다'),
-            action: SnackBarAction(
-              label: '실행 취소',
-              onPressed: () {
-                // 더미 데이터 다시 로드
-                _loadDummyData();
-              },
-            ),
-          ),
-        );
+      onDismissed: (direction) async {
+        await priceAlertVM.deleteAlert(alert.id);
+        // 삭제 후 새로고침 필요시 추가
       },
       child: Card(
         margin: const EdgeInsets.only(bottom: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => _showAlertDetailDialog(alert),
+          onTap: () => _showAlertDetailDialog(alert, coin),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 코인 및 가격 목표
                 Row(
                   children: [
-                    // 코인 아이콘
                     Container(
                       width: 40,
                       height: 40,
@@ -366,11 +321,11 @@ class _AlertsScreenState extends State<AlertsScreen>
                         ).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: coin.imageUrl != null
+                      child: coin?.imageUrl != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(20),
                               child: Image.network(
-                                coin.imageUrl!,
+                                coin!.imageUrl!,
                                 errorBuilder: (context, error, stackTrace) =>
                                     const Icon(Icons.currency_bitcoin),
                               ),
@@ -381,7 +336,6 @@ class _AlertsScreenState extends State<AlertsScreen>
                             ),
                     ),
                     const SizedBox(width: 12),
-                    // 알림 정보
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,7 +374,6 @@ class _AlertsScreenState extends State<AlertsScreen>
                         ],
                       ),
                     ),
-                    // 알림 상태
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -429,7 +382,9 @@ class _AlertsScreenState extends State<AlertsScreen>
                       decoration: BoxDecoration(
                         color: alert.isTriggered
                             ? Colors.orange.withOpacity(0.2)
-                            : Colors.blue.withOpacity(0.2),
+                            : (alert.isAbove
+                                  ? Colors.red.withOpacity(0.2)
+                                  : Colors.blue.withOpacity(0.2)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -438,17 +393,15 @@ class _AlertsScreenState extends State<AlertsScreen>
                           fontSize: 12,
                           color: alert.isTriggered
                               ? Colors.orange
-                              : Colors.blue,
+                              : (alert.isAbove ? Colors.red : Colors.blue),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                   ],
                 ),
-
                 if (alert.notes != null && alert.notes!.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  // 메모
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -473,9 +426,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                     ),
                   ),
                 ],
-
                 const SizedBox(height: 12),
-                // 생성 시간
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -519,11 +470,7 @@ class _AlertsScreenState extends State<AlertsScreen>
   }
 
   // 새 알림 추가 다이얼로그
-  void _showAddAlertDialog() {
-    // 코인 목록
-    final coins = DummyCoins.popularCoins;
-
-    // 코인 선택 드롭다운 아이템
+  void _showAddAlertDialog(List<Coin> coins, PriceAlertViewModel priceAlertVM) {
     final coinItems = coins
         .map<DropdownMenuItem<String>>(
           (coin) => DropdownMenuItem<String>(
@@ -549,13 +496,10 @@ class _AlertsScreenState extends State<AlertsScreen>
           ),
         )
         .toList();
-
-    // 필드 초기화
     _selectedCoinId = coins.isNotEmpty ? coins.first.id : null;
     _priceController.clear();
     _notesController.clear();
     _isAbove = true;
-
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -566,7 +510,6 @@ class _AlertsScreenState extends State<AlertsScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 코인 선택
                 DropdownButtonFormField<String>(
                   decoration: const InputDecoration(
                     labelText: '코인',
@@ -581,8 +524,6 @@ class _AlertsScreenState extends State<AlertsScreen>
                   },
                 ),
                 const SizedBox(height: 16),
-
-                // 알림 방향 선택 (상승/하락)
                 const Text('알림 조건'),
                 Row(
                   children: [
@@ -613,8 +554,6 @@ class _AlertsScreenState extends State<AlertsScreen>
                   ],
                 ),
                 const SizedBox(height: 16),
-
-                // 가격 입력
                 TextFormField(
                   controller: _priceController,
                   decoration: const InputDecoration(
@@ -625,8 +564,6 @@ class _AlertsScreenState extends State<AlertsScreen>
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
-
-                // 메모 입력 (선택사항)
                 TextFormField(
                   controller: _notesController,
                   decoration: const InputDecoration(
@@ -645,15 +582,13 @@ class _AlertsScreenState extends State<AlertsScreen>
               child: const Text('취소'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (_selectedCoinId == null || _priceController.text.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('코인과 가격을 모두 입력해주세요')),
                   );
                   return;
                 }
-
-                // 가격 변환
                 double? price = double.tryParse(_priceController.text.trim());
                 if (price == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -661,15 +596,17 @@ class _AlertsScreenState extends State<AlertsScreen>
                   );
                   return;
                 }
-
-                // 알림 생성
-                _createAlert(
-                  _selectedCoinId!,
+                final coin = coins.firstWhere((c) => c.id == _selectedCoinId);
+                // 실제 로그인된 사용자 ID로 교체 필요
+                final userId = 'user-id';
+                await priceAlertVM.createAlert(
+                  userId,
+                  coin.id,
+                  coin.symbol,
                   price,
                   _isAbove,
-                  _notesController.text.trim(),
+                  notes: _notesController.text.trim(),
                 );
-
                 Navigator.pop(context);
               },
               child: const Text('추가'),
@@ -680,58 +617,13 @@ class _AlertsScreenState extends State<AlertsScreen>
     );
   }
 
-  // 알림 생성 함수
-  void _createAlert(String coinId, double price, bool isAbove, String notes) {
-    // 관련 코인 찾기
-    final coin = DummyCoins.popularCoins.firstWhere(
-      (coin) => coin.id == coinId,
-      orElse: () => DummyCoins.allCoins.firstWhere(
-        (coin) => coin.id == coinId,
-        orElse: () => DummyCoins.popularCoins.first,
-      ),
-    );
-
-    // 새 알림 객체 생성
-    final newAlert = PriceAlert(
-      id: 'new-${DateTime.now().millisecondsSinceEpoch}',
-      userId: 'user1',
-      coinId: coinId,
-      coinSymbol: coin.symbol,
-      priceTarget: price,
-      isAbove: isAbove,
-      isTriggered: false,
-      createdAt: DateTime.now(),
-      notes: notes.isEmpty ? null : notes,
-    );
-
-    // 더미 데이터에 추가
-    setState(() {
-      DummyAlerts.userAlerts.add(newAlert);
-      _pendingAlerts.add(newAlert);
-    });
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('가격 알림이 생성되었습니다')));
-  }
-
   // 알림 상세 다이얼로그
-  void _showAlertDetailDialog(PriceAlert alert) {
-    // 관련 코인 정보 가져오기
-    final coin = DummyCoins.popularCoins.firstWhere(
-      (coin) => coin.id == alert.coinId,
-      orElse: () => DummyCoins.allCoins.firstWhere(
-        (coin) => coin.id == alert.coinId,
-        orElse: () => DummyCoins.popularCoins.first,
-      ),
-    );
-
+  void _showAlertDetailDialog(PriceAlert alert, Coin? coin) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            // 코인 아이콘
             Container(
               width: 32,
               height: 32,
@@ -739,11 +631,11 @@ class _AlertsScreenState extends State<AlertsScreen>
                 color: Theme.of(context).colorScheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: coin.imageUrl != null
+              child: coin?.imageUrl != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Image.network(
-                        coin.imageUrl!,
+                        coin!.imageUrl!,
                         errorBuilder: (context, error, stackTrace) =>
                             const Icon(Icons.currency_bitcoin, size: 20),
                       ),
@@ -762,20 +654,20 @@ class _AlertsScreenState extends State<AlertsScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 가격 목표
             Text(
               '가격 ${alert.isAbove ? '상승' : '하락'} 알림:',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             Text('₩${_formatPrice(alert.priceTarget)}'),
             const SizedBox(height: 16),
-
-            // 현재 가격
-            const Text('현재 가격:', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text('₩${_formatPrice(coin.currentPrice)}'),
-            const SizedBox(height: 16),
-
-            // 메모
+            if (coin != null) ...[
+              const Text(
+                '현재 가격:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text('₩${_formatPrice(coin.currentPrice)}'),
+              const SizedBox(height: 16),
+            ],
             if (alert.notes != null && alert.notes!.isNotEmpty) ...[
               const Text('메모:', style: TextStyle(fontWeight: FontWeight.bold)),
               Container(
@@ -790,12 +682,8 @@ class _AlertsScreenState extends State<AlertsScreen>
               ),
               const SizedBox(height: 16),
             ],
-
-            // 생성 시간
             const Text('생성 시간:', style: TextStyle(fontWeight: FontWeight.bold)),
             Text(_formatDateTime(alert.createdAt, detailed: true)),
-
-            // 발생 시간
             if (alert.isTriggered && alert.triggeredAt != null) ...[
               const SizedBox(height: 16),
               const Text(
@@ -807,23 +695,16 @@ class _AlertsScreenState extends State<AlertsScreen>
           ],
         ),
         actions: [
-          // 삭제 버튼
           TextButton.icon(
             icon: const Icon(Icons.delete, color: Colors.red),
             label: const Text('삭제', style: TextStyle(color: Colors.red)),
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                if (alert.isTriggered) {
-                  _triggeredAlerts.removeWhere((a) => a.id == alert.id);
-                } else {
-                  _pendingAlerts.removeWhere((a) => a.id == alert.id);
-                }
-                DummyAlerts.userAlerts.removeWhere((a) => a.id == alert.id);
-              });
-              ScaffoldMessenger.of(
+            onPressed: () async {
+              final priceAlertVM = Provider.of<PriceAlertViewModel>(
                 context,
-              ).showSnackBar(const SnackBar(content: Text('알림이 삭제되었습니다')));
+                listen: false,
+              );
+              await priceAlertVM.deleteAlert(alert.id);
+              Navigator.pop(context);
             },
           ),
           TextButton(
@@ -851,10 +732,8 @@ class _AlertsScreenState extends State<AlertsScreen>
     if (detailed) {
       return '${dateTime.year}/${dateTime.month}/${dateTime.day} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
     }
-
     final now = DateTime.now();
     final difference = now.difference(dateTime);
-
     if (difference.inDays > 0) {
       return '${dateTime.month}/${dateTime.day}';
     } else {

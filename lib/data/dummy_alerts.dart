@@ -1,3 +1,5 @@
+// 더 이상 사용하지 않음 - Supabase 연동으로 대체, 삭제 예정
+
 import '../model/price_alert_model.dart';
 
 // 더미 알림 데이터

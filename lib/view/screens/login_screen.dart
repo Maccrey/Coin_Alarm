@@ -49,10 +49,6 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _saveLoginInfo = settingsViewModel.saveLoginInfo;
       });
-
-      // 더미 데이터로 테스트 이메일 설정
-      _emailController.text = 'test@example.com';
-      _passwordController.text = 'password';
     } catch (e) {
       debugPrint('설정 불러오기 오류: $e');
     }
@@ -256,14 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // Todo:로그인 버튼 실제 수파베이스와 연결
                       ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const HomeScreen(),
-                            ),
-                          );
-                        },
-                        // onPressed: authViewModel.isLoading ? null : _login,
+                        onPressed: authViewModel.isLoading ? null : _login,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
@@ -299,14 +288,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: const Text('회원가입'),
                           ),
                         ],
-                      ),
-
-                      // 테스트 계정 안내
-                      const SizedBox(height: 48),
-                      Text(
-                        '테스트 계정: test@example.com / password',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall,
                       ),
                     ],
                   ),
