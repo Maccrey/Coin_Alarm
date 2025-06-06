@@ -28,15 +28,16 @@ class _AlertsScreenState extends State<AlertsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    // 실제 사용자 ID로 교체 필요
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final priceAlertVM = Provider.of<PriceAlertViewModel>(
         context,
         listen: false,
       );
       final coinVM = Provider.of<CoinViewModel>(context, listen: false);
-      // TODO: 실제 로그인된 사용자 ID로 교체
-      final userId = 'user-id';
+
+      // 임시 사용자 ID 사용 (실제로는 인증된 사용자 ID 사용)
+      const userId = 'local-user';
       priceAlertVM.loadUserAlerts(userId);
       coinVM.refreshCoins();
     });
@@ -561,8 +562,9 @@ class _AlertsScreenState extends State<AlertsScreen>
                   return;
                 }
                 final coin = coins.firstWhere((c) => c.id == _selectedCoinId);
-                // 실제 로그인된 사용자 ID로 교체 필요
-                final userId = 'user-id';
+
+                // 로컬 사용자 ID 사용
+                const userId = 'local-user';
                 await priceAlertVM.createAlert(
                   userId,
                   coin.id,
@@ -588,7 +590,9 @@ class _AlertsScreenState extends State<AlertsScreen>
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: const Text('코인 선택'),
-          content: SingleChildScrollView(
+          content: Container(
+            width: double.maxFinite,
+            height: MediaQuery.of(context).size.height * 0.5,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -604,6 +608,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                 const SizedBox(height: 16),
                 Expanded(
                   child: ListView.builder(
+                    shrinkWrap: true,
                     itemCount: coins.length,
                     itemBuilder: (context, index) {
                       final coin = coins[index];
@@ -623,7 +628,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                                   ),
                                 ),
                               )
-                            : Icon(Icons.currency_bitcoin),
+                            : const Icon(Icons.currency_bitcoin),
                         onTap: () {
                           setState(() {
                             _selectedCoinId = coin.id;

@@ -38,14 +38,6 @@ class ChartCacheService {
       // Hive 초기화
       await Hive.initFlutter();
 
-      // 모델 어댑터 등록
-      Hive.registerAdapter(ChartDataAdapter());
-      Hive.registerAdapter(ChartPointAdapter());
-      Hive.registerAdapter(CandleDataAdapter());
-      Hive.registerAdapter(CandleChartDataAdapter());
-      Hive.registerAdapter(ChartTypeAdapter());
-      Hive.registerAdapter(ChartTimeframeAdapter());
-
       // 박스 열기
       _lineChartBox = await Hive.openBox<ChartData>(_lineChartBoxName);
       _candleChartBox = await Hive.openBox<CandleChartData>(

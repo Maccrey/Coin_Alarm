@@ -8,7 +8,7 @@ part of 'chart_data_model.dart';
 
 class ChartDataAdapter extends TypeAdapter<ChartData> {
   @override
-  final int typeId = 1;
+  final int typeId = 6;
 
   @override
   ChartData read(BinaryReader reader) {

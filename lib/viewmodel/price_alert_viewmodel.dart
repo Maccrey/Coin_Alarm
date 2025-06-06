@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../services/supabase_service.dart';
+import '../services/price_alert_service.dart';
 import '../model/price_alert_model.dart';
 import '../model/coin_model.dart';
 
 // 가격 알림 관련 ViewModel 클래스
 class PriceAlertViewModel extends ChangeNotifier {
-  final SupabaseService _supabaseService;
+  final PriceAlertService _alertService;
 
   // 상태 관리
   bool _isLoading = false;
@@ -17,7 +17,7 @@ class PriceAlertViewModel extends ChangeNotifier {
   String? _coinFilter;
 
   // 생성자
-  PriceAlertViewModel(this._supabaseService);
+  PriceAlertViewModel(this._alertService);
 
   // Getters
   bool get isLoading => _isLoading;
@@ -32,8 +32,8 @@ class PriceAlertViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final alerts = await _supabaseService.getAlertSettings(userId: userId);
-      _alerts = alerts.map((data) => PriceAlert.fromJson(data)).toList();
+      final alerts = await _alertService.getAlerts(userId);
+      _alerts = alerts;
       _errorMessage = null;
     } catch (e) {
       _errorMessage = '가격 알림 로드 실패: $e';
@@ -57,33 +57,23 @@ class PriceAlertViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 새 알림 객체 생성
-      final newAlert = PriceAlert(
-        id: 'temp-${DateTime.now().millisecondsSinceEpoch}', // 임시 ID (DB에서 자동 생성됨)
-        userId: userId,
-        coinId: coinId,
-        coinSymbol: coinSymbol,
-        priceTarget: priceTarget,
-        isAbove: isAbove,
-        isTriggered: false,
-        createdAt: DateTime.now(),
+      final newAlert = await _alertService.createAlert(
+        userId,
+        coinId,
+        coinSymbol,
+        priceTarget,
+        isAbove,
         notes: notes,
       );
 
-      // DB에 저장
-      await _supabaseService.saveAlertSetting(
-        userId: userId,
-        symbol: coinSymbol,
-        targetPrice: priceTarget,
-        isAbove: isAbove,
-        isActive: true,
-      );
-
-      // 로컬 목록에 추가
-      _alerts.add(newAlert);
-      _errorMessage = null;
-      notifyListeners();
-      return true;
+      if (newAlert != null) {
+        // 로컬 목록에 추가
+        _alerts.add(newAlert);
+        _errorMessage = null;
+        notifyListeners();
+        return true;
+      }
+      return false;
     } catch (e) {
       _errorMessage = '가격 알림 생성 실패: $e';
       debugPrint(_errorMessage);
@@ -100,12 +90,14 @@ class PriceAlertViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _supabaseService.deleteAlertSetting(alertId: int.parse(alertId));
+      final success = await _alertService.deleteAlert(alertId);
 
-      // 로컬 목록에서 제거
-      _alerts.removeWhere((alert) => alert.id == alertId);
-      _errorMessage = null;
-      return true;
+      if (success) {
+        // 로컬 목록에서 제거
+        _alerts.removeWhere((alert) => alert.id == alertId);
+        _errorMessage = null;
+      }
+      return success;
     } catch (e) {
       _errorMessage = '가격 알림 삭제 실패: $e';
       debugPrint(_errorMessage);
@@ -139,36 +131,26 @@ class PriceAlertViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 가격 알림이 트리거되었는지 확인 (실제로는 서버에서 처리)
+  // 가격 알림이 트리거되었는지 확인
   Future<void> checkAlertsTriggered(List<Coin> currentPrices) async {
-    for (final coin in currentPrices) {
-      final alertsForCoin = _alerts
-          .where((alert) => alert.coinId == coin.id && !alert.isTriggered)
-          .toList();
+    // 로컬 사용자 ID (실제로는 인증된 사용자 ID 사용)
+    const userId = 'local-user';
+    final triggeredAlerts = await _alertService.checkAndUpdateAlerts(
+      currentPrices,
+      userId,
+    );
 
-      for (final alert in alertsForCoin) {
-        // 가격 조건 확인
-        final isTriggered = alert.isAbove
-            ? coin.currentPrice >= alert.priceTarget
-            : coin.currentPrice <= alert.priceTarget;
-
-        if (isTriggered) {
-          // 실제 앱에서는 여기서 알림을 표시하고 DB에 상태 업데이트
-          debugPrint('알림 발생: ${alert.description} (현재가: ${coin.currentPrice})');
-
-          // 로컬 상태 업데이트 (실제로는 DB 업데이트 후 새로 로드)
-          final index = _alerts.indexWhere((a) => a.id == alert.id);
-          if (index >= 0) {
-            _alerts[index] = alert.copyWith(
-              isTriggered: true,
-              triggeredAt: DateTime.now(),
-            );
-          }
+    if (triggeredAlerts.isNotEmpty) {
+      // 로컬 상태 업데이트
+      for (final triggeredAlert in triggeredAlerts) {
+        final index = _alerts.indexWhere((a) => a.id == triggeredAlert.id);
+        if (index >= 0) {
+          _alerts[index] = triggeredAlert;
         }
       }
-    }
 
-    // 변경사항이 있으면 갱신
-    notifyListeners();
+      // 변경사항이 있으면 갱신
+      notifyListeners();
+    }
   }
 }

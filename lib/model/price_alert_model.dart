@@ -1,15 +1,39 @@
+import 'package:hive/hive.dart';
+
+part 'price_alert_model.g.dart';
+
 // 가격 알림 모델 클래스
 
+@HiveType(typeId: 10)
 class PriceAlert {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String userId;
+
+  @HiveField(2)
   final String coinId;
+
+  @HiveField(3)
   final String coinSymbol;
+
+  @HiveField(4)
   final double priceTarget;
+
+  @HiveField(5)
   final bool isAbove; // true: 가격이 목표가 이상일 때, false: 가격이 목표가 이하일 때
+
+  @HiveField(6)
   final bool isTriggered; // 알림 발생 여부
+
+  @HiveField(7)
   final DateTime createdAt;
+
+  @HiveField(8)
   final DateTime? triggeredAt; // 알림 발생 시각
+
+  @HiveField(9)
   final String? notes; // 사용자 메모
 
   PriceAlert({
@@ -30,15 +54,17 @@ class PriceAlert {
     return PriceAlert(
       id: json['id'].toString(),
       userId: json['user_id'],
-      coinId: json['symbol'] ?? '',
-      coinSymbol: json['symbol'] ?? '',
-      priceTarget: (json['target_price'] ?? 0.0).toDouble(),
+      coinId: json['coin_id'] ?? '',
+      coinSymbol: json['coin_symbol'] ?? '',
+      priceTarget: (json['price_target'] ?? 0.0).toDouble(),
       isAbove: json['is_above'] ?? false,
-      isTriggered: false, // Supabase에서는 아직 이 필드를 관리하지 않음
+      isTriggered: json['is_triggered'] ?? false,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
-      triggeredAt: null, // Supabase에서는 아직 이 필드를 관리하지 않음
+      triggeredAt: json['triggered_at'] != null
+          ? DateTime.parse(json['triggered_at'])
+          : null,
       notes: json['notes'],
     );
   }

@@ -50,7 +50,7 @@ enum ChartTimeframe {
 }
 
 /// 차트 데이터 모델 (캔들스틱 또는 라인)
-@HiveType(typeId: 1)
+@HiveType(typeId: 6)
 class ChartData {
   @HiveField(0)
   final String symbol;

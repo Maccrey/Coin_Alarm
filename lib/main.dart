@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'core/theme.dart';
 import 'services/supabase_service.dart';
@@ -18,6 +19,9 @@ import 'services/supabase_client.dart';
 import 'view/screens/settings_screen.dart';
 import 'viewmodel/chart_viewmodel.dart';
 import 'services/chart_cache_service.dart';
+import 'model/chart_data_model.dart';
+import 'model/price_alert_model.dart';
+import 'services/price_alert_service.dart';
 
 // 앱 진입점
 void main() async {
@@ -44,6 +48,22 @@ void main() async {
   // 설정 서비스 초기화
   final settingsService = SettingsService();
   await settingsService.initialize();
+
+  // Hive 초기화
+  await Hive.initFlutter();
+
+  // Hive 어댑터 등록
+  Hive.registerAdapter(ChartDataAdapter());
+  Hive.registerAdapter(ChartPointAdapter());
+  Hive.registerAdapter(CandleDataAdapter());
+  Hive.registerAdapter(CandleChartDataAdapter());
+  Hive.registerAdapter(ChartTypeAdapter());
+  Hive.registerAdapter(ChartTimeframeAdapter());
+  Hive.registerAdapter(PriceAlertAdapter());
+
+  // 캐시 서비스 초기화
+  await ChartCacheService().initialize();
+  await PriceAlertService().initialize();
 
   // Supabase 클라이언트 초기화
   final supabaseUrl = dotenv.env['SUPABASE_URL'];
@@ -73,10 +93,6 @@ void main() async {
     debugPrint('더미 데이터로 초기화됨');
   }
 
-  // 차트 캐시 서비스 초기화
-  final chartCacheService = ChartCacheService();
-  await chartCacheService.initialize();
-
   runApp(
     MyApp(supabaseService: supabaseService, settingsService: settingsService),
   );
@@ -104,23 +120,23 @@ class MyApp extends StatelessWidget {
         // 인증 관련 ViewModel
         ChangeNotifierProvider(create: (_) => AuthViewModel(supabaseService)),
         // 코인 관련 ViewModel
-        ChangeNotifierProvider(create: (_) => CoinViewModel(supabaseService)),
+        ChangeNotifierProvider(
+          create: (context) => CoinViewModel(supabaseService),
+        ),
         // 뉴스 관련 ViewModel
         ChangeNotifierProvider(create: (_) => NewsViewModel(supabaseService)),
         // 가격 알림 관련 ViewModel
         ChangeNotifierProvider(
-          create: (_) => PriceAlertViewModel(supabaseService),
+          create: (context) => PriceAlertViewModel(PriceAlertService()),
         ),
         // 설정 관련 ViewModel
         ChangeNotifierProvider(
           create: (_) => SettingsViewModel(settingsService),
         ),
         // 실시간 암호화폐 API 데이터 ViewModel
-        ChangeNotifierProvider(
-          create: (_) => CryptoViewModel(settingsService: settingsService),
-        ),
+        ChangeNotifierProvider(create: (context) => CryptoViewModel()),
         // 차트 데이터 ViewModel
-        ChangeNotifierProvider(create: (_) => ChartViewModel()),
+        ChangeNotifierProvider(create: (context) => ChartViewModel()),
       ],
       builder: (context, child) {
         // SettingsViewModel에서 테마 모드 가져오기
