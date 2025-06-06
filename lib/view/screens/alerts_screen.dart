@@ -4,7 +4,7 @@ import '../../core/theme.dart';
 import '../../model/price_alert_model.dart';
 import '../../model/coin_model.dart';
 import '../../viewmodel/price_alert_viewmodel.dart';
-import '../../viewmodel/coin_viewmodel.dart';
+import '../../viewmodel/crypto_viewmodel.dart';
 
 // 알림 화면
 class AlertsScreen extends StatefulWidget {
@@ -34,12 +34,12 @@ class _AlertsScreenState extends State<AlertsScreen>
         context,
         listen: false,
       );
-      final coinVM = Provider.of<CoinViewModel>(context, listen: false);
+      final cryptoVM = Provider.of<CryptoViewModel>(context, listen: false);
 
       // 임시 사용자 ID 사용 (실제로는 인증된 사용자 ID 사용)
       const userId = 'local-user';
       priceAlertVM.loadUserAlerts(userId);
-      coinVM.refreshCoins();
+      cryptoVM.refreshCoins();
     });
   }
 
@@ -68,11 +68,11 @@ class _AlertsScreenState extends State<AlertsScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final priceAlertVM = Provider.of<PriceAlertViewModel>(context);
-    final coinVM = Provider.of<CoinViewModel>(context);
+    final cryptoVM = Provider.of<CryptoViewModel>(context);
     final alerts = priceAlertVM.alerts;
     final pendingAlerts = alerts.where((a) => !a.isTriggered).toList();
     final triggeredAlerts = alerts.where((a) => a.isTriggered).toList();
-    final coins = coinVM.coins;
+    final coins = cryptoVM.coins;
 
     return Scaffold(
       appBar: AppBar(
@@ -222,8 +222,8 @@ class _AlertsScreenState extends State<AlertsScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildAlertsList(pendingAlerts, coinVM, priceAlertVM),
-          _buildAlertsList(triggeredAlerts, coinVM, priceAlertVM),
+          _buildAlertsList(pendingAlerts, cryptoVM, priceAlertVM),
+          _buildAlertsList(triggeredAlerts, cryptoVM, priceAlertVM),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -237,7 +237,7 @@ class _AlertsScreenState extends State<AlertsScreen>
   // 알림 목록 위젯
   Widget _buildAlertsList(
     List<PriceAlert> alerts,
-    CoinViewModel coinVM,
+    CryptoViewModel cryptoVM,
     PriceAlertViewModel priceAlertVM,
   ) {
     if (alerts.isEmpty) {
@@ -264,7 +264,8 @@ class _AlertsScreenState extends State<AlertsScreen>
             TextButton.icon(
               icon: const Icon(Icons.add),
               label: const Text('새 알림 추가'),
-              onPressed: () => _showAddAlertDialog(coinVM.coins, priceAlertVM),
+              onPressed: () =>
+                  _showAddAlertDialog(cryptoVM.coins, priceAlertVM),
             ),
           ],
         ),
@@ -275,7 +276,7 @@ class _AlertsScreenState extends State<AlertsScreen>
       itemCount: alerts.length,
       itemBuilder: (context, index) {
         final alert = alerts[index];
-        return _buildAlertItem(alert, coinVM, priceAlertVM);
+        return _buildAlertItem(alert, cryptoVM, priceAlertVM);
       },
     );
   }
@@ -283,10 +284,15 @@ class _AlertsScreenState extends State<AlertsScreen>
   // 알림 아이템 위젯
   Widget _buildAlertItem(
     PriceAlert alert,
-    CoinViewModel coinVM,
+    CryptoViewModel cryptoVM,
     PriceAlertViewModel priceAlertVM,
   ) {
-    final coin = coinVM.getCoinById(alert.coinId);
+    Coin? coin;
+    try {
+      coin = cryptoVM.coins.firstWhere((c) => c.id == alert.coinId);
+    } catch (e) {
+      coin = null;
+    }
     return Dismissible(
       key: Key(alert.id),
       background: Container(
@@ -472,10 +478,13 @@ class _AlertsScreenState extends State<AlertsScreen>
 
   // 새 알림 추가 다이얼로그
   void _showAddAlertDialog(List<Coin> coins, PriceAlertViewModel priceAlertVM) {
+    setState(() {
+      _selectedCoinId = null;
+    });
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+        builder: (context, parentSetState) => AlertDialog(
           title: const Text('새 가격 알림 추가'),
           content: SingleChildScrollView(
             child: Column(
@@ -485,9 +494,63 @@ class _AlertsScreenState extends State<AlertsScreen>
                 const Text('코인 선택'),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () => _showCoinSelectionDialog(coins, setState),
-                  child: const Text('코인 선택'),
+                  onPressed: () =>
+                      _showCoinSelectionDialog(coins, parentSetState),
+                  child: _selectedCoinId == null
+                      ? const Text('코인 선택')
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (coins.any((c) => c.id == _selectedCoinId) &&
+                                coins
+                                        .firstWhere(
+                                          (c) => c.id == _selectedCoinId,
+                                        )
+                                        .imageUrl !=
+                                    null)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      coins
+                                          .firstWhere(
+                                            (c) => c.id == _selectedCoinId,
+                                          )
+                                          .imageUrl!,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              const Icon(
+                                                Icons.currency_bitcoin,
+                                                size: 18,
+                                              ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            Text(
+                              coins
+                                  .firstWhere((c) => c.id == _selectedCoinId)
+                                  .symbol,
+                            ),
+                          ],
+                        ),
                 ),
+                // 현재가 표시
+                if (_selectedCoinId != null &&
+                    coins.any((c) => c.id == _selectedCoinId)) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    '현재가: ₩${_formatPrice(coins.firstWhere((c) => c.id == _selectedCoinId).currentPrice)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 const Text('알림 조건'),
                 Row(
@@ -498,7 +561,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                         value: true,
                         groupValue: _isAbove,
                         onChanged: (value) {
-                          setState(() {
+                          parentSetState(() {
                             _isAbove = value!;
                           });
                         },
@@ -510,7 +573,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                         value: false,
                         groupValue: _isAbove,
                         onChanged: (value) {
-                          setState(() {
+                          parentSetState(() {
                             _isAbove = value!;
                           });
                         },
@@ -584,7 +647,8 @@ class _AlertsScreenState extends State<AlertsScreen>
   }
 
   // 코인 선택 다이얼로그
-  void _showCoinSelectionDialog(List<Coin> coins, StateSetter setState) {
+  void _showCoinSelectionDialog(List<Coin> coins, StateSetter parentSetState) {
+    String searchQuery = '';
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -601,7 +665,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                   decoration: const InputDecoration(labelText: '코인 검색'),
                   onChanged: (value) {
                     setState(() {
-                      // 검색 로직 구현
+                      searchQuery = value;
                     });
                   },
                 ),
@@ -609,9 +673,30 @@ class _AlertsScreenState extends State<AlertsScreen>
                 Expanded(
                   child: ListView.builder(
                     shrinkWrap: true,
-                    itemCount: coins.length,
+                    itemCount: coins
+                        .where(
+                          (coin) =>
+                              coin.symbol.toLowerCase().contains(
+                                searchQuery.toLowerCase(),
+                              ) ||
+                              coin.name.toLowerCase().contains(
+                                searchQuery.toLowerCase(),
+                              ),
+                        )
+                        .length,
                     itemBuilder: (context, index) {
-                      final coin = coins[index];
+                      final filteredCoins = coins
+                          .where(
+                            (coin) =>
+                                coin.symbol.toLowerCase().contains(
+                                  searchQuery.toLowerCase(),
+                                ) ||
+                                coin.name.toLowerCase().contains(
+                                  searchQuery.toLowerCase(),
+                                ),
+                          )
+                          .toList();
+                      final coin = filteredCoins[index];
                       return ListTile(
                         title: Text(coin.symbol),
                         leading: coin.imageUrl != null
@@ -630,7 +715,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                               )
                             : const Icon(Icons.currency_bitcoin),
                         onTap: () {
-                          setState(() {
+                          parentSetState(() {
                             _selectedCoinId = coin.id;
                           });
                           Navigator.pop(context);
