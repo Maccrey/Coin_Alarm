@@ -63,6 +63,12 @@
 - [x] 알림 설정/저장/조회 기능 구현 (로컬 저장소 활용) - 2024-06-20
 - [x] 알림 발송 및 이력 저장 - 2024-06-20
 - [x] 알림 페이지 UI 버그 수정 (코인 선택 시 앱 크래시 문제 해결) - 2024-06-20
+- [x] Supabase 기반 알림 관련 의존성 및 코드 완전 제거 - 2024-06-20
+- [x] PriceAlert 모델 Hive 어댑터(typeId: 10) 적용 및 리팩토링 - 2024-06-20
+- [x] PriceAlertService(Hive 기반) 신규 구현 및 기존 SupabaseService 대체 - 2024-06-20
+- [x] PriceAlertViewModel을 Hive 기반 PriceAlertService로 리팩토링 - 2024-06-20
+- [x] main.dart에서 Hive 초기화 및 어댑터 등록, PriceAlertService/ChartCacheService 초기화 코드 추가 - 2024-06-20
+- [x] 알림 페이지에서 Supabase 관련 로직/의존성 제거 및 Hive 기반 로컬 저장소 연동으로 UI/로직 전환 - 2024-06-20
 
 ### 7. 뉴스 시스템
 
@@ -147,6 +153,12 @@
 - [x] 알림 설정/저장/조회 기능 구현 (로컬 저장소 활용) - 2024-06-20
 - [x] 알림 발송 및 이력 저장 - 2024-06-20
 - [x] 알림 페이지 UI 버그 수정 (코인 선택 시 앱 크래시 문제 해결) - 2024-06-20
+- [x] Supabase 기반 알림 관련 의존성 및 코드 완전 제거 - 2024-06-20
+- [x] PriceAlert 모델 Hive 어댑터(typeId: 10) 적용 및 리팩토링 - 2024-06-20
+- [x] PriceAlertService(Hive 기반) 신규 구현 및 기존 SupabaseService 대체 - 2024-06-20
+- [x] PriceAlertViewModel을 Hive 기반 PriceAlertService로 리팩토링 - 2024-06-20
+- [x] main.dart에서 Hive 초기화 및 어댑터 등록, PriceAlertService/ChartCacheService 초기화 코드 추가 - 2024-06-20
+- [x] 알림 페이지에서 Supabase 관련 로직/의존성 제거 및 Hive 기반 로컬 저장소 연동으로 UI/로직 전환 - 2024-06-20
 - [x] 캔들스틱 차트 UI 개선 및 실제 데이터 표시 - 2024-06-18
 - [x] 라인 차트 UI 개선 및 실제 데이터 표시 - 2024-06-18
 - [x] 차트 기간 선택에 따른 데이터 요청 최적화 - 2024-06-18
@@ -160,5 +172,6 @@
 - 기존 Firebase/마이크로서비스 구조에서 Supabase(PostgreSQL, Edge Functions, Realtime 등)로 전환
 - 인프라 관리 최소화, 실시간 기능 강화, 배포 자동화 등 목표 명확히 설정
 - 알림 시스템은 Supabase 대신 Hive 로컬 저장소를 사용하여 오프라인 환경에서도 작동하도록 변경 (2024-06-20)
+  - Supabase 기반 알림 관련 모든 의존성/로직 제거 및 Hive 기반 PriceAlertService, ViewModel, 모델, 화면 리팩토링 완료 (2024-06-20)
 
 ---
