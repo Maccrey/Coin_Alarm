@@ -480,6 +480,8 @@ class _AlertsScreenState extends State<AlertsScreen>
   void _showAddAlertDialog(List<Coin> coins, PriceAlertViewModel priceAlertVM) {
     setState(() {
       _selectedCoinId = null;
+      _priceController.text = '';
+      _notesController.text = '';
     });
     showDialog(
       context: context,
@@ -840,9 +842,20 @@ class _AlertsScreenState extends State<AlertsScreen>
   // 가격 포맷팅 함수
   String _formatPrice(double price) {
     if (price >= 1000) {
-      return '${price.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}';
+      String formatted = price.toStringAsFixed(2);
+      if (formatted.endsWith('.00')) {
+        formatted = formatted.substring(0, formatted.length - 3);
+      }
+      return formatted.replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (Match m) => '${m[1]},',
+      );
     } else if (price >= 1) {
-      return price.toStringAsFixed(2);
+      String formatted = price.toStringAsFixed(2);
+      if (formatted.endsWith('.00')) {
+        formatted = formatted.substring(0, formatted.length - 3);
+      }
+      return formatted;
     } else {
       return price.toStringAsFixed(6);
     }
