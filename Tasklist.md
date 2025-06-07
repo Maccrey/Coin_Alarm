@@ -33,7 +33,7 @@
 - [x] Supabase Database(PostgreSQL) 테이블 구조 설계 및 샘플 데이터 입력 - 2024-06-17
 - [x] RLS(Row Level Security) 정책 설정 및 테스트 - 2024-06-17
 
-### 3-1. 로그인(Supabase 연동, MAS & TDD)
+### 3-1. 로그인(Supabase 연동, MSA & TDD)
 
 - [ ] 기존 더미데이터 기반 로그인 코드/로직 정리 및 주석처리
 - [ ] Supabase Auth 연동을 위한 환경변수(.env) 적용 확인
@@ -70,11 +70,57 @@
 - [x] main.dart에서 Hive 초기화 및 어댑터 등록, PriceAlertService/ChartCacheService 초기화 코드 추가 - 2024-06-20
 - [x] 알림 페이지에서 Supabase 관련 로직/의존성 제거 및 Hive 기반 로컬 저장소 연동으로 UI/로직 전환 - 2024-06-20
 
-### 7. 뉴스 시스템
+### 7. 뉴스 시스템 (MSA & TDD 방식)
 
-- [ ] 뉴스 크롤러(한국어) 구현
-- [ ] 뉴스 데이터 Supabase DB 저장 및 캐싱
-- [ ] 뉴스 필터링/중복제거 로직 구현
+- [x] 뉴스 관련 Supabase 테이블 스키마 설계 (news, news_coins)
+  - [x] news 테이블에 image_url(text), related_coins(text[]) 컬럼 추가 (대표 이미지, 관련 코인 배열 저장)
+- [x] 뉴스 크롤링 서버 개발 (MSA 아키텍처, 도커 기반)
+  - [x] webcrawler 디렉토리 생성 및 초기 구조 설정
+  - [x] Docker 및 docker-compose 설정
+  - [x] 단위 테스트 코드 작성 (TDD)
+
+#### 7-1. 뉴스 크롤링 서버 MSA 구조 구현
+
+- [x] 뉴스 크롤링 서비스 (news-crawler-service)
+
+  - [x] Blockmedia 크롤러 구현 및 테스트 (본문, 대표 이미지, 관련 코인 추출)
+  - [x] CoinReaders 크롤러 구현 및 테스트
+  - [x] Bloomingbit 크롤러 구현 및 테스트
+  - [x] 관련 코인 자동 태깅 기능 구현 (DummyCoins 데이터 활용)
+  - [x] crawled*news*\*.json에 imageUrl 필드 포함
+
+- [x] 뉴스 정제 서비스 (news-cleaner-service)
+
+  - [x] 중복 뉴스 필터링 로직 구현 및 테스트
+  - [x] 제목/본문 정제 기능 구현 및 테스트
+  - [x] 광고성 뉴스 필터링 로직 구현 및 테스트
+  - [x] cleaned*news*\*.json에 imageUrl 필드 항상 유지하도록 개선
+
+- [x] 뉴스 저장 서비스 (news-writer-service)
+
+  - [x] Supabase DB 연동 코드 구현 및 테스트
+  - [x] 뉴스 저장 및 업데이트 로직 구현
+  - [x] imageUrl → image_url로 변환하여 Supabase news 테이블에 저장
+  - [x] related_coins 배열 컬럼 저장
+
+- [x] 스케줄러 서비스 (scheduler-service)
+
+  - [x] cron 기반 2시간 주기 실행 구현
+  - [x] 오류 복구 및 재시도 로직 구현
+
+- [x] 로깅 서비스 (logger-service, 선택)
+  - [x] 중앙 집중식 로깅 구현
+  - [x] 오류 발생 시 알림 기능 구현 (이메일 또는 메시지)
+
+#### 7-2. 뉴스 시스템 앱 연동
+
+- [ ] 뉴스 모델 클래스 구현 (News, NewsCoin)
+- [ ] 뉴스 서비스 및 Repository 구현
+- [ ] 뉴스 화면 UI 설계 및 구현
+- [ ] 뉴스 필터링 및 정렬 기능 구현
+- [ ] 뉴스 상세 보기 화면 구현
+- [ ] 관련 코인으로 필터링 기능 구현
+- [ ] 오프라인 모드 지원 (캐시된 뉴스 데이터 사용)
 
 ### 8. 사용자 인터페이스
 
@@ -173,5 +219,8 @@
 - 인프라 관리 최소화, 실시간 기능 강화, 배포 자동화 등 목표 명확히 설정
 - 알림 시스템은 Supabase 대신 Hive 로컬 저장소를 사용하여 오프라인 환경에서도 작동하도록 변경 (2024-06-20)
   - Supabase 기반 알림 관련 모든 의존성/로직 제거 및 Hive 기반 PriceAlertService, ViewModel, 모델, 화면 리팩토링 완료 (2024-06-20)
+- 뉴스 시스템은 외부 크롤링 서버를 MSA 아키텍처로 구현하여 Supabase DB에 데이터 저장 (webcrawler 폴더에 구현)
+  - 2시간 주기로 업데이트되는 자동화된 크롤링 시스템 구축 계획
+  - 도커 기반으로 각 서비스를 컨테이너화하여 시놀로지 NAS에 배포 예정
 
 ---

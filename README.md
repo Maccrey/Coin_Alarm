@@ -12,7 +12,7 @@ Coin Alarm은 암호화폐 가격을 실시간으로 모니터링하고 사용�
 - 사용자 지정 가격 알림 설정
 - 코인별 차트 및 가격 이력 조회
 - 차트 데이터 1분마다 자동 새로고침
-- 암호화폐 관련 뉴스 제공
+- 암호화폐 관련 뉴스 제공 (MSA 아키텍처 기반 크롤링)
 - 다크 모드 지원
 - 오프라인 모드 지원 (캐시된 데이터 사용)
 
@@ -24,6 +24,7 @@ Coin Alarm은 암호화폐 가격을 실시간으로 모니터링하고 사용�
 - **API**: Upbit, Binance
 - **로컬 저장소**: Hive, SharedPreferences
 - **차트**: 커스텀 차트 위젯
+- **뉴스 크롤링**: Python, BeautifulSoup, Docker, MSA 아키텍처
 
 ## Supabase 연동
 
@@ -55,6 +56,55 @@ Supabase의 RLS(Row Level Security) 기능을 사용하여 다음과 같은 보�
 
 - 사용자는 자신의 프로필, 알림 설정, 앱 설정만 읽고 수정할 수 있습니다.
 - 코인 정보, 가격 이력, 뉴스는 모든 사용자가 읽기 가능합니다.
+
+## 뉴스 크롤링 서버 (MSA 아키텍처)
+
+암호화폐 관련 뉴스를 자동으로 수집하는 MSA(Microservice Architecture) 기반 크롤링 서버입니다.
+
+### 1. 서비스 구조
+
+- **news-crawler-service**: 다양한 암호화폐 뉴스 사이트에서 뉴스 수집
+
+  - Blockmedia, CoinReaders, Bloomingbit 크롤러
+  - 각 사이트별 독립적인 크롤링 모듈
+  - 관련 코인 자동 태깅
+
+- **news-cleaner-service**: 수집된 뉴스 데이터 정제
+
+  - 중복 뉴스 제거
+  - 제목/본문 정제
+  - 광고성 컨텐츠 필터링
+
+- **news-writer-service**: 정제된 뉴스 데이터 저장
+
+  - Supabase DB 연동
+  - 뉴스 저장 및 업데이트
+
+- **scheduler-service**: 정기적인 크롤링 작업 스케줄링
+
+  - 2시간 주기 실행
+  - 오류 복구 및 재시도 로직
+
+- **logger-service**: 로깅 및 오류 추적
+  - 중앙 집중식 로깅
+  - 오류 발생 시 알림
+
+### 2. 기술 스택
+
+- **언어**: Python
+- **크롤링 라이브러리**: BeautifulSoup, Requests
+- **컨테이너화**: Docker, docker-compose
+- **스케줄링**: cron
+- **데이터베이스**: Supabase (PostgreSQL)
+- **배포 환경**: Synology NAS
+
+### 3. 주요 특징
+
+- 확장 가능한 MSA 아키텍처로 각 서비스가 독립적으로 동작
+- 도커 기반 컨테이너화로 쉬운 배포 및 관리
+- TDD(Test-Driven Development) 방식 개발로 높은 안정성
+- 2시간마다 자동 업데이트되는 최신 뉴스 제공
+- 코인 관련 키워드 기반 자동 태깅 시스템
 
 ## 설치 및 실행
 
@@ -94,6 +144,26 @@ Supabase의 RLS(Row Level Security) 기능을 사용하여 다음과 같은 보�
    flutter run
    ```
 
+### 뉴스 크롤링 서버 실행 (개발자용)
+
+1. webcrawler 디렉토리로 이동:
+
+   ```bash
+   cd webcrawler
+   ```
+
+2. Docker 컨테이너 빌드 및 실행:
+
+   ```bash
+   docker-compose up -d
+   ```
+
+3. 로그 확인:
+
+   ```bash
+   docker-compose logs -f
+   ```
+
 ## 프로젝트 구조
 
 ```
@@ -108,6 +178,14 @@ lib/
 │   └── widgets/    # 재사용 가능한 위젯
 ├── viewmodel/      # 뷰모델 클래스 (MVVM 패턴)
 └── main.dart       # 앱 진입점
+
+webcrawler/         # 뉴스 크롤링 서버 (MSA 아키텍처)
+├── docker-compose.yml  # 도커 구성 파일
+├── news-crawler/   # 뉴스 크롤링 서비스
+├── news-cleaner/   # 뉴스 정제 서비스
+├── news-writer/    # Supabase DB 저장 서비스
+├── scheduler/      # 스케줄러 서비스
+└── logger/         # 로깅 서비스
 ```
 
 ## 라이선스
