@@ -198,27 +198,6 @@ def save_cleaned_news(news_list, original_file):
         logger.error(f"파일 저장 오류: {e}")
 
 
-class NewsFileHandler(FileSystemEventHandler):
-    """뉴스 파일 감시 핸들러"""
-    
-    def on_created(self, event):
-        """
-        파일 생성 이벤트 처리
-        
-        Args:
-            event: 파일 이벤트
-        """
-        if not event.is_directory and event.src_path.endswith('.json') and 'crawled_news_' in event.src_path:
-            logger.info(f"새 파일 감지: {event.src_path}")
-            time.sleep(1)  # 파일 쓰기 완료 대기
-            
-            # 뉴스 파일 처리
-            cleaned_news = process_news_file(event.src_path)
-            
-            # 정제된 뉴스 저장
-            save_cleaned_news(cleaned_news, event.src_path)
-
-
 def main():
     """메인 함수"""
     logger.info("뉴스 정제 서비스 시작")
@@ -230,19 +209,6 @@ def main():
             cleaned_news = process_news_file(file_path)
             save_cleaned_news(cleaned_news, file_path)
     
-    # 파일 시스템 이벤트 감시 설정
-    event_handler = NewsFileHandler()
-    observer = Observer()
-    observer.schedule(event_handler, SHARED_DIR, recursive=False)
-    observer.start()
-    
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-    
-    observer.join()
     logger.info("뉴스 정제 서비스 종료")
 
 

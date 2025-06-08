@@ -13,6 +13,7 @@ import requests
 import psutil
 import time
 from datetime import datetime
+import subprocess
 
 # 로깅 설정
 logging.basicConfig(
@@ -52,22 +53,24 @@ def check_service(service):
 
 def restart_service(service_name):
     """
-    서비스 재시작 (Docker 환경에서는 동작하지 않음, 참고용 코드)
-    
-    Args:
-        service_name (str): 서비스 이름
-        
-    Returns:
-        bool: 재시작 성공 여부
+    Docker 컨테이너를 실제로 재시작
     """
     logger.info(f"{service_name} 서비스 재시작 시도")
     try:
-        # 실제 구현 시 Docker API 또는 docker-compose 명령어 사용 필요
-        # 여기서는 로깅만 수행
-        logger.info(f"{service_name} 서비스 재시작 명령 실행 (시뮬레이션)")
-        return True
+        result = subprocess.run(
+            ["docker", "restart", service_name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.returncode == 0:
+            logger.info(f"{service_name} 서비스 재시작 성공: {result.stdout.strip()}")
+            return True
+        else:
+            logger.error(f"{service_name} 서비스 재시작 실패: {result.stderr.strip()}")
+            return False
     except Exception as e:
-        logger.error(f"{service_name} 서비스 재시작 실패: {e}")
+        logger.error(f"{service_name} 서비스 재시작 중 예외 발생: {e}")
         return False
 
 
@@ -111,11 +114,14 @@ def main():
             logger.info(f"{service['name']} 서비스 정상")
         else:
             logger.warning(f"{service['name']} 서비스 응답 없음")
-            # 필요시 서비스 재시작 코드 추가
-            # restart_service(service['name'])
+            # 서비스 자동 재시작
+            restart_service(service['name'])
     
     logger.info("서비스 상태 체크 완료")
 
 
 if __name__ == "__main__":
-    main() 
+    while True:
+        main()
+        logger.info("2시간 대기 후 다음 체크 진행")
+        time.sleep(60 * 60 * 2)  # 2시간 대기 

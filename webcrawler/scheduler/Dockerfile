@@ -22,4 +22,6 @@ RUN chmod 0644 /etc/cron.d/news-cron && crontab /etc/cron.d/news-cron
 RUN chmod +x /app/run_crawler.sh
 
 # 크론 서비스 및 로깅 실행
-CMD ["bash", "-c", "cron && tail -f /app/shared/scheduler.log"] 
+CMD ["bash", "-c", "cron && tail -f /app/shared/scheduler.log"]
+
+CMD ["python", "main.py"] 
