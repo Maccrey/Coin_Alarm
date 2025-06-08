@@ -144,26 +144,6 @@ def save_to_supabase(news_list):
                     continue
                 
                 logger.info(f"뉴스 저장 성공: {news_data['title']}")
-                
-                # 관련 코인 저장 (news_coins 테이블)
-                if related_coins:
-                    for coin_symbol in related_coins:
-                        coin_data = {
-                            'news_id': news_hash,
-                            'coin_symbol': coin_symbol,
-                            'created_at': datetime.now().isoformat()
-                        }
-                        
-                        coin_response = requests.post(
-                            f"{SUPABASE_URL}/rest/v1/news_coins",
-                            headers=headers,
-                            json=coin_data
-                        )
-                        
-                        if coin_response.status_code not in (201, 200):
-                            logger.warning(f"코인 관계 저장 실패: {coin_response.status_code}, {coin_response.text}")
-                        else:
-                            logger.info(f"코인 관계 저장 성공: {news_hash} - {coin_symbol}")
             
             except Exception as e:
                 logger.error(f"개별 뉴스 저장 오류: {e}")
