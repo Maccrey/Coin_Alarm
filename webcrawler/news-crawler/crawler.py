@@ -33,36 +33,31 @@ SHARED_DIR = '/app/shared'
 # 크롤링 사이트 정보
 SITES = {
     'blockmedia': {
-        'url': 'https://www.blockmedia.co.kr/news',
-        'article_selector': '.m-news-list li',
-        'title_selector': '.tit',
-        'link_selector': 'a',
-        'date_selector': '.date',
-        'base_url': 'https://www.blockmedia.co.kr'
-    },
-    'blockmedia_digital_asset': {
         'url': 'https://www.blockmedia.co.kr/archives/category/market/digital-asset',
         'article_selector': 'article',
         'title_selector': 'h2, h3, .entry-title',
         'link_selector': 'a',
         'date_selector': 'time',
-        'base_url': 'https://www.blockmedia.co.kr'
+        'base_url': 'https://www.blockmedia.co.kr',
+        'content_selector': ['.view-cont', '.entry-content', '.post-content']
     },
     'coinreaders': {
         'url': 'https://www.coinreaders.com/sub.html?section=sc21',
-        'article_selector': '.media-body',
+        'article_selector': '.section-list .media',
         'title_selector': 'h4 a',
         'link_selector': 'h4 a',
         'date_selector': '.write-time',
-        'base_url': 'https://coinreaders.com'
+        'base_url': 'https://coinreaders.com',
+        'content_selector': ['#article-view-content-div']
     },
     'bloomingbit': {
         'url': 'https://bloomingbit.io/news',
-        'article_selector': '.news-list li',
+        'article_selector': '.news-list > li',
         'title_selector': '.news-title',
-        'link_selector': 'a',
+        'link_selector': '.news-title a',
         'date_selector': '.news-date',
-        'base_url': 'https://bloomingbit.io'
+        'base_url': 'https://bloomingbit.io',
+        'content_selector': ['.news-content']
     }
 }
 
@@ -129,8 +124,11 @@ def parse_date(date_str, site):
         now = datetime.now(pytz.timezone('Asia/Seoul'))
         
         if site == 'blockmedia':
-            # 예: "2023-06-25 08:30:45"
-            return datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M:%S")
+            # "2023-06-25 08:30:45" 또는 "2023-06-25 08:30"
+            try:
+                return datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M")
         elif site == 'coinreaders':
             # 예: "2023-06-25"
             return datetime.strptime(date_str.strip(), "%Y-%m-%d")
@@ -200,15 +198,12 @@ def crawl_site(site_name):
                         article_response = requests.get(link, headers=headers)
                         article_response.raise_for_status()
                         article_soup = BeautifulSoup(article_response.text, 'lxml')
-                        # 본문 및 대표 이미지 selector 보완
-                        # 본문: .view-cont > .entry-content > .post-content 순서로 시도
-                        content_elem = (
-                            article_soup.select_one('.view-cont') or
-                            article_soup.select_one('.entry-content') or
-                            article_soup.select_one('.post-content')
-                        )
-                        if content_elem:
-                            content = content_elem.get_text().strip()
+                        # 본문 selector 우선순위별로 시도
+                        for selector in site_info.get('content_selector', []):
+                            content_elem = article_soup.select_one(selector)
+                            if content_elem:
+                                content = content_elem.get_text().strip()
+                                break
                         # 대표 이미지: og:image > .view-cont img > .entry-content img > .post-content img 순서로 시도
                         og_image = article_soup.find('meta', property='og:image')
                         if og_image and og_image.get('content'):
@@ -225,7 +220,6 @@ def crawl_site(site_name):
                         logger.warning(f"본문/이미지 가져오기 실패: {link}, 오류: {e}")
                 
                 # 관련 코인 태깅
-                related_coins = get_related_coins(title, content)
                 related_coins = get_related_coins(title, content)
                 
                 news = {

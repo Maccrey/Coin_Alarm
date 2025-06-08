@@ -3,7 +3,7 @@
 
 """
 스케줄러 서비스
-- 2시간마다 크롤링/정제/저장 파이프라인 전체 실행
+- 3시간마다 크롤링/정제/저장 파이프라인 전체 실행
 - 각 서비스를 순차적으로 실행하여 end-to-end 파이프라인 구성
 """
 
@@ -75,10 +75,10 @@ def main():
     # 초기 실행
     execute_pipeline()
     
-    # 2시간마다 반복 실행
+    # 3시간마다 반복 실행
     while True:
-        logger.info("2시간 대기 후 다음 실행")
-        time.sleep(60 * 60 * 2)  # 2시간 대기
+        logger.info("3시간 휴면 상태로 대기 후 다음 실행")
+        time.sleep(60 * 60 * 3)  # 3시간 대기
         execute_pipeline()
 
 if __name__ == "__main__":
