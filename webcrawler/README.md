@@ -6,9 +6,9 @@ MSA(Microservice Architecture) 기반의 암호화폐 뉴스 크롤링 서버입
 
 이 프로젝트는 다음과 같은 마이크로서비스로 구성되어 있습니다:
 
-1. **news-crawler**: 뉴스 웹사이트에서 데이터를 수집 (본문, 대표 이미지(imageUrl) 등 포함)
-2. **news-cleaner**: 수집된 데이터를 정제하고 중복을 제거하며, imageUrl(대표 이미지) 필드를 항상 유지
-3. **news-writer**: 정제된 데이터를 Supabase에 저장 (imageUrl → image_url로 변환하여 저장)
+1. **news-crawler**: 뉴스 웹사이트에서 데이터를 수집 (본문, 대표 이미지(imageUrl), 관련 코인 등 포함)
+2. **news-cleaner**: 수집된 데이터를 정제하고 중복을 제거하며, imageUrl(대표 이미지)과 related_coins 필드를 항상 유지
+3. **news-writer**: 정제된 데이터를 Supabase에 저장 (imageUrl → image_url로 변환, 관련 코인 배열 저장), SQLite DB를 통한 중복 처리 방지, 처리 완료된 파일 자동 정리
 4. **scheduler**: 크롤링 작업을 주기적으로 실행 (2시간마다)
 5. **logger**: 로그 수집 및 모니터링 대시보드 제공
 
@@ -17,7 +17,7 @@ MSA(Microservice Architecture) 기반의 암호화폐 뉴스 크롤링 서버입
 - **언어**: Python 3.9
 - **웹 크롤링**: BeautifulSoup, Requests
 - **컨테이너화**: Docker, docker-compose
-- **데이터베이스**: Supabase (PostgreSQL)
+- **데이터베이스**: Supabase (PostgreSQL), SQLite (로컬 처리 이력 저장)
 - **모니터링**: Flask 기반 대시보드
 - **스케줄링**: cron
 
@@ -34,7 +34,7 @@ MSA(Microservice Architecture) 기반의 암호화폐 뉴스 크롤링 서버입
 
 ```
 SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_anon_key
+SUPABASE_API_KEY=your_supabase_anon_key
 ```
 
 ### 실행 방법
@@ -65,6 +65,9 @@ docker-compose logs -f
 webcrawler/
 ├── docker-compose.yml     # 도커 구성 파일
 ├── shared/                # 서비스 간 공유 디렉토리
+│   ├── processed_files.db # SQLite DB (처리된 파일/뉴스 추적)
+│   ├── *.json             # 처리 중인 뉴스 파일들
+│   └── *.log              # 각 서비스 로그 파일
 ├── logs/                  # 로그 저장 디렉토리
 ├── news-crawler/          # 뉴스 크롤링 서비스
 │   ├── Dockerfile
@@ -92,9 +95,15 @@ webcrawler/
 
 ## 데이터 흐름 및 저장 구조
 
-- **news-crawler**: 각 뉴스의 본문(content), 대표 이미지(imageUrl), 관련 코인 등 필드를 포함하여 crawled*news*\*.json 파일로 저장
-- **news-cleaner**: 광고/중복/짧은 뉴스 필터링 및 정제, imageUrl 필드를 항상 유지하여 cleaned*news*\*.json 파일로 저장
-- **news-writer**: cleaned*news*\*.json을 읽어 Supabase news 테이블에 저장 (imageUrl → image_url로 컬럼명 변환)
+- **news-crawler**: 각 뉴스의 본문(content), 대표 이미지(imageUrl), 관련 코인(related_coins) 등 필드를 포함하여 crawled*news*\*.json 파일로 저장
+- **news-cleaner**: 광고/중복/짧은 뉴스 필터링 및 정제, imageUrl과 related_coins 필드를 항상 유지하여 cleaned*news*\*.json 파일로 저장
+- **news-writer**:
+  - cleaned*news*\*.json을 읽어 Supabase news 테이블에 저장 (imageUrl → image_url로 컬럼명 변환)
+  - related_coins 배열을 PostgreSQL 배열 형식(`{"BTC","ETH"}`)으로 변환하여 저장
+  - SQLite DB에 처리된 파일과 뉴스를 기록하여 중복 처리 방지
+  - 처리 완료된 파일은 자동으로 삭제 (디스크 공간 절약)
+  - 3시간마다 오래된 파일 자동 정리
+  - 서버 사용량 최적화를 위한 처리 이력 관리
 
 ### Supabase에 저장되는 데이터 예시
 
@@ -110,6 +119,35 @@ webcrawler/
   "image_url": "https://...", // 대표 이미지
   "related_coins": ["BTC", "ETH"] // 관련 코인 배열
 }
+```
+
+## SQLite DB 구조
+
+로컬 SQLite 데이터베이스(`shared/processed_files.db`)는 다음 테이블을 포함합니다:
+
+### processed_files 테이블
+
+처리된 파일의 이력을 저장하여 중복 처리를 방지합니다.
+
+```sql
+CREATE TABLE processed_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename TEXT UNIQUE NOT NULL,
+  processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### processed_news 테이블
+
+처리된 뉴스의 이력을 저장하여 중복 저장을 방지합니다.
+
+```sql
+CREATE TABLE processed_news (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  news_hash TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 ## Supabase 테이블 구조
@@ -140,6 +178,27 @@ create table news_coins (
   created_at timestamptz default now()
 );
 ```
+
+## 주요 기능 및 개선사항
+
+### 1. 이미지 URL 및 관련 코인 처리
+
+- 각 뉴스 사이트에서 대표 이미지 URL 추출 및 저장
+- 관련 코인 자동 태깅 및 배열 형태로 저장
+- imageUrl → image_url로 필드명 변환하여 Supabase 스키마와 일치시킴
+- PostgreSQL 배열 형식(`{"BTC","ETH"}`)으로 related_coins 저장
+
+### 2. 중복 처리 방지 및 서버 최적화
+
+- SQLite DB를 활용한 처리된 파일 및 뉴스 추적
+- 이미 처리된 파일/뉴스는 건너뛰어 서버 부하 감소
+- UPSERT 방식으로 데이터 중복 방지
+
+### 3. 자동 파일 정리
+
+- 처리 완료된 파일 자동 삭제
+- 3시간마다 오래된 파일 자동 정리 작업 실행
+- 디스크 공간 최적화
 
 ## 로깅 및 모니터링
 

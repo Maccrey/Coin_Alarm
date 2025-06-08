@@ -42,7 +42,7 @@ Supabase PostgreSQL 데이터베이스에 다음과 같은 테이블이 구성�
 - `coins`: 코인 기본 정보
 - `price_history`: 코인 가격 이력 데이터
 - `price_alerts`: 사용자 가격 알림 설정
-- `news`: 뉴스 정보
+- `news`: 뉴스 정보 (image_url, related_coins 포함)
 - `news_coins`: 뉴스와 코인의 관계 정보
 - `user_settings`: 사용자별 앱 설정 정보
 - `chart_data`: 차트 데이터 캐시
@@ -68,17 +68,22 @@ Supabase의 RLS(Row Level Security) 기능을 사용하여 다음과 같은 보�
   - Blockmedia, CoinReaders, Bloomingbit 크롤러
   - 각 사이트별 독립적인 크롤링 모듈
   - 관련 코인 자동 태깅
+  - 뉴스 이미지 URL 추출 및 저장
 
 - **news-cleaner-service**: 수집된 뉴스 데이터 정제
 
   - 중복 뉴스 제거
   - 제목/본문 정제
   - 광고성 컨텐츠 필터링
+  - 이미지 URL 및 관련 코인 정보 유지
 
 - **news-writer-service**: 정제된 뉴스 데이터 저장
 
   - Supabase DB 연동
   - 뉴스 저장 및 업데이트
+  - 이미지 URL(imageUrl → image_url) 및 관련 코인 배열 저장
+  - SQLite DB 기반 처리 이력 추적으로 중복 저장 방지
+  - 처리 완료된 파일 자동 정리
 
 - **scheduler-service**: 정기적인 크롤링 작업 스케줄링
 
@@ -95,7 +100,7 @@ Supabase의 RLS(Row Level Security) 기능을 사용하여 다음과 같은 보�
 - **크롤링 라이브러리**: BeautifulSoup, Requests
 - **컨테이너화**: Docker, docker-compose
 - **스케줄링**: cron
-- **데이터베이스**: Supabase (PostgreSQL)
+- **데이터베이스**: Supabase (PostgreSQL), SQLite (로컬 처리 추적)
 - **배포 환경**: Synology NAS
 
 ### 3. 주요 특징
@@ -105,6 +110,9 @@ Supabase의 RLS(Row Level Security) 기능을 사용하여 다음과 같은 보�
 - TDD(Test-Driven Development) 방식 개발로 높은 안정성
 - 2시간마다 자동 업데이트되는 최신 뉴스 제공
 - 코인 관련 키워드 기반 자동 태깅 시스템
+- SQLite 기반 처리 이력 추적으로 서버 부하 감소 및 중복 저장 방지
+- 뉴스 이미지 URL 및 관련 코인 정보 Supabase DB에 저장
+- 처리 완료된 파일 자동 정리로 디스크 공간 최적화
 
 ## 설치 및 실행
 
@@ -185,7 +193,8 @@ webcrawler/         # 뉴스 크롤링 서버 (MSA 아키텍처)
 ├── news-cleaner/   # 뉴스 정제 서비스
 ├── news-writer/    # Supabase DB 저장 서비스
 ├── scheduler/      # 스케줄러 서비스
-└── logger/         # 로깅 서비스
+├── logger/         # 로깅 서비스
+└── shared/         # 공유 디렉토리 (처리 파일 및 SQLite DB)
 ```
 
 ## 라이선스
