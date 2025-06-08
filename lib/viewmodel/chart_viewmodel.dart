@@ -10,7 +10,7 @@ import '../services/settings_service.dart';
 /// 차트 데이터 관리 ViewModel
 class ChartViewModel extends ChangeNotifier {
   final ChartApiServiceFactory _serviceFactory = ChartApiServiceFactory();
-  final ChartCacheService _cacheService = ChartCacheService();
+  final ChartCacheService _cacheService;
   final SettingsService _settingsService = SettingsService();
   final InternetConnectionChecker _connectionChecker =
       InternetConnectionChecker.createInstance();
@@ -43,7 +43,7 @@ class ChartViewModel extends ChangeNotifier {
   Timer? _refreshTimer;
 
   // 생성자
-  ChartViewModel() {
+  ChartViewModel(this._cacheService) {
     _initialize();
   }
 

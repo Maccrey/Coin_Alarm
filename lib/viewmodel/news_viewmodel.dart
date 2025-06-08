@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 import '../services/supabase_service.dart';
 import '../model/news_model.dart';
 import '../core/constants.dart';
@@ -11,6 +12,7 @@ class NewsViewModel extends ChangeNotifier {
   // 상태 관리
   bool _isLoading = false;
   List<News> _newsList = [];
+  List<News> _popularNews = []; // 인기 뉴스 목록 추가
   News? _selectedNews;
   String? _errorMessage;
 
@@ -19,10 +21,18 @@ class NewsViewModel extends ChangeNotifier {
 
   // 필터링
   String? _coinFilter;
+  String _searchQuery = ''; // 검색어 추가
+
+  // 오프라인 모드 관련
+  bool _isOfflineMode = false;
+  bool _isConnected = true;
+  late StreamSubscription _connectivitySubscription;
 
   // 생성자
   NewsViewModel(this._supabaseService) {
     // 초기 뉴스 데이터 로드
+    _initConnectivity();
+    _setupConnectivityMonitoring();
     refreshNews();
 
     // 자동 갱신 타이머 설정
@@ -31,75 +41,177 @@ class NewsViewModel extends ChangeNotifier {
 
   // Getters
   bool get isLoading => _isLoading;
-  List<News> get newsList => _coinFilter != null
-      ? _newsList
-            .where((news) => news.relatedCoins.contains(_coinFilter))
-            .toList()
-      : _newsList;
+  List<News> get newsList => _applyFilters(_newsList);
+  List<News> get popularNews => _popularNews;
   News? get selectedNews => _selectedNews;
   String? get errorMessage => _errorMessage;
   String? get coinFilter => _coinFilter;
+  String get searchQuery => _searchQuery;
+  bool get isOfflineMode => _isOfflineMode;
+  bool get isConnected => _isConnected;
+
+  // 네트워크 연결 상태 초기화
+  Future<void> _initConnectivity() async {
+    try {
+      final checker = InternetConnectionChecker.createInstance();
+      _isConnected = await checker.hasConnection;
+      debugPrint('NewsViewModel: 네트워크 상태 - ${_isConnected ? "연결됨" : "연결 끊김"}');
+    } catch (e) {
+      _isConnected = false;
+      debugPrint('NewsViewModel: 네트워크 연결 확인 오류 - $e');
+    }
+  }
+
+  // 네트워크 연결 상태 모니터링
+  void _setupConnectivityMonitoring() {
+    final checker = InternetConnectionChecker.createInstance();
+    _connectivitySubscription = checker.onStatusChange.listen((status) {
+      final isConnected = status == InternetConnectionStatus.connected;
+
+      if (_isConnected != isConnected) {
+        _isConnected = isConnected;
+        debugPrint(
+          'NewsViewModel: 네트워크 상태 변경 - ${_isConnected ? "연결됨" : "연결 끊김"}',
+        );
+
+        // 오프라인 모드가 아니고 연결이 복구된 경우 데이터 새로고침
+        if (_isConnected && !_isOfflineMode) {
+          refreshNews();
+        }
+
+        notifyListeners();
+      }
+    });
+  }
+
+  // 오프라인 모드 설정
+  void setOfflineMode(bool value) {
+    if (_isOfflineMode != value) {
+      _isOfflineMode = value;
+      debugPrint('NewsViewModel: 오프라인 모드 ${value ? "활성화" : "비활성화"}');
+
+      // 오프라인 모드를 끄고 네트워크가 연결된 경우 데이터 새로고침
+      if (!value && _isConnected) {
+        refreshNews();
+      }
+
+      notifyListeners();
+    }
+  }
+
+  // 필터링된 뉴스 반환
+  List<News> _applyFilters(List<News> news) {
+    var filtered = news;
+
+    // 코인 필터 적용
+    if (_coinFilter != null && _coinFilter!.isNotEmpty) {
+      filtered = filtered
+          .where(
+            (news) => news.relatedCoins.contains(_coinFilter!.toLowerCase()),
+          )
+          .toList();
+    }
+
+    // 검색어 필터 적용
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      filtered = filtered
+          .where(
+            (news) =>
+                news.title.toLowerCase().contains(query) ||
+                news.content.toLowerCase().contains(query),
+          )
+          .toList();
+    }
+
+    return filtered;
+  }
 
   // 자동 갱신 타이머 설정
   void _setupAutoRefresh() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
       Duration(minutes: TimeConstants.newsRefreshIntervalMinutes),
-      (_) => refreshNews(),
+      (_) {
+        if (_isConnected && !_isOfflineMode) {
+          refreshNews();
+        }
+      },
     );
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _connectivitySubscription.cancel();
     super.dispose();
   }
 
   // 뉴스 목록 갱신
   Future<void> refreshNews() async {
+    // 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시된 데이터 사용
+    if (_isOfflineMode || !_isConnected) {
+      return _loadCachedNews();
+    }
+
     _isLoading = true;
     notifyListeners();
 
     try {
-      // 현재 SupabaseService에 getNews 메서드가 구현되지 않았으므로 더미 데이터 사용
-      _newsList = [
-        News(
-          id: '1',
-          title: '비트코인, 사상 최고가 경신',
-          content: '비트코인이 사상 최고가를 경신했습니다. 전문가들은 이러한 추세가 계속될 것으로 전망합니다.',
-          source: 'Crypto News',
-          url: 'https://example.com/news/1',
-          publishedAt: DateTime.now().subtract(const Duration(hours: 2)),
-          imageUrl: 'https://example.com/images/bitcoin.jpg',
-          relatedCoins: ['BTC'],
-        ),
-        News(
-          id: '2',
-          title: '이더리움 2.0 업데이트 성공적으로 완료',
-          content:
-              '이더리움 네트워크가 2.0 업데이트를 성공적으로 완료했습니다. 이번 업데이트로 네트워크 속도와 확장성이 크게 향상될 전망입니다.',
-          source: 'Ethereum Today',
-          url: 'https://example.com/news/2',
-          publishedAt: DateTime.now().subtract(const Duration(hours: 5)),
-          imageUrl: 'https://example.com/images/ethereum.jpg',
-          relatedCoins: ['ETH'],
-        ),
-        News(
-          id: '3',
-          title: '리플, 국제 송금 시장 점유율 확대',
-          content:
-              '리플이 국제 송금 시장에서 점유율을 확대하고 있습니다. 여러 은행들이 리플의 기술을 도입하기 시작했습니다.',
-          source: 'Ripple News',
-          url: 'https://example.com/news/3',
-          publishedAt: DateTime.now().subtract(const Duration(days: 1)),
-          imageUrl: 'https://example.com/images/ripple.jpg',
-          relatedCoins: ['XRP'],
-        ),
-      ];
+      // Supabase에서 뉴스 데이터 가져오기
+      _newsList = await _supabaseService.getNews();
+
+      try {
+        // 인기 뉴스 로드 (별도 try-catch로 분리하여 인기 뉴스 로드 실패가 전체 로드에 영향 없게 함)
+        _popularNews = await _supabaseService.getPopularNews();
+      } catch (e) {
+        debugPrint('인기 뉴스 로드 실패: $e');
+        _popularNews = []; // 실패 시 빈 리스트로 설정
+      }
+
+      // 가져온 데이터 캐싱
+      await _supabaseService.cacheNewsData(_newsList);
+
       _errorMessage = null;
     } catch (e) {
       _errorMessage = '뉴스 데이터 로드 실패: $e';
       debugPrint(_errorMessage);
+
+      // 오류 발생 시 캐시된 데이터로 폴백
+      await _loadCachedNews();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // 캐시된 뉴스 데이터 로드
+  Future<void> _loadCachedNews() async {
+    if (!_isLoading) {
+      _isLoading = true;
+      notifyListeners();
+    }
+
+    try {
+      final cachedNews = await _supabaseService.getCachedNews();
+      if (cachedNews.isNotEmpty) {
+        _newsList = cachedNews;
+        // 인기 뉴스는 캐시된 뉴스 중 상위 3개만 사용
+        _popularNews = List.of(cachedNews)
+          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt))
+          ..take(3).toList();
+
+        debugPrint('캐시된 뉴스 데이터 로드 완료: ${cachedNews.length}개');
+      } else {
+        debugPrint('캐시된 뉴스 데이터가 없습니다');
+      }
+    } catch (e) {
+      debugPrint('캐시된 뉴스 데이터 로드 실패: $e');
+
+      // 오류 메시지 업데이트 (기존 오류 메시지가 없는 경우에만)
+      if (_errorMessage == null) {
+        _errorMessage = '뉴스 데이터 로드 실패: $e';
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -113,13 +225,60 @@ class NewsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 현재 SupabaseService에 getNewsByCoinId 메서드가 구현되지 않았으므로 로컬 필터링 사용
-      await refreshNews(); // 모든 뉴스 로드
-      // 필터링은 getter에서 처리됨
-      _errorMessage = null;
+      if (coinId.isEmpty || coinId == '전체') {
+        // 전체 뉴스 로드
+        await refreshNews();
+        _coinFilter = null;
+      } else {
+        if (_isOfflineMode || !_isConnected) {
+          // 오프라인 모드에서는 캐시된 데이터를 필터링
+          await _loadCachedNews();
+        } else {
+          // 특정 코인의 뉴스만 로드
+          _newsList = await _supabaseService.getNewsByCoin(coinId: coinId);
+        }
+        _errorMessage = null;
+      }
     } catch (e) {
       _errorMessage = '코인 관련 뉴스 로드 실패: $e';
       debugPrint(_errorMessage);
+
+      // 오류 발생 시 캐시된 데이터로 폴백
+      await _loadCachedNews();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // 뉴스 검색
+  Future<void> searchNews(String query) async {
+    _searchQuery = query;
+
+    if (query.isEmpty) {
+      // 검색어가 비어있으면 전체 뉴스 다시 로드
+      await refreshNews();
+      return;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      if (_isOfflineMode || !_isConnected) {
+        // 오프라인 모드에서는 캐시된 데이터를 검색어로 필터링
+        await _loadCachedNews();
+      } else {
+        // 서버에서 검색 수행
+        _newsList = await _supabaseService.searchNews(query: query);
+      }
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = '뉴스 검색 실패: $e';
+      debugPrint(_errorMessage);
+
+      // 오류 발생 시 캐시된 데이터로 폴백
+      await _loadCachedNews();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -129,18 +288,36 @@ class NewsViewModel extends ChangeNotifier {
   // 특정 뉴스 선택
   void selectNews(News news) {
     _selectedNews = news;
+
+    // 오프라인 모드가 아니고 네트워크 연결이 있는 경우에만 조회수 증가 API 호출
+    if (!_isOfflineMode && _isConnected) {
+      _supabaseService
+          .incrementNewsViewCount(news.id)
+          .then((_) {
+            debugPrint('뉴스 조회수 증가 완료: ${news.id}');
+          })
+          .catchError((e) {
+            debugPrint('뉴스 조회수 증가 실패: $e');
+          });
+    }
+
     notifyListeners();
   }
 
   // 필터 설정
   void setFilter(String? coinId) {
-    _coinFilter = coinId;
+    if (coinId == '전체') {
+      _coinFilter = null;
+    } else {
+      _coinFilter = coinId;
+    }
     notifyListeners();
   }
 
   // 필터 초기화
   void clearFilter() {
     _coinFilter = null;
+    _searchQuery = '';
     notifyListeners();
   }
 
