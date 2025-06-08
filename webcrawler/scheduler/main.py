@@ -23,48 +23,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def run_service(service_name, script_path):
+def run_docker_command(container_name, command):
     """
-    서비스 실행
+    도커 컨테이너에서 명령어 실행
     
     Args:
-        service_name (str): 서비스 이름
-        script_path (str): 실행할 스크립트 경로
+        container_name (str): 컨테이너 이름
+        command (str): 실행할 명령어
     """
-    logger.info(f"{service_name} 실행 시작")
+    logger.info(f"{container_name} 컨테이너에서 '{command}' 실행 시작")
     
     try:
         result = subprocess.run(
-            ["python", script_path],
+            ["docker", "exec", container_name, "python", command],
             capture_output=True,
             text=True
         )
         
         if result.stdout:
-            logger.info(f"{service_name} 출력:\n{result.stdout}")
+            logger.info(f"{container_name} 출력:\n{result.stdout}")
         
         if result.returncode == 0:
-            logger.info(f"{service_name} 실행 완료 (성공)")
+            logger.info(f"{container_name} 실행 완료 (성공)")
         else:
-            logger.error(f"{service_name} 실행 실패 (코드: {result.returncode})")
+            logger.error(f"{container_name} 실행 실패 (코드: {result.returncode})")
             if result.stderr:
-                logger.error(f"{service_name} 오류:\n{result.stderr}")
+                logger.error(f"{container_name} 오류:\n{result.stderr}")
                 
     except Exception as e:
-        logger.error(f"{service_name} 실행 중 예외 발생: {e}")
+        logger.error(f"{container_name} 실행 중 예외 발생: {e}")
 
 def execute_pipeline():
     """뉴스 파이프라인 전체 실행"""
     logger.info("=== 뉴스 파이프라인 전체 실행 시작 ===")
     
     # 1. 뉴스 크롤링
-    run_service("news-crawler", "/app/news-crawler/crawler.py")
+    run_docker_command("news-crawler", "/app/crawler.py")
     
     # 2. 뉴스 정제
-    run_service("news-cleaner", "/app/news-cleaner/cleaner.py")
+    run_docker_command("news-cleaner", "/app/cleaner.py")
     
     # 3. 뉴스 저장
-    run_service("news-writer", "/app/news-writer/writer.py")
+    run_docker_command("news-writer", "/app/writer.py")
     
     logger.info("=== 뉴스 파이프라인 전체 실행 완료 ===")
 

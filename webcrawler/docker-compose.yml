@@ -56,6 +56,7 @@ services:
       - ./shared:/app/shared
       - ./scheduler:/app
       - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - PYTHONUNBUFFERED=1
     depends_on:

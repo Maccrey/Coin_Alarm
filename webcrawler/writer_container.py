@@ -18,7 +18,6 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from dotenv import load_dotenv
 import uuid
-import hashlib
 
 # 환경 변수 로드
 load_dotenv()
@@ -47,11 +46,6 @@ SUPABASE_API_KEY = (
 
 if not SUPABASE_URL or not SUPABASE_API_KEY:
     logger.error("Supabase 환경 변수가 설정되지 않았습니다.")
-    # 환경 변수가 없으면 더미 값으로 설정 (로그용)
-    if not SUPABASE_URL:
-        SUPABASE_URL = "http://dummy-supabase-url.com"
-    if not SUPABASE_API_KEY:
-        SUPABASE_API_KEY = "dummy-api-key"
 
 # RLS 정책 안내 함수
 def check_rls_guide(response):
@@ -67,21 +61,6 @@ def get_image_url(news):
         if val is not None and str(val).strip() != '':
             return val
     return ''
-
-# 뉴스 해시 생성 함수
-def generate_news_hash(news):
-    """
-    뉴스 데이터로부터 해시 ID 생성
-    
-    Args:
-        news (dict): 뉴스 데이터
-        
-    Returns:
-        str: 해시 ID
-    """
-    # 제목과 URL로 해시 생성
-    key = f"{news.get('title', '')}|{news.get('url', '')}".encode('utf-8')
-    return hashlib.md5(key).hexdigest()
 
 def save_to_supabase(news_list):
     """
@@ -121,10 +100,9 @@ def save_to_supabase(news_list):
                 
                 # news_hash를 id로 사용
                 news_hash = news.pop('news_hash', None)
-                # news_hash가 없으면 생성
                 if not news_hash:
-                    logger.warning(f"news_hash 없음, 자동 생성: {news['title']}")
-                    news_hash = generate_news_hash(news)
+                    logger.warning(f"news_hash 없음: {news['title']}")
+                    continue
                 
                 # 뉴스 데이터 구성
                 news_data = {
@@ -143,12 +121,6 @@ def save_to_supabase(news_list):
                     logger.warning(f"content 필드가 비어 있음: {news_data['title']}")
                 if not news_data["image_url"]:
                     logger.warning(f"image_url 필드가 비어 있음: {news_data['title']}")
-                
-                # Supabase 저장 환경이 없는 경우 로그만 출력하고 다음으로 진행
-                if SUPABASE_URL == "http://dummy-supabase-url.com" or SUPABASE_API_KEY == "dummy-api-key":
-                    logger.warning("Supabase 환경변수 없음: 더미 모드로 실행 중 (실제 저장 안됨)")
-                    logger.info(f"뉴스 저장 요청 데이터(더미): {news_data}")
-                    continue
                 
                 # 추가: 요청 정보 로그
                 logger.info(f"뉴스 저장 요청 데이터: {news_data}")
@@ -225,7 +197,7 @@ def main():
     
     # Supabase 연결 정보 확인
     if not SUPABASE_URL or not SUPABASE_API_KEY:
-        logger.warning("Supabase 환경 변수가 설정되지 않았습니다. 더미 모드로 실행합니다.")
+        logger.error("Supabase 환경 변수가 설정되지 않았습니다.")
     
     # 기존 파일 처리
     for file_name in os.listdir(SHARED_DIR):

@@ -15,6 +15,9 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 import pytz
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 
 # 로깅 설정
 logging.basicConfig(
@@ -164,10 +167,25 @@ def crawl_site(site_name):
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         }
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'lxml')
+        # Selenium을 사용할 사이트 분기
+        if site_name in ['coinreaders', 'bloomingbit']:
+            options = Options()
+            options.add_argument('--headless')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu')
+            # Chromium 사용
+            service = Service('/usr/bin/chromedriver')
+            driver = webdriver.Chrome(service=service, options=options)
+            driver.get(url)
+            time.sleep(3)  # JS 렌더링 대기
+            html = driver.page_source
+            driver.quit()
+            soup = BeautifulSoup(html, 'lxml')
+        else:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'lxml')
         articles = soup.select(site_info['article_selector'])
         
         news_list = []
@@ -195,16 +213,30 @@ def crawl_site(site_name):
                 image_url = ""
                 if link:
                     try:
-                        article_response = requests.get(link, headers=headers)
-                        article_response.raise_for_status()
-                        article_soup = BeautifulSoup(article_response.text, 'lxml')
-                        # 본문 selector 우선순위별로 시도
+                        # 본문도 Selenium으로 접근 필요 (coinreaders, bloomingbit)
+                        if site_name in ['coinreaders', 'bloomingbit']:
+                            options = Options()
+                            options.add_argument('--headless')
+                            options.add_argument('--no-sandbox')
+                            options.add_argument('--disable-dev-shm-usage')
+                            options.add_argument('--disable-gpu')
+                            # Chromium 사용
+                            service = Service('/usr/bin/chromedriver')
+                            driver = webdriver.Chrome(service=service, options=options)
+                            driver.get(link)
+                            time.sleep(2)
+                            article_html = driver.page_source
+                            driver.quit()
+                            article_soup = BeautifulSoup(article_html, 'lxml')
+                        else:
+                            article_response = requests.get(link, headers=headers)
+                            article_response.raise_for_status()
+                            article_soup = BeautifulSoup(article_response.text, 'lxml')
                         for selector in site_info.get('content_selector', []):
                             content_elem = article_soup.select_one(selector)
                             if content_elem:
                                 content = content_elem.get_text().strip()
                                 break
-                        # 대표 이미지: og:image > .view-cont img > .entry-content img > .post-content img 순서로 시도
                         og_image = article_soup.find('meta', property='og:image')
                         if og_image and og_image.get('content'):
                             image_url = og_image.get('content')
