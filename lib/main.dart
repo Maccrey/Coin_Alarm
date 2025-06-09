@@ -55,6 +55,9 @@ void main() async {
   Hive.registerAdapter(ChartTimeframeAdapter());
   Hive.registerAdapter(PriceAlertAdapter());
 
+  // 뉴스 캐시 박스 미리 오픈 (속도 개선)
+  await Hive.openBox('news_cache');
+
   // SettingsService 초기화
   final settingsService = SettingsService();
   await settingsService.initialize();

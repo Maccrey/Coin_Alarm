@@ -45,7 +45,7 @@ class News {
       content: json['content'],
       source: json['source'],
       url: json['url'],
-      publishedAt: DateTime.parse(json['published_at']),
+      publishedAt: DateTime.parse(json['published_at']).toLocal(),
       relatedCoins: relatedCoins,
       imageUrl: json['image_url'],
     );

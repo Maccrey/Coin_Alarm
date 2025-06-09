@@ -349,19 +349,46 @@ class _ChartScreenState extends State<ChartScreen> {
     // 차트 데이터가 준비되지 않았으면 로딩 인디케이터만 표시
     final isCandle = chartViewModel.selectedChartType == ChartType.candlestick;
     final isLine = chartViewModel.selectedChartType == ChartType.line;
-    final isChartReady =
-        !chartViewModel.isLoading &&
-        ((isCandle && chartViewModel.candleChartData != null) ||
-            (isLine && chartViewModel.lineChartData != null));
+    final hasCandle = chartViewModel.candleChartData != null;
+    final hasLine = chartViewModel.lineChartData != null;
+    final isChartReady = (isCandle && hasCandle) || (isLine && hasLine);
 
-    if (!isChartReady) {
-      return Scaffold(
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          title: const Text('차트'),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
+    // 1. 로딩 중이지만 캐시 데이터가 있으면 차트 먼저 표시 + 안내
+    if (chartViewModel.isLoading && isChartReady) {
+      return Stack(
+        children: [
+          // 차트 본문
+          _buildChartArea(context),
+          // 하단 안내 메시지
+          Positioned(
+            bottom: 32,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '최신 데이터 수신 중...\n(표시 중인 데이터는 캐시입니다)',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+        ],
       );
+    }
+
+    // 2. 로딩 중이고 캐시 데이터도 없으면 로딩 인디케이터
+    if (chartViewModel.isLoading && !isChartReady) {
+      return const Center(child: CircularProgressIndicator());
     }
 
     // 현재 선택된 코인 이름 가져오기
