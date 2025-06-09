@@ -49,4 +49,3 @@ app.*.map.json
 .env
 webcrawler/shared/crawled_news_20250608124644.json
 webcrawler/coin-alarm-scheduler.tar
-webcrawler/coin-alarm-scheduler.tar
