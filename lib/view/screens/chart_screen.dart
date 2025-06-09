@@ -42,7 +42,7 @@ class CandleData {
 
 class _ChartScreenState extends State<ChartScreen> {
   // 선택된 코인
-  late Coin _selectedCoin;
+  Coin? _selectedCoin;
 
   // 차트 기간 옵션
   final List<String> _timeframes = ['1일', '1주일', '1개월', '3개월', '1년', '전체'];
@@ -88,10 +88,14 @@ class _ChartScreenState extends State<ChartScreen> {
           context,
           listen: false,
         );
-        _selectedCoin = cryptoViewModel.visibleCoins.firstWhere(
-          (coin) => coin.symbol.toUpperCase() == 'BTC',
-          orElse: () => cryptoViewModel.visibleCoins.first,
-        );
+        if (cryptoViewModel.visibleCoins.isNotEmpty) {
+          _selectedCoin = cryptoViewModel.visibleCoins.firstWhere(
+            (coin) => coin.symbol.toUpperCase() == 'BTC',
+            orElse: () => cryptoViewModel.visibleCoins.first,
+          );
+        } else {
+          _selectedCoin = null;
+        }
       }
     });
   }
@@ -128,8 +132,8 @@ class _ChartScreenState extends State<ChartScreen> {
           // 현재가 업데이트
           setState(() {
             final coin = cryptoViewModel.topCoins.firstWhere(
-              (c) => c.symbol == _selectedCoin.symbol,
-              orElse: () => _selectedCoin,
+              (c) => c.symbol == _selectedCoin?.symbol,
+              orElse: () => cryptoViewModel.topCoins.first,
             );
             _updateCurrentPrice(coin.currentPrice); // 라인 차트용
             _updateCurrentCandle(coin.currentPrice); // 캔들스틱 차트용
@@ -149,13 +153,19 @@ class _ChartScreenState extends State<ChartScreen> {
         context,
         listen: false,
       );
-      _selectedCoin = cryptoViewModel.visibleCoins.firstWhere(
-        (coin) => coin.symbol.toUpperCase() == 'BTC',
-        orElse: () => cryptoViewModel.visibleCoins.first,
-      );
+      if (cryptoViewModel.visibleCoins.isNotEmpty) {
+        _selectedCoin = cryptoViewModel.visibleCoins.firstWhere(
+          (coin) => coin.symbol.toUpperCase() == 'BTC',
+          orElse: () => cryptoViewModel.visibleCoins.first,
+        );
+      } else {
+        _selectedCoin = null;
+      }
     }
-    _initChartData(); // 라인 차트용
-    _initCandleDataList(); // 캔들스틱 차트용
+    if (_selectedCoin != null) {
+      _initChartData(); // 라인 차트용
+      _initCandleDataList(); // 캔들스틱 차트용
+    }
   }
 
   // 과거 데이터 고정, 현재가만 실시간 업데이트
@@ -166,12 +176,12 @@ class _ChartScreenState extends State<ChartScreen> {
     // 과거 데이터: 랜덤 변동 (마지막 전까지)
     for (int i = 0; i < pointCount - 1; i++) {
       final y =
-          _selectedCoin.currentPrice * (0.97 + 0.06 * random.nextDouble());
+          _selectedCoin!.currentPrice * (0.97 + 0.06 * random.nextDouble());
       _chartData.add(Point(i.toDouble(), y));
     }
     // 마지막 포인트(현재가)
     _chartData.add(
-      Point((pointCount - 1).toDouble(), _selectedCoin.currentPrice),
+      Point((pointCount - 1).toDouble(), _selectedCoin!.currentPrice),
     );
   }
 
@@ -181,7 +191,7 @@ class _ChartScreenState extends State<ChartScreen> {
     final pointCount = _getPointCount();
     _candleDataList = [];
     double prevClose =
-        _selectedCoin.currentPrice * (0.97 + 0.06 * random.nextDouble());
+        _selectedCoin!.currentPrice * (0.97 + 0.06 * random.nextDouble());
     for (int i = 0; i < pointCount - 1; i++) {
       final open = prevClose;
       final close = open * (0.98 + 0.04 * random.nextDouble());
@@ -200,7 +210,7 @@ class _ChartScreenState extends State<ChartScreen> {
     }
     // 마지막 캔들(현재가)
     final open = prevClose;
-    final close = _selectedCoin.currentPrice;
+    final close = _selectedCoin!.currentPrice;
     final high = max(open, close) * (1 + random.nextDouble() * 0.01);
     final low = min(open, close) * (1 - random.nextDouble() * 0.01);
     _candleDataList.add(
@@ -309,6 +319,7 @@ class _ChartScreenState extends State<ChartScreen> {
   @override
   Widget build(BuildContext context) {
     final chartViewModel = Provider.of<ChartViewModel>(context);
+    final cryptoViewModel = Provider.of<CryptoViewModel>(context);
 
     // 코인이 전달된 경우 해당 코인으로 차트 데이터 로드
     if (widget.selectedCoin != null &&
@@ -316,6 +327,41 @@ class _ChartScreenState extends State<ChartScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         chartViewModel.selectCoin(widget.selectedCoin!);
       });
+    }
+
+    // visibleCoins가 비어 있으면 API 안내 메시지 표시
+    if (cryptoViewModel.visibleCoins.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: const Text('차트'),
+        ),
+        body: const Center(
+          child: Text(
+            'API 키가 등록되어 있지 않습니다.\n설정에서 API 키를 등록하세요.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
+    // 차트 데이터가 준비되지 않았으면 로딩 인디케이터만 표시
+    final isCandle = chartViewModel.selectedChartType == ChartType.candlestick;
+    final isLine = chartViewModel.selectedChartType == ChartType.line;
+    final isChartReady =
+        !chartViewModel.isLoading &&
+        ((isCandle && chartViewModel.candleChartData != null) ||
+            (isLine && chartViewModel.lineChartData != null));
+
+    if (!isChartReady) {
+      return Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: const Text('차트'),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     // 현재 선택된 코인 이름 가져오기

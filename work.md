@@ -111,3 +111,13 @@ return SizedBox(
 - 위젯이 무한한 크기를 가지지 않도록 mainAxisSize: MainAxisSize.min 사용
 - 스크롤 가능한 위젯 내부에서는 SingleChildScrollView나 ListView를 사용하여 오버플로우 방지
 - Center 위젯 내부의 위젯에는 항상 명시적인 너비 제한(SizedBox, ConstrainedBox 등)을 추가
+
+## [2024-06-XX] LateInitializationError: Field '\_box@xxxx' has not been initialized 오류
+
+- **에러 로그:**
+  flutter: UpbitApiService 오류 상세: LateInitializationError: Field '\_box@50167360' has not been initialized.
+- **원인:**
+  main.dart에서 Hive.initFlutter()와 어댑터 등록이 SettingsService.initialize()보다 늦게 실행되어, SettingsService에서 Box를 열기 전에 접근이 발생함.
+- **해결:**
+  Hive 초기화 및 어댑터 등록을 SettingsService.initialize()보다 먼저 실행하도록 main.dart 코드 순서 수정.
+- **Tasklist.md**에 이슈 및 해결 내역 기록.

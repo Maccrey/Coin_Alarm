@@ -32,26 +32,25 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // 화면이 마운트된 후에 저장된 데이터 로드
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadSavedLoginInfo();
-    });
-  }
-
-  // 저장된 로그인 정보 불러오기
-  void _loadSavedLoginInfo() {
-    try {
-      // ViewModel을 통해 저장된 설정 불러오기
+    // 화면이 마운트된 후에 저장된 데이터 로드 및 상태 동기화
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final settingsViewModel = Provider.of<SettingsViewModel>(
         context,
         listen: false,
       );
+      // Hive에서 저장된 이메일/비밀번호/저장여부 불러오기
+      final saveLoginInfo = settingsViewModel.saveLoginInfo;
       setState(() {
-        _saveLoginInfo = settingsViewModel.saveLoginInfo;
+        _saveLoginInfo = saveLoginInfo;
       });
-    } catch (e) {
-      debugPrint('설정 불러오기 오류: $e');
-    }
+      if (saveLoginInfo) {
+        // 이메일/비밀번호 자동 입력
+        final email = settingsViewModel.getSavedEmail();
+        final password = settingsViewModel.getSavedPassword();
+        if (email != null) _emailController.text = email;
+        if (password != null) _passwordController.text = password;
+      }
+    });
   }
 
   @override
@@ -78,6 +77,13 @@ class _LoginScreenState extends State<LoginScreen> {
         listen: false,
       );
       await settingsViewModel.setSaveLoginInfo(_saveLoginInfo);
+      // saveLoginInfo가 true면 이메일/비밀번호 저장, false면 삭제
+      if (_saveLoginInfo) {
+        await settingsViewModel.setSavedEmail(_emailController.text.trim());
+        await settingsViewModel.setSavedPassword(_passwordController.text);
+      } else {
+        await settingsViewModel.clearLoginInfo();
+      }
     } catch (e) {
       debugPrint('로그인 정보 저장 설정 오류: $e');
     }
@@ -99,12 +105,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 테마 데이터
     final theme = Theme.of(context);
-
     return Scaffold(
-      body: Consumer<AuthViewModel>(
-        builder: (context, authViewModel, child) {
+      body: Consumer2<AuthViewModel, SettingsViewModel>(
+        builder: (context, authViewModel, settingsViewModel, child) {
+          // ViewModel의 saveLoginInfo 값과 체크박스 동기화
+          if (_saveLoginInfo != settingsViewModel.saveLoginInfo) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              setState(() {
+                _saveLoginInfo = settingsViewModel.saveLoginInfo;
+              });
+            });
+          }
           return SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -220,6 +232,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     setState(() {
                                       _saveLoginInfo = value!;
                                     });
+                                    // 체크박스 변경 시 ViewModel에도 반영
+                                    settingsViewModel.setSaveLoginInfo(value!);
                                   },
                             activeColor: AppTheme.primaryColor,
                           ),

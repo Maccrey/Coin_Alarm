@@ -45,6 +45,18 @@
 - [ ] 로그아웃 기능 Supabase 연동으로 전환 및 테스트
 - [ ] 관련 주석 및 문서(README, development.md, work.md) 업데이트
 
+### 3-2. 로그인 정보 Hive 기반 저장/불러오기/삭제 (MSA & TDD)
+
+- [x] SettingsService에서 SharedPreferences → Hive로 전환 [설계/구현]
+- [x] Hive Box(`settings`) 기반 로그인 정보 저장/불러오기/삭제 메서드 구현
+- [x] SettingsViewModel에서 Hive 기반 메서드 연동 및 상태 관리
+- [x] 로그인 화면에서 Hive 기반 자동 입력/자동 로그인 로직 구현
+- [ ] 설정 화면에서 Hive 기반 로그인 정보 저장 스위치 연동
+- [ ] 기존 SharedPreferences 코드 완전 제거
+- [ ] 단위 테스트 코드 작성 및 통과 (TDD)
+- [ ] README.md, development.md, work.md, Tasklist.md 문서화 및 진행상황 업데이트
+- [x] Hive 초기화 및 어댑터 등록 순서 오류로 인한 LateInitializationError 수정 (main.dart)
+
 ### 4. API 연동 및 데이터 수집
 
 - [x] Upbit/Binance API 연동 모듈 작성 - 2024-06-13
@@ -72,7 +84,6 @@
 
 ### 7. 뉴스 시스템 (MSA & TDD 방식)
 
-<<<<<<< HEAD
 - [ ] 뉴스 크롤러(한국어) 구현
 - [ ] 뉴스 데이터 Supabase DB 저장 및 캐싱
 - [ ] 뉴스 필터링/중복제거 로직 구현
@@ -85,8 +96,7 @@
 - [x] 코인별 필터링 및 검색 기능 보완 - 2024-06-21
 - [x] 오프라인 모드 지원 (캐시된 뉴스 표시) - 2024-06-21
 - [x] 인기 뉴스 기능 구현 (조회수 기반) - 2024-06-21
-- [x] 웹뷰를 통한 원문 기사 보기 기능 구현 - 2024-06-21
-=======
+- [x] # 웹뷰를 통한 원문 기사 보기 기능 구현 - 2024-06-21
 - [x] 뉴스 관련 Supabase 테이블 스키마 설계 (news, news_coins)
   - [x] news 테이블에 image_url(text), related_coins(text[]) 컬럼 추가 (대표 이미지, 관련 코인 배열 저장)
 - [x] 뉴스 크롤링 서버 개발 (MSA 아키텍처, 도커 기반)
@@ -138,7 +148,7 @@
 - [ ] 뉴스 상세 보기 화면 구현
 - [ ] 관련 코인으로 필터링 기능 구현
 - [ ] 오프라인 모드 지원 (캐시된 뉴스 데이터 사용)
->>>>>>> feature/webcrawler
+  > > > > > > > feature/webcrawler
 
 ### 8. 사용자 인터페이스
 

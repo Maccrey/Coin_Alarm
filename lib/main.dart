@@ -45,14 +45,8 @@ void main() async {
   // .env 파일 로드
   await dotenv.load();
 
-  // 설정 서비스 초기화
-  final settingsService = SettingsService();
-  await settingsService.initialize();
-
-  // Hive 초기화
+  // Hive 초기화 및 어댑터 등록 먼저 실행
   await Hive.initFlutter();
-
-  // Hive 어댑터 등록
   Hive.registerAdapter(ChartDataAdapter());
   Hive.registerAdapter(ChartPointAdapter());
   Hive.registerAdapter(CandleDataAdapter());
@@ -60,6 +54,10 @@ void main() async {
   Hive.registerAdapter(ChartTypeAdapter());
   Hive.registerAdapter(ChartTimeframeAdapter());
   Hive.registerAdapter(PriceAlertAdapter());
+
+  // SettingsService 초기화
+  final settingsService = SettingsService();
+  await settingsService.initialize();
 
   // 캐시 서비스 초기화
   await ChartCacheService().initialize();
