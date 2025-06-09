@@ -346,7 +346,7 @@ class _ChartScreenState extends State<ChartScreen> {
       );
     }
 
-    // 차트 데이터가 준비되지 않았으면 로딩 인디케이터만 표시
+    // 차트 데이터 준비 상태 확인
     final isCandle = chartViewModel.selectedChartType == ChartType.candlestick;
     final isLine = chartViewModel.selectedChartType == ChartType.line;
     final hasCandle = chartViewModel.candleChartData != null;
@@ -386,9 +386,27 @@ class _ChartScreenState extends State<ChartScreen> {
       );
     }
 
-    // 2. 로딩 중이고 캐시 데이터도 없으면 로딩 인디케이터
+    // 2. 로딩 중이고 캐시 데이터도 없으면 안내 멘트 + 인디케이터
     if (chartViewModel.isLoading && !isChartReady) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              '차트 데이터를 업데이트 중입니다...',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '네트워크 상태에 따라 시간이 소요될 수 있습니다.',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
     }
 
     // 현재 선택된 코인 이름 가져오기
