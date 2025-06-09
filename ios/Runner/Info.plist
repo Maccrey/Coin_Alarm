@@ -52,5 +52,9 @@
 	<true/>
 	<key>io.flutter.embedded_views_preview</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>이 앱은 Face ID를 사용하여 인증합니다.</string>
+	<key>NSLocalAuthenticationUsageDescription</key>
+	<string>이 앱은 생체 인증(지문/Face ID)으로 인증합니다.</string>
 </dict>
 </plist>

@@ -35,15 +35,15 @@
 
 ### 3-1. 로그인(Supabase 연동, MSA & TDD)
 
-- [ ] 기존 더미데이터 기반 로그인 코드/로직 정리 및 주석처리
-- [ ] Supabase Auth 연동을 위한 환경변수(.env) 적용 확인
-- [ ] Supabase Auth(이메일/비밀번호) 로그인 ViewModel/Repository 구현 (TDD)
-- [ ] 로그인 단위 테스트 코드 작성 및 통과 (TDD)
-- [ ] 로그인 UI에서 Supabase 연동 적용 및 기존 더미데이터 제거
-- [ ] 로그인 성공/실패/에러 처리 및 UI 반영
-- [ ] 로그인 상태 유지(세션) 기능 구현 및 테스트
-- [ ] 로그아웃 기능 Supabase 연동으로 전환 및 테스트
-- [ ] 관련 주석 및 문서(README, development.md, work.md) 업데이트
+- [x] 기존 더미데이터 기반 로그인 코드/로직 정리 및 주석처리
+- [x] Supabase Auth 연동을 위한 환경변수(.env) 적용 확인
+- [x] Supabase Auth(이메일/비밀번호) 로그인 ViewModel/Repository 구현 (TDD)
+- [x] 로그인 단위 테스트 코드 작성 및 통과 (TDD)
+- [x] 로그인 UI에서 Supabase 연동 적용 및 기존 더미데이터 제거
+- [x] 로그인 성공/실패/에러 처리 및 UI 반영
+- [x] 로그인 상태 유지(세션) 기능 구현 및 테스트
+- [x] 로그아웃 기능 Supabase 연동으로 전환 및 테스트
+- [x] 관련 주석 및 문서(README, development.md, work.md) 업데이트
 
 ### 3-2. 로그인 정보 Hive 기반 저장/불러오기/삭제 (MSA & TDD)
 
@@ -51,11 +51,24 @@
 - [x] Hive Box(`settings`) 기반 로그인 정보 저장/불러오기/삭제 메서드 구현
 - [x] SettingsViewModel에서 Hive 기반 메서드 연동 및 상태 관리
 - [x] 로그인 화면에서 Hive 기반 자동 입력/자동 로그인 로직 구현
-- [ ] 설정 화면에서 Hive 기반 로그인 정보 저장 스위치 연동
-- [ ] 기존 SharedPreferences 코드 완전 제거
-- [ ] 단위 테스트 코드 작성 및 통과 (TDD)
-- [ ] README.md, development.md, work.md, Tasklist.md 문서화 및 진행상황 업데이트
+- [x] 설정 화면에서 Hive 기반 로그인 정보 저장 스위치 연동
+- [x] 기존 SharedPreferences 코드 완전 제거
+- [x] 단위 테스트 코드 작성 및 통과 (TDD)
+- [x] README.md, development.md, work.md, Tasklist.md 문서화 및 진행상황 업데이트
 - [x] Hive 초기화 및 어댑터 등록 순서 오류로 인한 LateInitializationError 수정 (main.dart)
+
+### 3-3. 생체 인증(지문/Face ID) 기능 구현 (MSA & TDD)
+
+- [x] 생체 인증 도입 필요성/UX 설계 및 기술 조사 (local_auth 패키지 등)
+- [x] 생체 인증 관련 의존성 추가 및 pubspec.yaml 반영
+- [x] SettingsService에 생체 인증 사용 여부 저장/불러오기(Hive) 메서드 설계/구현
+- [x] SettingsViewModel에 생체 인증 상태/토글 메서드 구현 및 상태 관리
+- [x] 설정 화면 UI에 "생체 인증 사용" 스위치 추가 및 ViewModel 연동
+- [x] 생체 인증 등록/해제/실패/성공 UX 설계 및 안내 메시지 구현
+- [x] 실제 생체 인증 로직(지문/Face ID) 연동 및 예외 처리
+- [x] 앱 실행/로그인/설정 변경 시 생체 인증 동작 플로우 설계 및 적용
+- [x] 단위 테스트/통합 테스트 코드 작성 및 통과 (TDD)
+- [x] README.md, development.md, work.md, Tasklist.md 문서화 및 진행상황 업데이트
 
 ### 4. API 연동 및 데이터 수집
 
@@ -84,9 +97,9 @@
 
 ### 7. 뉴스 시스템 (MSA & TDD 방식)
 
-- [ ] 뉴스 크롤러(한국어) 구현
-- [ ] 뉴스 데이터 Supabase DB 저장 및 캐싱
-- [ ] 뉴스 필터링/중복제거 로직 구현
+- [x] 뉴스 크롤러(한국어) 구현
+- [x] 뉴스 데이터 Supabase DB 저장 및 캐싱
+- [x] 뉴스 필터링/중복제거 로직 구현
 - [x] 더미 뉴스 데이터 기반 코드 분석 및 현재 구조 파악 - 2024-06-21
 - [x] Supabase 뉴스 테이블 설계 및 구조화 - 2024-06-21
 - [x] 뉴스 모델에 Supabase 연동 확인 - 2024-06-21
@@ -141,13 +154,13 @@
 
 #### 7-2. 뉴스 시스템 앱 연동
 
-- [ ] 뉴스 모델 클래스 구현 (News, NewsCoin)
-- [ ] 뉴스 서비스 및 Repository 구현
-- [ ] 뉴스 화면 UI 설계 및 구현
-- [ ] 뉴스 필터링 및 정렬 기능 구현
-- [ ] 뉴스 상세 보기 화면 구현
-- [ ] 관련 코인으로 필터링 기능 구현
-- [ ] 오프라인 모드 지원 (캐시된 뉴스 데이터 사용)
+- [x] 뉴스 모델 클래스 구현 (News, NewsCoin)
+- [x] 뉴스 서비스 및 Repository 구현
+- [x] 뉴스 화면 UI 설계 및 구현
+- [x] 뉴스 필터링 및 정렬 기능 구현
+- [x] 뉴스 상세 보기 화면 구현
+- [x] 관련 코인으로 필터링 기능 구현
+- [x] 오프라인 모드 지원 (캐시된 뉴스 데이터 사용)
   > > > > > > > feature/webcrawler
 
 ### 8. 사용자 인터페이스

@@ -301,4 +301,19 @@ class SettingsService {
       await setCoinOrder(coinOrder);
     }
   }
+
+  /// 생체 인증 사용 여부 저장
+  Future<void> setUseBiometrics(bool value) async {
+    await _box.put('useBiometrics', value);
+  }
+
+  /// 생체 인증 사용 여부 불러오기
+  Future<bool> getUseBiometrics() async {
+    return _box.get('useBiometrics', defaultValue: false);
+  }
+
+  /// 생체 인증 사용 여부 삭제
+  Future<void> removeUseBiometrics() async {
+    await _box.delete('useBiometrics');
+  }
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/settings_service.dart';
 import '../core/theme.dart';
 import 'crypto_viewmodel.dart';
+import 'package:local_auth/local_auth.dart';
 
 // 설정 관련 ViewModel 클래스
 class SettingsViewModel extends ChangeNotifier {
@@ -13,7 +14,7 @@ class SettingsViewModel extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   int _refreshInterval = 30;
   bool _pushNotificationsEnabled = true;
-  bool _useBiometricAuth = false;
+  bool _useBiometrics = false;
   String _language = '한국어';
   bool _saveLoginInfo = false;
 
@@ -23,8 +24,14 @@ class SettingsViewModel extends ChangeNotifier {
   String? _binanceApiKey;
   String? _binanceSecretKey;
 
+  final LocalAuthentication _localAuth = LocalAuthentication();
+
+  String? _biometricErrorMessage;
+  String? get biometricErrorMessage => _biometricErrorMessage;
+
   // 생성자
   SettingsViewModel(this._settingsService) {
+    _loadBiometrics();
     // 설정값 로드
     _loadSettings();
   }
@@ -34,7 +41,7 @@ class SettingsViewModel extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   int get refreshInterval => _refreshInterval;
   bool get pushNotificationsEnabled => _pushNotificationsEnabled;
-  bool get useBiometricAuth => _useBiometricAuth;
+  bool get useBiometrics => _useBiometrics;
   String get language => _language;
   bool get saveLoginInfo => _saveLoginInfo;
 
@@ -61,7 +68,7 @@ class SettingsViewModel extends ChangeNotifier {
       _refreshInterval = _settingsService.getRefreshInterval();
       _pushNotificationsEnabled = _settingsService
           .getPushNotificationsEnabled();
-      _useBiometricAuth = _settingsService.getBiometricAuthEnabled();
+      _useBiometrics = await _settingsService.getUseBiometrics();
       _language = _settingsService.getLanguage();
       _saveLoginInfo = _settingsService.getSaveLoginInfo();
 
@@ -84,6 +91,44 @@ class SettingsViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// 생체 인증 사용 여부 불러오기 (초기화 시)
+  Future<void> _loadBiometrics() async {
+    _useBiometrics = await _settingsService.getUseBiometrics();
+    notifyListeners();
+  }
+
+  /// 생체 인증 사용 토글 및 실제 인증 시도
+  Future<void> toggleBiometrics(bool value) async {
+    _biometricErrorMessage = null;
+    if (value) {
+      // 실제 생체 인증 시도
+      final canCheck = await _localAuth.canCheckBiometrics;
+      if (!canCheck) {
+        _biometricErrorMessage = '이 기기에서는 생체 인증을 지원하지 않습니다.';
+        notifyListeners();
+        return;
+      }
+      final available = await _localAuth.getAvailableBiometrics();
+      if (available.isEmpty) {
+        _biometricErrorMessage = '생체 인증(지문/Face ID)이 등록되어 있지 않습니다.';
+        notifyListeners();
+        return;
+      }
+      final didAuth = await _localAuth.authenticate(
+        localizedReason: '생체 인증을 사용하여 인증하세요',
+        options: const AuthenticationOptions(biometricOnly: true),
+      );
+      if (!didAuth) {
+        _biometricErrorMessage = '생체 인증에 실패했습니다.';
+        notifyListeners();
+        return;
+      }
+    }
+    _useBiometrics = value;
+    await _settingsService.setUseBiometrics(value);
+    notifyListeners();
   }
 
   // 테마 모드 설정
@@ -139,24 +184,6 @@ class SettingsViewModel extends ChangeNotifier {
       _pushNotificationsEnabled = enabled;
     } catch (e) {
       debugPrint('푸시 알림 설정 실패: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // 생체 인증 설정
-  Future<void> setUseBiometricAuth(bool enabled) async {
-    if (_useBiometricAuth == enabled) return;
-
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      await _settingsService.setBiometricAuthEnabled(enabled);
-      _useBiometricAuth = enabled;
-    } catch (e) {
-      debugPrint('생체 인증 설정 실패: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

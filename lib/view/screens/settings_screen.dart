@@ -947,20 +947,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // 보안 설정 위젯
   Widget _buildSecuritySettings(SettingsViewModel viewModel) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: SwitchListTile(
-          title: const Text('생체 인증 사용'),
-          subtitle: const Text('지문 또는 얼굴 인식으로 로그인'),
-          secondary: const Icon(Icons.fingerprint),
-          value: viewModel.useBiometricAuth,
-          onChanged: viewModel.isLoading
-              ? null
-              : (value) => viewModel.setUseBiometricAuth(value),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Consumer<SettingsViewModel>(
+          builder: (context, vm, _) => SwitchListTile(
+            title: const Text('생체 인증 사용'),
+            value: vm.useBiometrics,
+            onChanged: (value) async {
+              await vm.toggleBiometrics(value);
+            },
+          ),
         ),
-      ),
+        if (viewModel.biometricErrorMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+            child: Text(
+              viewModel.biometricErrorMessage!,
+              style: const TextStyle(color: Colors.red, fontSize: 13),
+            ),
+          ),
+      ],
     );
   }
 
