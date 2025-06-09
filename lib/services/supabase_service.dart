@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../data/dummy_supabase.dart';
-import '../data/dummy_news.dart';
 import '../model/user_model.dart' as app_user;
 import '../model/coin_model.dart';
 import '../model/price_alert_model.dart';
@@ -489,8 +488,8 @@ class SupabaseService {
         throw Exception('뉴스 데이터 조회 실패: $e');
       }
     } else {
-      // 더미 뉴스 데이터 조회
-      return DummyNews.getLatestNews(limit: limit);
+      // 더미 데이터 없음: 빈 리스트 반환
+      return [];
     }
   }
 
@@ -541,8 +540,8 @@ class SupabaseService {
         throw Exception('코인 관련 뉴스 조회 실패: $e');
       }
     } else {
-      // 더미 코인 관련 뉴스 조회
-      return DummyNews.getNewsByCoin(normalizedCoinId, limit: limit);
+      // 더미 데이터 없음: 빈 리스트 반환
+      return [];
     }
   }
 
@@ -598,8 +597,8 @@ class SupabaseService {
         throw Exception('인기 뉴스 조회 실패: $e');
       }
     } else {
-      // 더미 인기 뉴스 조회
-      return DummyNews.getPopularNews(limit: limit);
+      // 더미 데이터 없음: 빈 리스트 반환
+      return [];
     }
   }
 
@@ -625,17 +624,8 @@ class SupabaseService {
         throw Exception('뉴스 검색 실패: $e');
       }
     } else {
-      // 더미 뉴스 검색
-      final allNews = DummyNews.newsList;
-      final queryLower = query.toLowerCase();
-      return allNews
-          .where(
-            (news) =>
-                news.title.toLowerCase().contains(queryLower) ||
-                news.content.toLowerCase().contains(queryLower),
-          )
-          .take(limit)
-          .toList();
+      // 더미 데이터 없음: 빈 리스트 반환
+      return [];
     }
   }
 
@@ -733,13 +723,7 @@ class SupabaseService {
         debugPrint('뉴스 조회수 증가 실패: $e');
       }
     } else {
-      // 더미 모드에서는 DummyNews의 해당 뉴스 조회수만 로그로 출력
-      final news = DummyNews.getNewsById(newsId);
-      if (news != null) {
-        debugPrint('더미 모드: 뉴스 조회수 증가 (ID: $newsId, 제목: ${news.title})');
-      } else {
-        debugPrint('더미 모드: 뉴스 조회수 증가 실패 (ID: $newsId, 뉴스를 찾을 수 없음)');
-      }
+      // 더미 데이터 없음: 아무 동작도 하지 않음
     }
   }
 }

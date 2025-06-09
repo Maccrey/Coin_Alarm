@@ -1,5 +1,7 @@
 // 뉴스 모델 클래스
 
+import 'dart:convert';
+
 class News {
   final String id;
   final String title;
@@ -23,6 +25,20 @@ class News {
 
   // JSON에서 변환
   factory News.fromJson(Map<String, dynamic> json) {
+    // related_coins가 String(예: '["xrp"]')으로 들어오는 경우도 robust하게 처리
+    dynamic coins = json['related_coins'];
+    List<String> relatedCoins;
+    if (coins is String) {
+      try {
+        relatedCoins = List<String>.from(jsonDecode(coins));
+      } catch (_) {
+        relatedCoins = [coins];
+      }
+    } else if (coins is List) {
+      relatedCoins = List<String>.from(coins);
+    } else {
+      relatedCoins = [];
+    }
     return News(
       id: json['id'],
       title: json['title'],
@@ -30,7 +46,7 @@ class News {
       source: json['source'],
       url: json['url'],
       publishedAt: DateTime.parse(json['published_at']),
-      relatedCoins: List<String>.from(json['related_coins']),
+      relatedCoins: relatedCoins,
       imageUrl: json['image_url'],
     );
   }

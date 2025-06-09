@@ -28,6 +28,10 @@ class NewsViewModel extends ChangeNotifier {
   bool _isConnected = true;
   late StreamSubscription _connectivitySubscription;
 
+  // 원본 값과 정규화된 값 모두 저장
+  String? _rawCoinFilter;
+  String? _normalizedCoinFilter;
+
   // 생성자
   NewsViewModel(this._supabaseService) {
     // 초기 뉴스 데이터 로드
@@ -49,6 +53,71 @@ class NewsViewModel extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   bool get isOfflineMode => _isOfflineMode;
   bool get isConnected => _isConnected;
+
+  // 검색어를 무시하고 코인 필터만 적용한 뉴스 리스트 반환
+  List<News> get newsListWithoutSearch {
+    var filtered = _newsList;
+    if (_coinFilter != null && _coinFilter!.isNotEmpty) {
+      final normalizedFilter =
+          _normalizedCoinFilter ?? _normalizeCoinId(_coinFilter!);
+      final rawFilter = _rawCoinFilter ?? _coinFilter!;
+
+      final symbolToId = {
+        'btc': 'bitcoin',
+        'eth': 'ethereum',
+        'bnb': 'binancecoin',
+        'sol': 'solana',
+        'xrp': 'ripple',
+        'doge': 'dogecoin',
+        'ada': 'cardano',
+      };
+      final idToSymbol = {
+        'bitcoin': 'btc',
+        'ethereum': 'eth',
+        'binancecoin': 'bnb',
+        'solana': 'sol',
+        'ripple': 'xrp',
+        'dogecoin': 'doge',
+        'cardano': 'ada',
+      };
+
+      final filterVariants = <String>{
+        normalizedFilter.toLowerCase(),
+        normalizedFilter.toUpperCase(),
+        rawFilter.toLowerCase(),
+        rawFilter.toUpperCase(),
+      };
+      if (symbolToId.containsKey(rawFilter.toLowerCase())) {
+        filterVariants.add(symbolToId[rawFilter.toLowerCase()]!);
+        filterVariants.add(symbolToId[rawFilter.toLowerCase()]!.toUpperCase());
+      }
+      if (idToSymbol.containsKey(normalizedFilter.toLowerCase())) {
+        filterVariants.add(idToSymbol[normalizedFilter.toLowerCase()]!);
+        filterVariants.add(
+          idToSymbol[normalizedFilter.toLowerCase()]!.toUpperCase(),
+        );
+      }
+
+      filtered = filtered.where((news) {
+        for (final coin in news.relatedCoins) {
+          final coinLower = coin.toLowerCase();
+          final coinUpper = coin.toUpperCase();
+          // 심볼/ID 매핑까지 모두 비교
+          if (filterVariants.contains(coin) ||
+              filterVariants.contains(coinLower) ||
+              filterVariants.contains(coinUpper) ||
+              (symbolToId.containsKey(coinLower) &&
+                  filterVariants.contains(symbolToId[coinLower]!)) ||
+              (idToSymbol.containsKey(coinLower) &&
+                  filterVariants.contains(idToSymbol[coinLower]!))) {
+            return true;
+          }
+        }
+        return false;
+      }).toList();
+    }
+    return filtered;
+  }
 
   // 네트워크 연결 상태 초기화
   Future<void> _initConnectivity() async {
@@ -105,12 +174,62 @@ class NewsViewModel extends ChangeNotifier {
 
     // 코인 필터 적용
     if (_coinFilter != null && _coinFilter!.isNotEmpty) {
-      final normalizedFilter = _normalizeCoinId(_coinFilter!);
+      final normalizedFilter =
+          _normalizedCoinFilter ?? _normalizeCoinId(_coinFilter!);
+      final rawFilter = _rawCoinFilter ?? _coinFilter!;
 
-      // 필터 ID와 동일하거나 매핑 가능한 심볼이 있는 뉴스만 필터링
-      filtered = filtered
-          .where((news) => _newsContainsRelatedCoin(news, normalizedFilter))
-          .toList();
+      final symbolToId = {
+        'btc': 'bitcoin',
+        'eth': 'ethereum',
+        'bnb': 'binancecoin',
+        'sol': 'solana',
+        'xrp': 'ripple',
+        'doge': 'dogecoin',
+        'ada': 'cardano',
+      };
+      final idToSymbol = {
+        'bitcoin': 'btc',
+        'ethereum': 'eth',
+        'binancecoin': 'bnb',
+        'solana': 'sol',
+        'ripple': 'xrp',
+        'dogecoin': 'doge',
+        'cardano': 'ada',
+      };
+
+      final filterVariants = <String>{
+        normalizedFilter.toLowerCase(),
+        normalizedFilter.toUpperCase(),
+        rawFilter.toLowerCase(),
+        rawFilter.toUpperCase(),
+      };
+      if (symbolToId.containsKey(rawFilter.toLowerCase())) {
+        filterVariants.add(symbolToId[rawFilter.toLowerCase()]!);
+        filterVariants.add(symbolToId[rawFilter.toLowerCase()]!.toUpperCase());
+      }
+      if (idToSymbol.containsKey(normalizedFilter.toLowerCase())) {
+        filterVariants.add(idToSymbol[normalizedFilter.toLowerCase()]!);
+        filterVariants.add(
+          idToSymbol[normalizedFilter.toLowerCase()]!.toUpperCase(),
+        );
+      }
+
+      filtered = filtered.where((news) {
+        for (final coin in news.relatedCoins) {
+          final coinLower = coin.toLowerCase();
+          final coinUpper = coin.toUpperCase();
+          if (filterVariants.contains(coin) ||
+              filterVariants.contains(coinLower) ||
+              filterVariants.contains(coinUpper) ||
+              (symbolToId.containsKey(coinLower) &&
+                  filterVariants.contains(symbolToId[coinLower]!)) ||
+              (idToSymbol.containsKey(coinLower) &&
+                  filterVariants.contains(idToSymbol[coinLower]!))) {
+            return true;
+          }
+        }
+        return false;
+      }).toList();
     }
 
     // 검색어 필터 적용
@@ -126,61 +245,6 @@ class NewsViewModel extends ChangeNotifier {
     }
 
     return filtered;
-  }
-
-  // 뉴스에 관련 코인이 포함되어 있는지 확인하는 함수
-  bool _newsContainsRelatedCoin(News news, String coinFilter) {
-    // 심볼과 ID 매핑 (양방향)
-    final symbolToId = {
-      'btc': 'bitcoin',
-      'eth': 'ethereum',
-      'bnb': 'binancecoin',
-      'sol': 'solana',
-      'xrp': 'ripple',
-      'doge': 'dogecoin',
-      'ada': 'cardano',
-    };
-
-    final idToSymbol = {
-      'bitcoin': 'btc',
-      'ethereum': 'eth',
-      'binancecoin': 'bnb',
-      'solana': 'sol',
-      'ripple': 'xrp',
-      'dogecoin': 'doge',
-      'cardano': 'ada',
-    };
-
-    final filterLower = coinFilter.toLowerCase();
-
-    // 관련 코인 배열이 비어있는 경우
-    if (news.relatedCoins.isEmpty) {
-      return false;
-    }
-
-    // 관련 코인 순회하며 확인
-    for (final coin in news.relatedCoins) {
-      final coinLower = coin.toLowerCase();
-
-      // 직접 일치하는 경우
-      if (coinLower == filterLower) {
-        return true;
-      }
-
-      // 필터가 ID이고 코인이 심볼인 경우 (예: filter='bitcoin', coin='btc')
-      if (idToSymbol.containsKey(filterLower) &&
-          coinLower == idToSymbol[filterLower]) {
-        return true;
-      }
-
-      // 필터가 심볼이고 코인이 ID인 경우 (예: filter='btc', coin='bitcoin')
-      if (symbolToId.containsKey(filterLower) &&
-          coinLower == symbolToId[filterLower]) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   // 자동 갱신 타이머 설정
@@ -306,16 +370,17 @@ class NewsViewModel extends ChangeNotifier {
       } else {
         // 코인 ID 또는 심볼 정규화
         final normalizedCoinId = _normalizeCoinId(coinId);
-        _coinFilter = normalizedCoinId;
+        // 원본 값과 정규화된 값 모두 저장
+        _coinFilter = coinId;
+        _rawCoinFilter = coinId;
+        _normalizedCoinFilter = normalizedCoinId;
 
         if (_isOfflineMode || !_isConnected) {
           // 오프라인 모드에서는 캐시된 데이터를 필터링
           await _loadCachedNews();
         } else {
-          // 특정 코인의 뉴스만 로드
-          _newsList = await _supabaseService.getNewsByCoin(
-            coinId: normalizedCoinId,
-          );
+          // 전체 뉴스만 받아오고, 필터는 클라이언트에서 적용
+          _newsList = await _supabaseService.getNews();
         }
         _errorMessage = null;
       }

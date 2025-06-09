@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../data/dummy_coins.dart';
 import '../../model/coin_model.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
 import 'dart:async';
@@ -84,24 +83,15 @@ class _ChartScreenState extends State<ChartScreen> {
 
       // 차트 화면이 직접 열릴 때만 비트코인으로 설정 (selectedCoin이 null인 경우)
       if (widget.selectedCoin == null) {
-        // 차트 뷰모델에 비트코인 선택
-        final chartViewModel = Provider.of<ChartViewModel>(
-          context,
-          listen: false,
-        );
+        // Provider에서 BTC 코인을 찾아서 기본값으로 사용
         final cryptoViewModel = Provider.of<CryptoViewModel>(
           context,
           listen: false,
         );
-
-        // 비트코인 코인 객체 찾기
-        final bitcoinCoin = cryptoViewModel.visibleCoins.firstWhere(
+        _selectedCoin = cryptoViewModel.visibleCoins.firstWhere(
           (coin) => coin.symbol.toUpperCase() == 'BTC',
           orElse: () => cryptoViewModel.visibleCoins.first,
         );
-
-        // 비트코인 선택
-        chartViewModel.selectCoin(bitcoinCoin);
       }
     });
   }
@@ -154,7 +144,15 @@ class _ChartScreenState extends State<ChartScreen> {
     if (widget.selectedCoin != null) {
       _selectedCoin = widget.selectedCoin!;
     } else {
-      _selectedCoin = DummyCoins.popularCoins.first;
+      // Provider에서 BTC 코인을 찾아서 기본값으로 사용
+      final cryptoViewModel = Provider.of<CryptoViewModel>(
+        context,
+        listen: false,
+      );
+      _selectedCoin = cryptoViewModel.visibleCoins.firstWhere(
+        (coin) => coin.symbol.toUpperCase() == 'BTC',
+        orElse: () => cryptoViewModel.visibleCoins.first,
+      );
     }
     _initChartData(); // 라인 차트용
     _initCandleDataList(); // 캔들스틱 차트용

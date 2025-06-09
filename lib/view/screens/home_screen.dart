@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
-import '../../core/constants.dart';
-import '../../data/dummy_coins.dart'; // DummyCoins 추가
+import '../../core/constants.dart'; // DummyCoins 추가
 import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
 import '../../model/coin_model.dart';
