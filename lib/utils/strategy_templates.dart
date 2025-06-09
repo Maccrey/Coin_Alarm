@@ -76,12 +76,13 @@ class StrategyTemplates {
   static Map<String, dynamic> _getBreakoutTemplate() {
     return {
       'type': 'breakout',
-      'period': 24, // 기준 기간 (시간)
-      'breakout_type': 'upward', // upward, downward, both
-      'volume_confirmation': true, // 거래량 확인 여부
+      'period': 24, // 분석 기간 (시간)
+      'breakoutType': 'upward', // 'upward' or 'downward'
+      'threshold': 3.0, // 돌파 임계값 (%)
+      'minVolumeRatio': 2.0, // 최소 거래량 비율
+      'confirmationPeriod': 1, // 확인 기간 (시간)
       'volume_multiplier': 1.5, // 평균 거래량의 배수
       'price_threshold': 0.02, // 돌파 임계값 (2%)
-      'confirmation_period': 4, // 확인 기간 (시간)
       'description': '24시간 고점/저점 돌파 감지 (거래량 1.5배 이상)',
     };
   }
@@ -90,9 +91,11 @@ class StrategyTemplates {
   static Map<String, dynamic> _getPullbackTemplate() {
     return {
       'type': 'pullback',
-      'trend_period': 168, // 추세 확인 기간 (7일)
-      'pullback_percent': 0.10, // 눌림목 비율 (10%)
-      'min_pullback_percent': 0.05, // 최소 눌림목 비율 (5%)
+      'pullbackPercent': 4.0, // 풀백 비율 (%)
+      'supportLevel': 0.0, // 지지선 가격 (0이면 자동 계산)
+      'trendDirection': 'upward', // 'upward' or 'downward'
+      'minVolume': 0.0, // 최소 거래량
+      'maxPullback': 8.0, // 최대 풀백 비율 (%)
       'recovery_percent': 0.03, // 반등 확인 비율 (3%)
       'trend_strength': 0.15, // 추세 강도 (15% 이상 상승)
       'rsi_condition': true, // RSI 조건 추가 (과매도 확인)
@@ -105,11 +108,12 @@ class StrategyTemplates {
   static Map<String, dynamic> _getRsiReversalTemplate() {
     return {
       'type': 'rsi_reversal',
-      'rsi_period': 14, // RSI 계산 기간
-      'oversold_threshold': 30, // 과매도 기준
-      'overbought_threshold': 70, // 과매수 기준
-      'reversal_type': 'oversold', // oversold, overbought, both
-      'confirmation_candles': 2, // 확인 캔들 수
+      'rsiPeriod': 14, // RSI 계산 기간
+      'rsiLowerThreshold': 25.0, // 과매도 임계값 (더 엄격하게)
+      'rsiUpperThreshold': 75.0, // 과매수 임계값 (더 엄격하게)
+      'reversalType': 'oversold', // 'oversold' or 'overbought'
+      'confirmationPeriod': 2, // 확인 기간
+      'volumeIncrease': true, // 거래량 증가 확인
       'price_confirmation': true, // 가격 확인 여부
       'min_reversal_percent': 0.02, // 최소 반전 비율 (2%)
       'volume_factor': 1.2, // 거래량 조건 (평균의 1.2배)
@@ -121,10 +125,11 @@ class StrategyTemplates {
   static Map<String, dynamic> _getGoldenCrossTemplate() {
     return {
       'type': 'golden_cross',
-      'short_ma_period': 20, // 단기 이동평균 기간 (20일)
-      'long_ma_period': 50, // 장기 이동평균 기간 (50일)
-      'ma_type': 'sma', // sma, ema, wma
-      'volume_confirmation': true, // 거래량 확인
+      'shortPeriod': 5, // 단기 이동평균 기간 (일)
+      'longPeriod': 20, // 장기 이동평균 기간 (일)
+      'crossType': 'golden', // 'golden' or 'dead'
+      'minAngle': 5.0, // 최소 기울기 각도
+      'volumeConfirmation': true, // 거래량 확인
       'volume_multiplier': 1.3, // 거래량 배수
       'cross_angle': 5, // 교차 각도 (도)
       'price_above_ma': true, // 가격이 이동평균 위에 있어야 함
@@ -137,10 +142,11 @@ class StrategyTemplates {
   static Map<String, dynamic> _getDeadCrossTemplate() {
     return {
       'type': 'dead_cross',
-      'short_ma_period': 20, // 단기 이동평균 기간 (20일)
-      'long_ma_period': 50, // 장기 이동평균 기간 (50일)
-      'ma_type': 'sma', // sma, ema, wma
-      'volume_confirmation': true, // 거래량 확인
+      'shortPeriod': 5, // 단기 이동평균 기간 (일)
+      'longPeriod': 20, // 장기 이동평균 기간 (일)
+      'crossType': 'dead', // 'golden' or 'dead'
+      'minAngle': 5.0, // 최소 기울기 각도 (하락)
+      'volumeConfirmation': true, // 거래량 확인
       'volume_multiplier': 1.3, // 거래량 배수
       'cross_angle': 5, // 교차 각도 (도)
       'price_below_ma': true, // 가격이 이동평균 아래에 있어야 함
@@ -153,11 +159,13 @@ class StrategyTemplates {
   static Map<String, dynamic> _getCandlePatternTemplate() {
     return {
       'type': 'candle_pattern',
-      'pattern_types': ['hammer', 'doji', 'engulfing'], // 감지할 패턴 목록
-      'pattern_strength': 'medium', // weak, medium, strong
+      'patternType': 'hammer', // 'hammer', 'doji', 'engulfing', 'shooting_star'
+      'confirmationCandles': 2, // 확인용 캔들 수
+      'minBodyRatio': 0.6, // 최소 몸통 비율
+      'maxWickRatio': 0.3, // 최대 꼬리 비율
+      'volumeWeight': 1.5, // 거래량 가중치
       'confirmation_required': true, // 다음 캔들 확인 필요
       'volume_condition': true, // 거래량 조건
-      'min_body_ratio': 0.1, // 최소 몸체 비율
       'shadow_ratio': 2.0, // 그림자 비율
       'trend_context': true, // 추세 맥락 고려
       'lookback_period': 20, // 패턴 확인 기간
@@ -284,11 +292,11 @@ class StrategyTemplates {
         }
         break;
       case 'rsi_reversal':
-        if (!template.containsKey('rsi_period')) {
+        if (!template.containsKey('rsiPeriod')) {
           errors.add('RSI 반등: RSI 기간이 지정되지 않았습니다.');
         }
-        if (!template.containsKey('oversold_threshold') &&
-            !template.containsKey('overbought_threshold')) {
+        if (!template.containsKey('rsiLowerThreshold') &&
+            !template.containsKey('rsiUpperThreshold')) {
           errors.add('RSI 반등: 과매도/과매수 임계값이 지정되지 않았습니다.');
         }
         break;

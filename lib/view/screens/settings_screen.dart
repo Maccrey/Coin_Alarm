@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:math';
 import '../../core/theme.dart';
 import '../../core/constants.dart';
 import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/settings_viewmodel.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
+import '../../services/strategy_monitoring_service.dart';
 import 'login_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
@@ -1374,8 +1376,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<bool> _getMonitoringServiceStatus() async {
     try {
       // StrategyMonitoringService의 isRunning 상태를 확인
-      // 실제 구현에서는 StrategyMonitoringService.isRunning 호출
-      return false; // 임시로 false 반환
+      return await StrategyMonitoringService.isRunning;
     } catch (e) {
       print('모니터링 서비스 상태 확인 오류: $e');
       return false;
@@ -1389,40 +1390,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (isCurrentlyRunning) {
         // 서비스 중지
-        // success = await StrategyMonitoringService.stopService();
-        success = true; // 임시로 true 반환
+        print('[서비스토글] 서비스 중지 시작');
+        success = await StrategyMonitoringService.stopService();
 
         if (success) {
+          print('[서비스토글] 서비스 중지 성공');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('전략 모니터링 서비스가 중지되었습니다'),
               backgroundColor: Colors.orange,
             ),
           );
+        } else {
+          print('[서비스토글] 서비스 중지 실패');
         }
       } else {
-        // 권한 확인 및 서비스 시작
-        final hasPermissions = await _checkAndRequestPermissions();
-        if (!hasPermissions) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('필요한 권한이 부족합니다'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          return;
+        // 서비스 시작
+        print('[서비스토글] 서비스 시작 시작');
+
+        // 권한 확인 (하지만 실패해도 서비스 시작 시도)
+        bool hasPermissions = false;
+        try {
+          hasPermissions = await _checkAndRequestPermissions();
+          print('[서비스토글] 권한 확인 결과: $hasPermissions');
+        } catch (e) {
+          print('[서비스토글] 권한 확인 실패: $e');
+          hasPermissions = false;
         }
 
-        // success = await StrategyMonitoringService.startService();
-        success = true; // 임시로 true 반환
-
-        if (success) {
+        // 권한이 없어도 서비스 시작 시도 (관대한 정책)
+        if (!hasPermissions) {
+          print('[서비스토글] 권한이 부족하지만 서비스 시작 시도');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('전략 모니터링 서비스가 시작되었습니다'),
+              content: Text(
+                '일부 권한이 부족하지만 서비스를 시작합니다. 알림이 정상적으로 작동하지 않을 수 있습니다.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+
+        success = await StrategyMonitoringService.startService();
+        print('[서비스토글] 서비스 시작 시도 결과: $success');
+
+        if (success) {
+          print('[서비스토글] 서비스 시작 성공');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                hasPermissions
+                    ? '전략 모니터링 서비스가 시작되었습니다'
+                    : '전략 모니터링 서비스가 시작되었습니다 (일부 권한 부족)',
+              ),
               backgroundColor: Colors.green,
             ),
           );
+        } else {
+          print('[서비스토글] 서비스 시작 실패');
         }
       }
 
@@ -1453,28 +1479,137 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // 필요한 권한 확인 및 요청
   Future<bool> _checkAndRequestPermissions() async {
     try {
-      // 알림 권한 확인
-      // 실제 구현에서는 permission_handler 패키지 사용
-      // final notificationStatus = await Permission.notification.status;
-      // if (!notificationStatus.isGranted) {
-      //   final result = await Permission.notification.request();
-      //   if (!result.isGranted) return false;
-      // }
+      print('[권한체크] 권한 확인 시작');
 
-      // 배터리 최적화 제외 권한 확인 (Android)
-      // final ignoreBatteryStatus = await Permission.ignoreBatteryOptimizations.status;
-      // if (!ignoreBatteryStatus.isGranted) {
-      //   final result = await Permission.ignoreBatteryOptimizations.request();
-      //   if (!result.isGranted) {
-      //     // 사용자에게 수동 설정 안내
-      //     _showBatteryOptimizationDialog();
-      //   }
-      // }
-
-      return true; // 임시로 true 반환
+      // 플랫폼별로 분기하여 권한 처리
+      if (Theme.of(context).platform == TargetPlatform.iOS) {
+        return await _checkIOSPermissions();
+      } else {
+        return await _checkAndroidPermissions();
+      }
     } catch (e) {
       print('권한 확인 오류: $e');
-      return false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('권한 확인 중 오류가 발생했습니다: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      // 에러 발생 시에도 서비스 시작을 허용 (권한은 선택사항으로 처리)
+      return true;
+    }
+  }
+
+  // iOS 권한 확인
+  Future<bool> _checkIOSPermissions() async {
+    print('[iOS권한] iOS 권한 확인 시작');
+
+    try {
+      // iOS에서는 flutter_local_notifications를 사용하여 알림 권한 확인
+      // 하지만 여기서는 간단히 permission_handler를 시도하고, 실패해도 진행
+      try {
+        final notificationStatus = await Permission.notification.status;
+        print('[iOS권한] 알림 권한 상태: $notificationStatus');
+
+        if (notificationStatus.isDenied) {
+          final result = await Permission.notification.request();
+          print('[iOS권한] 알림 권한 요청 결과: $result');
+        }
+      } catch (e) {
+        print('[iOS권한] 알림 권한 확인 실패 (정상적임): $e');
+      }
+
+      // iOS 백그라운드 제한 안내
+      if (mounted) {
+        _showIOSBackgroundLimitationDialog();
+      }
+
+      print('[iOS권한] iOS 권한 체크 완료 - 허용으로 처리');
+      return true; // iOS에서는 관대하게 허용
+    } catch (e) {
+      print('[iOS권한] iOS 권한 체크 오류: $e');
+      return true; // 오류 발생 시에도 허용
+    }
+  }
+
+  // Android 권한 확인
+  Future<bool> _checkAndroidPermissions() async {
+    print('[Android권한] Android 권한 확인 시작');
+    bool allPermissionsGranted = true;
+
+    try {
+      // 1. 알림 권한 확인 및 요청
+      try {
+        final notificationStatus = await Permission.notification.status;
+        print('[Android권한] 알림 권한 상태: $notificationStatus');
+
+        if (notificationStatus.isDenied) {
+          final result = await Permission.notification.request();
+          print('[Android권한] 알림 권한 요청 결과: $result');
+
+          if (!result.isGranted) {
+            allPermissionsGranted = false;
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('알림 권한이 필요합니다. 설정에서 권한을 허용해주세요.'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
+          }
+        }
+      } catch (e) {
+        print('[Android권한] 알림 권한 확인 실패: $e');
+        // 알림 권한 실패는 치명적이지 않으므로 계속 진행
+      }
+
+      // 2. 배터리 최적화 제외 권한 (선택사항)
+      try {
+        final batteryStatus =
+            await Permission.ignoreBatteryOptimizations.status;
+        print('[Android권한] 배터리 최적화 권한 상태: $batteryStatus');
+
+        if (batteryStatus.isDenied) {
+          final result = await Permission.ignoreBatteryOptimizations.request();
+          print('[Android권한] 배터리 최적화 권한 요청 결과: $result');
+
+          if (!result.isGranted) {
+            // 배터리 최적화는 선택사항이므로 안내만 제공
+            if (mounted) {
+              _showBatteryOptimizationDialog();
+            }
+          }
+        }
+      } catch (e) {
+        print('[Android권한] 배터리 최적화 권한 확인 실패: $e');
+        // 배터리 최적화 권한 실패는 무시
+      }
+
+      // 3. 시스템 오버레이 권한 (선택사항)
+      try {
+        final systemAlertWindowStatus =
+            await Permission.systemAlertWindow.status;
+        print('[Android권한] 시스템 오버레이 권한 상태: $systemAlertWindowStatus');
+
+        if (systemAlertWindowStatus.isDenied) {
+          await Permission.systemAlertWindow.request();
+        }
+      } catch (e) {
+        print('[Android권한] 시스템 오버레이 권한 확인 실패: $e');
+        // 시스템 오버레이 권한 실패는 무시
+      }
+
+      print('[Android권한] Android 권한 체크 완료 - 결과: $allPermissionsGranted');
+
+      // 알림 권한만 필수이고, 나머지는 선택사항으로 처리
+      // 하지만 너무 엄격하지 않게 처리
+      return true; // 관대하게 허용하여 서비스 시작 가능하도록
+    } catch (e) {
+      print('[Android권한] Android 권한 체크 오류: $e');
+      return true; // 오류 발생 시에도 허용
     }
   }
 
@@ -1487,6 +1622,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: const Text(
           '백그라운드에서 안정적인 모니터링을 위해 앱의 배터리 최적화를 해제해 주세요.\n\n'
           '설정 > 앱 > Coin Alarm > 배터리 > 배터리 최적화 안 함',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // iOS 백그라운드 제한 안내 다이얼로그
+  void _showIOSBackgroundLimitationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('iOS 백그라운드 제한 안내'),
+        content: const Text(
+          'iOS는 백그라운드 작업에 제한이 있어 완전한 모니터링이 어려울 수 있습니다.\n\n'
+          '최상의 경험을 위해:\n'
+          '• 앱을 포그라운드에서 실행\n'
+          '• 설정 > 일반 > 백그라운드 앱 새로고침 활성화\n'
+          '• 배터리 절약 모드 비활성화\n\n'
+          '그래도 일부 전략 알림이 누락될 수 있습니다.',
         ),
         actions: [
           TextButton(

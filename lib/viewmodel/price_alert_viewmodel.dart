@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../services/price_alert_service.dart';
 import '../model/price_alert_model.dart';
 import '../model/coin_model.dart';
+import 'package:hive/hive.dart';
 
 // 가격 알림 관련 ViewModel 클래스
 class PriceAlertViewModel extends ChangeNotifier {
@@ -16,8 +18,15 @@ class PriceAlertViewModel extends ChangeNotifier {
   // 필터링
   String? _coinFilter;
 
+  bool _boxListenerRegistered = false;
+
   // 생성자
-  PriceAlertViewModel(this._alertService);
+  PriceAlertViewModel(this._alertService) {
+    // Hive 박스 변경 감지하여 자동 새로고침
+    Hive.box<PriceAlert>('price_alerts').listenable().addListener(() {
+      loadUserAlerts('local-user');
+    });
+  }
 
   // Getters
   bool get isLoading => _isLoading;
@@ -35,6 +44,18 @@ class PriceAlertViewModel extends ChangeNotifier {
       final alerts = await _alertService.getAlerts(userId);
       _alerts = alerts;
       _errorMessage = null;
+
+      // Hive 박스 변경 리스너를 한 번만 등록
+      if (!_boxListenerRegistered) {
+        try {
+          Hive.box<PriceAlert>('price_alerts').listenable().addListener(() {
+            notifyListeners();
+          });
+          _boxListenerRegistered = true;
+        } catch (e) {
+          debugPrint('박스 리스너 등록 실패: $e');
+        }
+      }
     } catch (e) {
       _errorMessage = '가격 알림 로드 실패: $e';
       debugPrint(_errorMessage);

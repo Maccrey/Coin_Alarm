@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import '../model/strategy_alert_model.dart';
 import '../services/strategy_alert_service.dart';
 import '../utils/strategy_templates.dart';
+import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 /// 전략 기반 알림 ViewModel 클래스
 /// Provider 패턴을 사용하여 전략 알림의 상태 관리와 비즈니스 로직을 처리합니다.
@@ -15,6 +17,7 @@ class StrategyAlertViewModel extends ChangeNotifier {
   String? _selectedRiskFilter;
   String? _selectedCoinFilter;
   String? _selectedStatusFilter;
+  bool _boxListenerRegistered = false;
 
   // Public Getters
 
@@ -79,11 +82,34 @@ class StrategyAlertViewModel extends ChangeNotifier {
       _setLoading(true);
       _clearError();
 
+      print('[StrategyAlertViewModel] 사용자 알림 로드 시작: $userId');
       _currentUserId = userId;
       _alerts = await StrategyAlertService.getAllAlerts(userId);
+      print('[StrategyAlertViewModel] 로드된 알림 수: ${_alerts.length}');
 
+      // Hive 박스 변경 리스너를 한 번만 등록
+      if (!_boxListenerRegistered) {
+        try {
+          Hive.box<StrategyAlert>('strategy_alerts').listenable().addListener(
+            () {
+              print('[StrategyAlertViewModel] Hive 박스 변경 감지됨');
+              notifyListeners();
+            },
+          );
+          _boxListenerRegistered = true;
+          print('[StrategyAlertViewModel] Hive 박스 리스너 등록 완료');
+        } catch (e) {
+          debugPrint('박스 리스너 등록 실패: $e');
+        }
+      }
+
+      print('[StrategyAlertViewModel] 현재 필터: $_selectedStatusFilter');
+      print(
+        '[StrategyAlertViewModel] 필터링 적용 후 알림 수: ${_applyFilters(_alerts).length}',
+      );
       notifyListeners();
     } catch (e) {
+      print('[StrategyAlertViewModel] 알림 로드 오류: $e');
       _setError('알림 목록을 불러오는 중 오류가 발생했습니다: $e');
     } finally {
       _setLoading(false);
@@ -239,7 +265,7 @@ class StrategyAlertViewModel extends ChangeNotifier {
       final index = _alerts.indexWhere((alert) => alert.id == alertId);
       if (index != -1) {
         _alerts[index] = updatedAlert;
-        notifyListeners();
+        await loadUserAlerts(_currentUserId!);
       }
 
       return true;
@@ -264,7 +290,7 @@ class StrategyAlertViewModel extends ChangeNotifier {
 
       // 로컬 목록에서 제거
       _alerts.removeWhere((alert) => alert.id == alertId);
-      notifyListeners();
+      await loadUserAlerts(_currentUserId!);
 
       return true;
     } catch (e) {
@@ -290,7 +316,7 @@ class StrategyAlertViewModel extends ChangeNotifier {
       final index = _alerts.indexWhere((alert) => alert.id == alertId);
       if (index != -1) {
         _alerts[index] = triggeredAlert;
-        notifyListeners();
+        await loadUserAlerts(_currentUserId!);
       }
 
       return true;
@@ -325,6 +351,11 @@ class StrategyAlertViewModel extends ChangeNotifier {
   /// [status] 필터할 상태 (pending, triggered, disabled, null이면 전체)
   void setStatusFilter(String? status) {
     _selectedStatusFilter = status;
+    print('[StrategyAlertViewModel] 상태 필터 설정: $status');
+    print('[StrategyAlertViewModel] 필터링 전 알림 수: ${_alerts.length}');
+    print(
+      '[StrategyAlertViewModel] 필터링 후 알림 수: ${_applyFilters(_alerts).length}',
+    );
     notifyListeners();
   }
 
@@ -390,7 +421,20 @@ class StrategyAlertViewModel extends ChangeNotifier {
   /// 알림 목록 새로고침
   Future<void> refreshAlerts() async {
     if (_currentUserId != null) {
-      await loadUserAlerts(_currentUserId!);
+      print('[StrategyAlertViewModel] 알림 목록 새로고침 시작');
+      _setLoading(true);
+      try {
+        _alerts = await StrategyAlertService.getAllAlerts(_currentUserId!);
+        print('[StrategyAlertViewModel] 새로고침 후 알림 수: ${_alerts.length}');
+        print(
+          '[StrategyAlertViewModel] 필터링 적용 후 알림 수: ${_applyFilters(_alerts).length}',
+        );
+      } catch (e) {
+        print('[StrategyAlertViewModel] 알림 새로고침 오류: $e');
+        _setError('알림 새로고침 중 오류가 발생했습니다: $e');
+      } finally {
+        _setLoading(false);
+      }
     }
   }
 
@@ -421,6 +465,11 @@ class StrategyAlertViewModel extends ChangeNotifier {
 
   /// 필터 적용
   List<StrategyAlert> _applyFilters(List<StrategyAlert> alerts) {
+    print('[_applyFilters] 필터링 전 알림 수: ${alerts.length}');
+    print(
+      '[_applyFilters] 현재 필터 상태: 전략=${_selectedStrategyFilter}, 위험도=${_selectedRiskFilter}, 코인=${_selectedCoinFilter}, 상태=${_selectedStatusFilter}',
+    );
+
     List<StrategyAlert> filteredAlerts = List.from(alerts);
 
     // 전략 필터
@@ -428,6 +477,7 @@ class StrategyAlertViewModel extends ChangeNotifier {
       filteredAlerts = filteredAlerts
           .where((alert) => alert.strategyName == _selectedStrategyFilter)
           .toList();
+      print('[_applyFilters] 전략 필터 적용 후: ${filteredAlerts.length}개');
     }
 
     // 위험도 필터
@@ -435,6 +485,7 @@ class StrategyAlertViewModel extends ChangeNotifier {
       filteredAlerts = filteredAlerts
           .where((alert) => alert.riskLevel == _selectedRiskFilter)
           .toList();
+      print('[_applyFilters] 위험도 필터 적용 후: ${filteredAlerts.length}개');
     }
 
     // 코인 필터
@@ -442,26 +493,49 @@ class StrategyAlertViewModel extends ChangeNotifier {
       filteredAlerts = filteredAlerts
           .where((alert) => alert.coinId == _selectedCoinFilter)
           .toList();
+      print('[_applyFilters] 코인 필터 적용 후: ${filteredAlerts.length}개');
     }
 
     // 상태 필터
     if (_selectedStatusFilter != null) {
+      int beforeCount = filteredAlerts.length;
       switch (_selectedStatusFilter) {
         case 'pending':
           filteredAlerts = filteredAlerts
               .where((alert) => !alert.isTriggered && alert.isEnabled)
               .toList();
+          print(
+            '[_applyFilters] pending 필터 적용: ${beforeCount}개 -> ${filteredAlerts.length}개',
+          );
           break;
         case 'triggered':
           filteredAlerts = filteredAlerts
               .where((alert) => alert.isTriggered)
               .toList();
+          print(
+            '[_applyFilters] triggered 필터 적용: ${beforeCount}개 -> ${filteredAlerts.length}개',
+          );
           break;
         case 'disabled':
           filteredAlerts = filteredAlerts
               .where((alert) => !alert.isEnabled)
               .toList();
+          print(
+            '[_applyFilters] disabled 필터 적용: ${beforeCount}개 -> ${filteredAlerts.length}개',
+          );
           break;
+      }
+    }
+
+    print('[_applyFilters] 최종 필터링 결과: ${filteredAlerts.length}개');
+
+    if (filteredAlerts.isEmpty && _selectedStatusFilter != null) {
+      print('[_applyFilters] 경고: 필터링 결과가 없습니다. 데이터를 확인하세요.');
+      // 알림 상태 디버깅을 위해 전체 알림의 상태 출력
+      for (var alert in alerts) {
+        print(
+          '[_applyFilters] 알림 ID: ${alert.id}, 활성화: ${alert.isEnabled}, 발생됨: ${alert.isTriggered}, 전략: ${alert.strategyName}',
+        );
       }
     }
 

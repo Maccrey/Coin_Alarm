@@ -313,6 +313,14 @@ class _AlertsScreenState extends State<AlertsScreen>
     } catch (e) {
       coin = null;
     }
+
+    // 현재 가격과 목표 가격 비교
+    final currentPrice = coin?.currentPrice ?? 0.0;
+    final targetPrice = alert.priceTarget;
+    final conditionMet = alert.isAbove
+        ? currentPrice >= targetPrice
+        : currentPrice <= targetPrice;
+
     return Dismissible(
       key: Key(alert.id),
       background: Container(
@@ -327,45 +335,43 @@ class _AlertsScreenState extends State<AlertsScreen>
         // 삭제 후 새로고침 필요시 추가
       },
       child: Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.only(bottom: 8),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
           onTap: () => _showAlertDetailDialog(alert, coin),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: coin?.imageUrl != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(20),
-                              child: Image.network(
-                                coin!.imageUrl!,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    const Icon(Icons.currency_bitcoin),
-                              ),
-                            )
-                          : Icon(
-                              Icons.currency_bitcoin,
-                              color: AppTheme.primaryColor,
-                            ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                // 코인 이미지
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceVariant,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: coin?.imageUrl != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Image.network(
+                            coin!.imageUrl!,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.currency_bitcoin, size: 24),
+                          ),
+                        )
+                      : Icon(
+                          Icons.currency_bitcoin,
+                          size: 24,
+                          color: AppTheme.primaryColor,
+                        ),
+                ),
+                const SizedBox(width: 16),
+                // 알림 정보
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
                           Text(
                             alert.coinSymbol,
@@ -374,116 +380,154 @@ class _AlertsScreenState extends State<AlertsScreen>
                               fontSize: 16,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                alert.isAbove
-                                    ? Icons.arrow_upward
-                                    : Icons.arrow_downward,
-                                size: 14,
-                                color: alert.isAbove
-                                    ? Colors.blue.shade700
-                                    : Colors.red.shade700,
+                          const SizedBox(width: 8),
+                          // 조건 달성 상태 표시
+                          if (!alert.isTriggered)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '₩${_formatPrice(alert.priceTarget)}',
+                              decoration: BoxDecoration(
+                                color: conditionMet
+                                    ? Colors.green.withOpacity(0.1)
+                                    : Colors.grey.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: conditionMet
+                                      ? Colors.green
+                                      : Colors.grey,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                conditionMet ? '조건 달성' : '대기중',
                                 style: TextStyle(
-                                  color: alert.isAbove
-                                      ? Colors.blue.shade700
-                                      : Colors.red.shade700,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: conditionMet
+                                      ? Colors.green
+                                      : Colors.grey[600],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // 목표 가격과 조건
+                      Row(
+                        children: [
+                          Icon(
+                            alert.isAbove
+                                ? Icons.arrow_upward
+                                : Icons.arrow_downward,
+                            size: 14,
+                            color: alert.isAbove
+                                ? Colors.blue.shade700
+                                : Colors.red.shade700,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '목표: ₩${_formatPrice(alert.priceTarget)}',
+                            style: TextStyle(
+                              color: alert.isAbove
+                                  ? Colors.blue.shade700
+                                  : Colors.red.shade700,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // 현재 가격 표시
+                      if (coin?.currentPrice != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.trending_flat,
+                              size: 14,
+                              color: Colors.grey[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '현재: ₩${_formatPrice(currentPrice)}',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // 가격 차이 표시
+                            if (currentPrice != 0.0) ...[
+                              Icon(
+                                conditionMet
+                                    ? Icons.check_circle
+                                    : Icons.schedule,
+                                size: 12,
+                                color: conditionMet
+                                    ? Colors.green
+                                    : Colors.orange,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                conditionMet
+                                    ? '달성!'
+                                    : '차이: ₩${_formatPrice((targetPrice - currentPrice).abs())}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: conditionMet
+                                      ? Colors.green
+                                      : Colors.orange[700],
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // 알림 상태 및 시간 정보
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (alert.isTriggered) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          '발생됨',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
                           ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: alert.isTriggered
-                            ? Colors.orange.withOpacity(0.2)
-                            : (alert.isAbove
-                                  ? Colors.red.withOpacity(0.2)
-                                  : Colors.blue.withOpacity(0.2)),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        alert.status,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: alert.isTriggered
-                              ? Colors.orange
-                              : (alert.isAbove ? Colors.red : Colors.blue),
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                if (alert.notes != null && alert.notes!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceVariant.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.note, size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            alert.notes!,
-                            style: const TextStyle(fontSize: 13),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                      if (alert.triggeredAt != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatDateTime(alert.triggeredAt!),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[600],
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Icon(
-                      Icons.access_time,
-                      size: 12,
-                      color: Theme.of(context).hintColor,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '생성: ${_formatDateTime(alert.createdAt)}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).hintColor,
-                      ),
-                    ),
-                    if (alert.isTriggered && alert.triggeredAt != null) ...[
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.notifications_active,
-                        size: 12,
-                        color: Theme.of(context).hintColor,
-                      ),
-                      const SizedBox(width: 4),
+                    ] else ...[
                       Text(
-                        '발생: ${_formatDateTime(alert.triggeredAt!)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).hintColor,
-                        ),
+                        _formatDateTime(alert.createdAt),
+                        style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                       ),
                     ],
                   ],
@@ -943,7 +987,33 @@ class _AlertsScreenState extends State<AlertsScreen>
           );
         }
 
+        print('[AlertsScreen] 필터링 후 알림 수: ${alerts.length}');
+        print(
+          '[AlertsScreen] 현재 선택된 필터: ${strategyAlertVM.selectedStatusFilter}',
+        );
+
         if (alerts.isEmpty) {
+          // 선택된 필터에 따라 메시지 변경
+          String mainMessage = '전략 기반 알림이 없습니다';
+          String subMessage = '단타매매 전략을 설정하여\n스마트한 알림을 받아보세요';
+
+          if (strategyAlertVM.selectedStatusFilter != null) {
+            switch (strategyAlertVM.selectedStatusFilter) {
+              case 'pending':
+                mainMessage = '대기중인 전략 알림이 없습니다';
+                subMessage = '새로운 전략 알림을 추가하거나\n다른 필터를 선택해보세요';
+                break;
+              case 'triggered':
+                mainMessage = '발생된 전략 알림이 없습니다';
+                subMessage = '아직 조건이 충족된 알림이 없습니다';
+                break;
+              case 'disabled':
+                mainMessage = '비활성화된 전략 알림이 없습니다';
+                subMessage = '알림 설정을 비활성화하면 이곳에 표시됩니다';
+                break;
+            }
+          }
+
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -955,16 +1025,25 @@ class _AlertsScreenState extends State<AlertsScreen>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  '전략 기반 알림이 없습니다',
+                  mainMessage,
                   style: TextStyle(fontSize: 18, color: theme.disabledColor),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '단타매매 전략을 설정하여\n스마트한 알림을 받아보세요',
+                  subMessage,
                   style: TextStyle(color: theme.disabledColor),
                   textAlign: TextAlign.center,
                 ),
-                if (_tabController.index == 2) ...[
+                const SizedBox(height: 16),
+                if (strategyAlertVM.selectedStatusFilter != null)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.filter_alt_off),
+                    label: const Text('필터 초기화'),
+                    onPressed: () => strategyAlertVM.setStatusFilter(null),
+                  ),
+                if (_tabController.index == 2 &&
+                    (strategyAlertVM.selectedStatusFilter == null ||
+                        strategyAlertVM.selectedStatusFilter == 'pending')) ...[
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
                     icon: const Icon(Icons.add),
@@ -1044,7 +1123,15 @@ class _AlertsScreenState extends State<AlertsScreen>
       label: Text(label),
       selected: isSelected,
       onSelected: (selected) {
-        strategyAlertVM.setStatusFilter(selected ? filterValue : null);
+        print('[FilterChip] 필터 선택: $filterValue, selected: $selected');
+        if (selected) {
+          strategyAlertVM.setStatusFilter(filterValue);
+        } else {
+          strategyAlertVM.setStatusFilter(null);
+        }
+
+        // 강제로 상태 업데이트
+        setState(() {});
       },
       selectedColor: theme.colorScheme.primaryContainer,
       checkmarkColor: theme.colorScheme.primary,
@@ -1316,6 +1403,8 @@ class _AlertsScreenState extends State<AlertsScreen>
       context,
       listen: false,
     );
+    // 사용자 ID를 반드시 먼저 설정
+    await strategyAlertVM.setUserId('local-user');
     final coin = coins.firstWhere((c) => c.id == coinId);
 
     final success = await strategyAlertVM.createStrategyAlertFromTemplate(

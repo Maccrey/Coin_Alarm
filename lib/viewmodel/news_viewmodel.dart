@@ -41,7 +41,9 @@ class NewsViewModel extends ChangeNotifier {
       final cachedData = box.get('cached_news');
       if (cachedData != null) {
         final List<dynamic> newsJsonList = cachedData;
-        _newsList = newsJsonList.map((json) => News.fromJson(json)).toList();
+        _newsList = newsJsonList
+            .map((json) => News.fromJson(Map<String, dynamic>.from(json)))
+            .toList();
         notifyListeners();
       }
     }
