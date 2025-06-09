@@ -573,15 +573,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            OutlinedButton(
+            // TODO: 추후 프로필 편집 기능 구현 예정
+            // 아래 '프로필 편집' 버튼은 임시로 주석처리
+            /*
+            // 예시: 프로필 편집 버튼
+            ElevatedButton(
               onPressed: () {
-                // TODO: 프로필 편집 화면으로 이동
+                // TODO: 프로필 편집 기능 구현 예정
               },
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 40),
-              ),
-              child: const Text('프로필 편집'),
+              child: Text('프로필 편집'),
             ),
+            */
           ],
         ),
       ),
