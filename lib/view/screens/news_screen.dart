@@ -28,7 +28,11 @@ class _NewsScreenState extends State<NewsScreen> {
     // 컴포넌트가 마운트되면 뉴스 데이터 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final newsViewModel = Provider.of<NewsViewModel>(context, listen: false);
-      newsViewModel.refreshNews();
+      // 모든 필터 초기화 후 전체 뉴스 로드
+      _selectedFilter = '전체';
+      newsViewModel.clearFilter(); // 필터 초기화
+      newsViewModel.refreshNews(); // 전체 뉴스 로드
+      debugPrint('뉴스 화면 초기화: 전체 뉴스 로드 요청');
     });
   }
 
@@ -46,7 +50,14 @@ class _NewsScreenState extends State<NewsScreen> {
 
     // NewsViewModel에 필터 적용
     final newsViewModel = Provider.of<NewsViewModel>(context, listen: false);
-    newsViewModel.setFilter(filter);
+    if (filter == '전체') {
+      newsViewModel.loadNewsByCoinId('');
+    } else {
+      // 코인 심볼(BTC, ETH 등)이나 ID를 적절한 형태로 변환
+      final coin = DummyCoins.getCoinById(filter);
+      final coinId = coin?.id ?? filter; // 코인 ID가 있으면 사용, 없으면 원래 필터값 사용
+      newsViewModel.loadNewsByCoinId(coinId);
+    }
   }
 
   // 검색 실행
@@ -379,7 +390,7 @@ class _NewsScreenState extends State<NewsScreen> {
                     setState(() {
                       _selectedFilter = '전체';
                     });
-                    viewModel.clearFilter();
+                    viewModel.loadNewsByCoinId('');
                   },
                   child: const Text('전체 보기'),
                 ),
@@ -511,7 +522,13 @@ class _NewsScreenState extends State<NewsScreen> {
 
   // 뉴스 목록 위젯
   Widget _buildNewsList(NewsViewModel viewModel) {
+    // 디버깅용 로그 추가
+    debugPrint(
+      '뉴스 목록 표시: 필터=${_selectedFilter}, 뉴스 개수=${viewModel.newsList.length}',
+    );
+
     if (viewModel.newsList.isEmpty) {
+      debugPrint('뉴스 목록이 비어있음');
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -529,21 +546,18 @@ class _NewsScreenState extends State<NewsScreen> {
                 color: Theme.of(context).disabledColor,
               ),
             ),
-            if (_searchController.text.isNotEmpty ||
-                _selectedFilter != '전체') ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                icon: const Icon(Icons.refresh),
-                label: const Text('필터 초기화'),
-                onPressed: () {
-                  _searchController.clear();
-                  setState(() {
-                    _selectedFilter = '전체';
-                  });
-                  viewModel.clearFilter();
-                },
-              ),
-            ],
+            const SizedBox(height: 8),
+            TextButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text('다시 로드'),
+              onPressed: () {
+                _searchController.clear();
+                setState(() {
+                  _selectedFilter = '전체';
+                });
+                viewModel.refreshNews();
+              },
+            ),
           ],
         ),
       );

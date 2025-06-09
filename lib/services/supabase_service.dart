@@ -494,7 +494,7 @@ class SupabaseService {
     }
   }
 
-  /// 특정 코인 관련 뉴스 조회
+  /// 코인 관련 뉴스 조회
   Future<List<News>> getNewsByCoin({
     required String coinId,
     int limit = 10,
@@ -504,15 +504,37 @@ class SupabaseService {
       throw Exception('Supabase가 초기화되지 않았습니다.');
     }
 
+    // 코인 ID 또는 심볼 정규화
+    final normalizedCoinId = _normalizeCoinId(coinId);
+    final coinSymbol = _getCoinSymbol(normalizedCoinId);
+
+    debugPrint('코인 관련 뉴스 조회: ID=$normalizedCoinId, 심볼=$coinSymbol');
+
     if (_useRealSupabase) {
       try {
-        final response = await _client
-            .from('news')
-            .select()
-            .contains('related_coins', [coinId.toLowerCase()])
-            .order('published_at', ascending: false)
-            .range(offset, offset + limit - 1);
+        // 코인 ID와 심볼 모두 검색
+        List<dynamic> response;
+        if (coinSymbol != null) {
+          // ID나 심볼 모두 검색
+          response = await _client
+              .from('news')
+              .select()
+              .or(
+                'related_coins.cs.{$normalizedCoinId},related_coins.cs.{$coinSymbol}',
+              )
+              .order('published_at', ascending: false)
+              .range(offset, offset + limit - 1);
+        } else {
+          // ID만 검색
+          response = await _client
+              .from('news')
+              .select()
+              .contains('related_coins', [normalizedCoinId.toLowerCase()])
+              .order('published_at', ascending: false)
+              .range(offset, offset + limit - 1);
+        }
 
+        debugPrint('코인 관련 뉴스 조회 결과: ${response.length}개');
         return List<News>.from(response.map((json) => News.fromJson(json)));
       } catch (e) {
         debugPrint('코인 관련 뉴스 조회 실패: $e');
@@ -520,8 +542,39 @@ class SupabaseService {
       }
     } else {
       // 더미 코인 관련 뉴스 조회
-      return DummyNews.getNewsByCoin(coinId, limit: limit);
+      return DummyNews.getNewsByCoin(normalizedCoinId, limit: limit);
     }
+  }
+
+  // 코인 ID 정규화 헬퍼 메서드
+  String _normalizeCoinId(String coinIdOrSymbol) {
+    final symbolToId = {
+      'btc': 'bitcoin',
+      'eth': 'ethereum',
+      'bnb': 'binancecoin',
+      'sol': 'solana',
+      'xrp': 'ripple',
+      'doge': 'dogecoin',
+      'ada': 'cardano',
+    };
+
+    final lowerCase = coinIdOrSymbol.toLowerCase();
+    return symbolToId[lowerCase] ?? lowerCase;
+  }
+
+  // 코인 심볼 조회 헬퍼 메서드
+  String? _getCoinSymbol(String coinId) {
+    final idToSymbol = {
+      'bitcoin': 'btc',
+      'ethereum': 'eth',
+      'binancecoin': 'bnb',
+      'solana': 'sol',
+      'ripple': 'xrp',
+      'dogecoin': 'doge',
+      'cardano': 'ada',
+    };
+
+    return idToSymbol[coinId.toLowerCase()];
   }
 
   /// 인기 뉴스 조회
