@@ -116,6 +116,7 @@ class MyApp extends StatelessWidget {
       providers: [
         // 서비스 제공
         Provider<ChartCacheService>(create: (_) => ChartCacheService()),
+        Provider<PriceAlertService>(create: (_) => PriceAlertService()),
 
         // 인증 관련 ViewModel
         ChangeNotifierProvider(create: (_) => AuthViewModel(supabaseService)),
@@ -136,7 +137,9 @@ class MyApp extends StatelessWidget {
         // 실시간 암호화폐 API 데이터 ViewModel
         ChangeNotifierProvider(create: (context) => CryptoViewModel()),
         // 차트 데이터 ViewModel
-        ChangeNotifierProvider(create: (context) => ChartViewModel()),
+        ChangeNotifierProvider(
+          create: (context) => ChartViewModel(ChartCacheService()),
+        ),
       ],
       builder: (context, child) {
         // SettingsViewModel에서 테마 모드 가져오기

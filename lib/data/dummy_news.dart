@@ -1,6 +1,7 @@
 // 더 이상 사용하지 않음 - Supabase 연동으로 대체, 삭제 예정
 
 import '../model/news_model.dart';
+import 'package:flutter/foundation.dart';
 
 // 더미 뉴스 데이터
 class DummyNews {
@@ -96,12 +97,56 @@ class DummyNews {
 
   // 특정 코인 관련 뉴스 가져오기
   static List<News> getNewsByCoin(String coinId, {int limit = 5}) {
-    final filteredNews =
-        newsList
-            .where((news) => news.relatedCoins.contains(coinId.toLowerCase()))
-            .toList()
-          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+    // 코인 ID와 심볼 매핑
+    final Map<String, String> symbolToId = {
+      'btc': 'bitcoin',
+      'eth': 'ethereum',
+      'bnb': 'binancecoin',
+      'sol': 'solana',
+      'xrp': 'ripple',
+      'doge': 'dogecoin',
+      'ada': 'cardano',
+    };
 
+    final Map<String, String> idToSymbol = {
+      'bitcoin': 'btc',
+      'ethereum': 'eth',
+      'binancecoin': 'bnb',
+      'solana': 'sol',
+      'ripple': 'xrp',
+      'dogecoin': 'doge',
+      'cardano': 'ada',
+    };
+
+    // 검색 ID 정규화
+    final lowerCaseId = coinId.toLowerCase();
+    final normalizedId = symbolToId[lowerCaseId] ?? lowerCaseId;
+    final relatedSymbol = idToSymbol[normalizedId];
+
+    // 디버그 출력
+    debugPrint(
+      '검색하는 코인 ID: $coinId, 정규화된 ID: $normalizedId, 관련 심볼: $relatedSymbol',
+    );
+
+    // 필터링 로직
+    final filteredNews = newsList.where((news) {
+      // 관련 코인 목록의 각 항목 확인
+      for (final coin in news.relatedCoins) {
+        final lowerCoin = coin.toLowerCase();
+
+        // ID 또는 심볼과 일치하는지 확인
+        if (lowerCoin == normalizedId ||
+            lowerCoin == lowerCaseId ||
+            (relatedSymbol != null && lowerCoin == relatedSymbol)) {
+          debugPrint('일치하는 뉴스 발견: ${news.title}, 관련 코인: $coin');
+          return true;
+        }
+      }
+      return false;
+    }).toList()..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+
+    // 결과 반환
+    debugPrint('필터링된 뉴스 개수: ${filteredNews.length}');
     return filteredNews.take(limit).toList();
   }
 
