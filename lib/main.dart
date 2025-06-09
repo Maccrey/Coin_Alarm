@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import 'core/theme.dart';
 import 'services/supabase_service.dart';
@@ -22,6 +23,10 @@ import 'services/chart_cache_service.dart';
 import 'model/chart_data_model.dart';
 import 'model/price_alert_model.dart';
 import 'services/price_alert_service.dart';
+import 'model/strategy_alert_model.dart';
+import 'services/strategy_alert_service.dart';
+import 'services/strategy_monitoring_service.dart';
+import 'viewmodel/strategy_alert_viewmodel.dart';
 
 // 앱 진입점
 void main() async {
@@ -54,6 +59,7 @@ void main() async {
   Hive.registerAdapter(ChartTypeAdapter());
   Hive.registerAdapter(ChartTimeframeAdapter());
   Hive.registerAdapter(PriceAlertAdapter());
+  Hive.registerAdapter(StrategyAlertAdapter());
 
   // 뉴스 캐시 박스 미리 오픈 (속도 개선)
   await Hive.openBox('news_cache');
@@ -65,6 +71,30 @@ void main() async {
   // 캐시 서비스 초기화
   await ChartCacheService().initialize();
   await PriceAlertService().initialize();
+  await StrategyAlertService.init();
+
+  // 포그라운드 서비스 초기화
+  FlutterForegroundTask.init(
+    androidNotificationOptions: AndroidNotificationOptions(
+      channelId: 'foreground_service_channel',
+      channelName: '포그라운드 서비스',
+      channelDescription: '전략 알림 모니터링 서비스',
+      channelImportance: NotificationChannelImportance.LOW,
+      priority: NotificationPriority.LOW,
+    ),
+    iosNotificationOptions: const IOSNotificationOptions(
+      showNotification: true,
+      playSound: false,
+    ),
+    foregroundTaskOptions: ForegroundTaskOptions(
+      eventAction: ForegroundTaskEventAction.repeat(30000), // 30초마다 실행
+      autoRunOnBoot: false, // 부팅 시 자동 실행 비활성화
+      allowWakeLock: true,
+      allowWifiLock: true,
+    ),
+  );
+
+  await StrategyMonitoringService.initialize();
 
   // Supabase 클라이언트 초기화
   final supabaseUrl = dotenv.env['SUPABASE_URL'];
@@ -131,6 +161,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (context) => PriceAlertViewModel(PriceAlertService()),
         ),
+        // 전략 기반 알림 ViewModel
+        ChangeNotifierProvider(create: (context) => StrategyAlertViewModel()),
         // 설정 관련 ViewModel
         ChangeNotifierProvider(
           create: (_) => SettingsViewModel(settingsService),

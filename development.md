@@ -25,3 +25,10 @@
 - Tasklist.md에는 Hive 기반 기능 전환 작업을 MSA 및 TDD 방식으로 세분화하여 반드시 기록한다.
 - 모든 함수와 주요 로직에는 한국어 주석을 작성한다.
 - 구현 완료 후 README.md, development.md, work.md, Tasklist.md에 반드시 진행상황과 변경사항을 기록한다.
+- 단타매매 전략 기반 알림 시스템 개발 시:
+  - Hive(로컬 저장소) 기반으로 모든 알림/전략/조건/지표 데이터를 저장/처리한다.
+  - 전략별 trigger_condition_json 구조는 명확히 정의하고, 확장 가능하게 설계한다.
+  - 모든 전략/알림/지표 관련 함수에 한국어 주석을 작성한다.
+  - Tasklist.md에 전략별 Task를 세분화하여 기록하고, TDD 방식으로 구현한다.
+  - 전략/알림 관련 UI/UX는 직관적이고, 실전 트레이딩에 적합하게 설계한다.
+  - 구현/테스트/문서화/룰 변경 시 README.md, development.md, work.md, Tasklist.md를 반드시 동기화한다.

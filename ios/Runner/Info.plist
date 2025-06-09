@@ -56,5 +56,20 @@
 	<string>이 앱은 Face ID를 사용하여 인증합니다.</string>
 	<key>NSLocalAuthenticationUsageDescription</key>
 	<string>이 앱은 생체 인증(지문/Face ID)으로 인증합니다.</string>
+	
+	<!-- 백그라운드 모드 설정 -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>background-processing</string>
+		<string>background-fetch</string>
+	</array>
+	
+	<!-- 로컬 알림 권한 설명 -->
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>이 앱은 전략 기반 알림을 제공하기 위해 알림 권한이 필요합니다.</string>
+	
+	<!-- 백그라운드 앱 새로고침 설명 -->
+	<key>NSBackgroundRefreshStatusDescription</key>
+	<string>백그라운드에서 전략 알림 조건을 모니터링합니다.</string>
 </dict>
 </plist>

@@ -20,6 +20,8 @@ Coin Alarm은 암호화폐 가격을 실시간으로 모니터링하고 사용�
 - 코인 시세/차트/뉴스/알림 실시간 제공
 - **설정: 생체 인증(지문/Face ID) 사용 가능**
 - 로컬 저장소(Hive) 기반 자동 로그인/알림/차트 캐시
+- 단타매매 전략 기반 코인 알림 시스템 (Hive 로컬 저장소 기반, 돌파매매, 눌림목, RSI 반등, 골든크로스, 캔들 패턴)
+- 전략별 템플릿 선택 및 조건 자동 입력, 실시간 조건 감지/알림 수신 (모든 데이터는 기기 내에 안전하게 저장)
 
 ## 기술 스택
 
@@ -233,3 +235,154 @@ webcrawler/         # 뉴스 크롤링 서버 (MSA 아키텍처)
 - 설정 화면에서 '생체 인증 사용' 스위치를 켜면, 기기에서 지문/Face ID 인증을 요구합니다.
 - 인증에 성공하면 이후 앱 실행/로그인 시 생체 인증을 사용할 수 있습니다.
 - 기기에서 생체 인증이 미지원/실패 시 안내 메시지가 표시됩니다.
+
+## 단타매매 전략 기반 알림 시스템 (Hive 로컬 저장소 기반)
+
+### 개요
+
+Coin Alarm은 일반적인 가격 알림뿐만 아니라 단타매매 전략에 기반한 고급 알림 시스템을 제공합니다. 모든 데이터는 Hive 로컬 저장소에 안전하게 저장되어 완전히 오프라인에서 동작합니다.
+
+### 지원하는 단타매매 전략
+
+#### 1. 돌파매매 (Breakout Trading)
+
+- **설명**: 저항선이나 지지선을 돌파할 때 거래하는 전략
+- **조건**: 가격이 일정 기간 고점 또는 저점을 돌파
+- **파라미터**:
+  - `period`: 기준 기간 (예: 24시간)
+  - `breakout_type`: 상향돌파 또는 하향돌파
+  - `volume_confirmation`: 거래량 확인 여부
+
+#### 2. 눌림목 매매 (Pullback Trading)
+
+- **설명**: 상승 추세에서 일시적 하락 후 재상승 시점을 포착
+- **조건**: 상승 추세 중 일정 비율 하락 후 반등
+- **파라미터**:
+  - `trend_period`: 추세 확인 기간 (예: 7일)
+  - `pullback_percent`: 눌림목 비율 (예: 5-15%)
+  - `recovery_percent`: 반등 확인 비율 (예: 2-5%)
+
+#### 3. RSI 반등 (RSI Reversal)
+
+- **설명**: RSI 과매도/과매수 구간에서 반전 신호 포착
+- **조건**: RSI가 30 이하 또는 70 이상에서 반전
+- **파라미터**:
+  - `rsi_period`: RSI 계산 기간 (일반적으로 14)
+  - `oversold_threshold`: 과매도 기준 (일반적으로 30)
+  - `overbought_threshold`: 과매수 기준 (일반적으로 70)
+  - `reversal_confirmation`: 반전 확인 조건
+
+#### 4. 골든크로스/데드크로스 (Golden/Dead Cross)
+
+- **설명**: 단기 이동평균선이 장기 이동평균선을 상향/하향 돌파
+- **조건**: MA5가 MA20을 교차할 때
+- **파라미터**:
+  - `short_period`: 단기 이동평균 기간 (예: 5일)
+  - `long_period`: 장기 이동평균 기간 (예: 20일)
+  - `cross_type`: 골든크로스 또는 데드크로스
+  - `volume_filter`: 거래량 필터 적용 여부
+
+#### 5. 캔들 패턴 (Candlestick Patterns)
+
+- **설명**: 특정 캔들스틱 패턴 발생 시 알림
+- **지원 패턴**:
+  - 망치형 (Hammer)
+  - 도지 (Doji)
+  - 연속상승/하락 캔들
+  - 갭업/갭다운
+- **파라미터**:
+  - `pattern_type`: 패턴 유형
+  - `confirmation_period`: 패턴 확인 기간
+  - `min_body_ratio`: 최소 몸통 비율
+
+### 기술적 구현
+
+#### 데이터 구조 (Hive 기반)
+
+```dart
+// 전략 기반 알림 모델
+@HiveType(typeId: 11)
+class StrategyAlert {
+  @HiveField(0) String id;
+  @HiveField(1) String userId;
+  @HiveField(2) String coinId;
+  @HiveField(3) String coinSymbol;
+  @HiveField(4) String strategyName;     // 전략명
+  @HiveField(5) String riskLevel;       // 위험도 (low, medium, high)
+  @HiveField(6) Map<String, dynamic> triggerCondition; // JSON 조건
+  @HiveField(7) bool isTriggered;
+  @HiveField(8) DateTime? triggeredAt;
+  @HiveField(9) DateTime createdAt;
+  @HiveField(10) String? notes;
+  @HiveField(11) bool isEnabled;        // 알림 활성화 상태
+}
+```
+
+#### 전략별 JSON 조건 예시
+
+```json
+// 돌파매매 조건
+{
+  "strategy": "breakout",
+  "period": 24,
+  "breakout_type": "upward",
+  "volume_confirmation": true,
+  "min_volume_ratio": 1.5
+}
+
+// 눌림목 매매 조건
+{
+  "strategy": "pullback",
+  "trend_period": 7,
+  "pullback_percent": 10,
+  "recovery_percent": 3,
+  "min_trend_strength": 0.7
+}
+
+// RSI 반등 조건
+{
+  "strategy": "rsi_reversal",
+  "rsi_period": 14,
+  "threshold": 30,
+  "reversal_type": "oversold_bounce",
+  "confirmation_periods": 2
+}
+```
+
+#### 포그라운드 서비스 모니터링
+
+대기중인 전략 알림이 있을 경우, 앱이 백그라운드에 있어도 조건을 지속적으로 모니터링:
+
+- **flutter_foreground_task**: 포그라운드 서비스 실행
+- **flutter_local_notifications**: 로컬 푸시 알림 발송
+- **주기적 체크**: 1분마다 시세 데이터 확인 및 전략 조건 평가
+- **배터리 최적화**: 효율적인 데이터 처리로 배터리 소모 최소화
+
+### 사용자 경험 (UX)
+
+#### 1. 전략 선택 및 설정
+
+- 직관적인 전략 선택 UI
+- 각 전략별 상세 설명 및 예시
+- 위험도별 색상 구분 (낮음: 초록, 보통: 노랑, 높음: 빨강)
+- 실시간 조건 미리보기
+
+#### 2. 알림 관리
+
+- 전략별 알림 그룹화
+- 알림 상태별 필터링 (대기중/발생됨/비활성)
+- 전략 성과 통계 (성공률, 수익률 등)
+- 원터치 활성화/비활성화
+
+#### 3. 백테스팅 (향후 확장)
+
+- 과거 데이터로 전략 성과 시뮬레이션
+- 최적 파라미터 추천
+- 위험도 분석 리포트
+
+### 보안 및 개인정보
+
+- **완전 로컬 저장**: 모든 전략과 알림 데이터는 사용자 기기에만 저장
+- **암호화**: Hive 암호화를 통한 데이터 보호
+- **오프라인 동작**: 인터넷 연결 없이도 알림 시스템 동작
+- **생체 인증**: 설정에서 생체 인증으로 추가 보안

@@ -114,6 +114,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: _buildStrategyMonitoringSettings(),
+                ),
+              ),
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: _buildLanguageSettings(settingsViewModel),
               ),
 
@@ -1251,6 +1258,240 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(isKorean ? '닫기' : 'Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 전략 모니터링 서비스 설정 위젯
+  Widget _buildStrategyMonitoringSettings() {
+    return ExpansionTile(
+      title: const Text('전략 기반 알림 모니터링'),
+      subtitle: const Text('단타매매 전략 알림을 백그라운드에서 모니터링합니다'),
+      leading: const Icon(Icons.analytics_outlined),
+      children: [
+        // 서비스 상태 표시
+        Consumer<SettingsViewModel>(
+          builder: (context, settingsViewModel, child) {
+            return FutureBuilder<bool>(
+              future: _getMonitoringServiceStatus(),
+              builder: (context, snapshot) {
+                final isRunning = snapshot.data ?? false;
+
+                return Column(
+                  children: [
+                    // 서비스 상태
+                    ListTile(
+                      leading: Icon(
+                        isRunning ? Icons.play_circle : Icons.pause_circle,
+                        color: isRunning ? Colors.green : Colors.grey,
+                      ),
+                      title: Text(isRunning ? '모니터링 서비스 실행 중' : '모니터링 서비스 중지됨'),
+                      subtitle: Text(
+                        isRunning
+                            ? '전략 알림 조건을 30초마다 체크하고 있습니다'
+                            : '전략 알림이 비활성화 상태입니다',
+                      ),
+                    ),
+
+                    const Divider(height: 1),
+
+                    // 서비스 제어 버튼
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: Icon(
+                                isRunning ? Icons.stop : Icons.play_arrow,
+                              ),
+                              label: Text(isRunning ? '서비스 중지' : '서비스 시작'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isRunning
+                                    ? Colors.red
+                                    : Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () =>
+                                  _toggleMonitoringService(isRunning),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: const Icon(Icons.refresh),
+                            onPressed: () => setState(() {}),
+                            tooltip: '상태 새로고침',
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // 권한 안내
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 20,
+                              color: Colors.blue.shade700,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '서비스 시작 시 알림 권한과 배터리 최적화 설정이 필요할 수 있습니다.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  // 모니터링 서비스 상태 조회
+  Future<bool> _getMonitoringServiceStatus() async {
+    try {
+      // StrategyMonitoringService의 isRunning 상태를 확인
+      // 실제 구현에서는 StrategyMonitoringService.isRunning 호출
+      return false; // 임시로 false 반환
+    } catch (e) {
+      print('모니터링 서비스 상태 확인 오류: $e');
+      return false;
+    }
+  }
+
+  // 모니터링 서비스 시작/중지 토글
+  Future<void> _toggleMonitoringService(bool isCurrentlyRunning) async {
+    try {
+      bool success = false;
+
+      if (isCurrentlyRunning) {
+        // 서비스 중지
+        // success = await StrategyMonitoringService.stopService();
+        success = true; // 임시로 true 반환
+
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('전략 모니터링 서비스가 중지되었습니다'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } else {
+        // 권한 확인 및 서비스 시작
+        final hasPermissions = await _checkAndRequestPermissions();
+        if (!hasPermissions) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('필요한 권한이 부족합니다'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        // success = await StrategyMonitoringService.startService();
+        success = true; // 임시로 true 반환
+
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('전략 모니터링 서비스가 시작되었습니다'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isCurrentlyRunning ? '서비스 중지에 실패했습니다' : '서비스 시작에 실패했습니다',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+
+      // UI 업데이트
+      setState(() {});
+    } catch (e) {
+      print('모니터링 서비스 토글 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('서비스 제어 중 오류가 발생했습니다'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // 필요한 권한 확인 및 요청
+  Future<bool> _checkAndRequestPermissions() async {
+    try {
+      // 알림 권한 확인
+      // 실제 구현에서는 permission_handler 패키지 사용
+      // final notificationStatus = await Permission.notification.status;
+      // if (!notificationStatus.isGranted) {
+      //   final result = await Permission.notification.request();
+      //   if (!result.isGranted) return false;
+      // }
+
+      // 배터리 최적화 제외 권한 확인 (Android)
+      // final ignoreBatteryStatus = await Permission.ignoreBatteryOptimizations.status;
+      // if (!ignoreBatteryStatus.isGranted) {
+      //   final result = await Permission.ignoreBatteryOptimizations.request();
+      //   if (!result.isGranted) {
+      //     // 사용자에게 수동 설정 안내
+      //     _showBatteryOptimizationDialog();
+      //   }
+      // }
+
+      return true; // 임시로 true 반환
+    } catch (e) {
+      print('권한 확인 오류: $e');
+      return false;
+    }
+  }
+
+  // 배터리 최적화 설정 안내 다이얼로그
+  void _showBatteryOptimizationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('배터리 최적화 설정'),
+        content: const Text(
+          '백그라운드에서 안정적인 모니터링을 위해 앱의 배터리 최적화를 해제해 주세요.\n\n'
+          '설정 > 앱 > Coin Alarm > 배터리 > 배터리 최적화 안 함',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('확인'),
           ),
         ],
       ),

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../../model/price_alert_model.dart';
+import '../../model/strategy_alert_model.dart';
 import '../../model/coin_model.dart';
 import '../../viewmodel/price_alert_viewmodel.dart';
+import '../../viewmodel/strategy_alert_viewmodel.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
+import '../../utils/strategy_templates.dart';
 
 // 알림 화면
 class AlertsScreen extends StatefulWidget {
@@ -27,10 +30,14 @@ class _AlertsScreenState extends State<AlertsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final priceAlertVM = Provider.of<PriceAlertViewModel>(
+        context,
+        listen: false,
+      );
+      final strategyAlertVM = Provider.of<StrategyAlertViewModel>(
         context,
         listen: false,
       );
@@ -39,6 +46,7 @@ class _AlertsScreenState extends State<AlertsScreen>
       // 임시 사용자 ID 사용 (실제로는 인증된 사용자 ID 사용)
       const userId = 'local-user';
       priceAlertVM.loadUserAlerts(userId);
+      strategyAlertVM.setUserId(userId);
       cryptoVM.refreshCoins();
     });
   }
@@ -83,6 +91,7 @@ class _AlertsScreenState extends State<AlertsScreen>
           tabs: const [
             Tab(text: '대기중'),
             Tab(text: '발생됨'),
+            Tab(text: '전략 기반'),
           ],
         ),
         actions: [
@@ -224,13 +233,22 @@ class _AlertsScreenState extends State<AlertsScreen>
         children: [
           _buildAlertsList(pendingAlerts, cryptoVM, priceAlertVM),
           _buildAlertsList(triggeredAlerts, cryptoVM, priceAlertVM),
+          _buildStrategyAlertsList(cryptoVM, priceAlertVM),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddAlertDialog(coins, priceAlertVM),
-        tooltip: '새 알림 추가',
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: (_tabController.index == 1)
+          ? null
+          : FloatingActionButton(
+              onPressed: () {
+                if (_tabController.index == 0) {
+                  _showAddAlertDialog(coins, priceAlertVM);
+                } else if (_tabController.index == 2) {
+                  _showAddStrategyAlertDialog(cryptoVM);
+                }
+              },
+              tooltip: _tabController.index == 2 ? '전략 알림 추가' : '새 알림 추가',
+              child: const Icon(Icons.add),
+            ),
     );
   }
 
@@ -260,13 +278,15 @@ class _AlertsScreenState extends State<AlertsScreen>
                 color: Theme.of(context).disabledColor,
               ),
             ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('새 알림 추가'),
-              onPressed: () =>
-                  _showAddAlertDialog(cryptoVM.coins, priceAlertVM),
-            ),
+            if (_tabController.index != 1) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('새 알림 추가'),
+                onPressed: () =>
+                    _showAddAlertDialog(cryptoVM.coins, priceAlertVM),
+              ),
+            ],
           ],
         ),
       );
@@ -873,5 +893,600 @@ class _AlertsScreenState extends State<AlertsScreen>
     } else {
       return '${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
     }
+  }
+
+  // 전략 기반 알림 목록 위젯
+  Widget _buildStrategyAlertsList(
+    CryptoViewModel cryptoVM,
+    PriceAlertViewModel priceAlertVM,
+  ) {
+    return Consumer<StrategyAlertViewModel>(
+      builder: (context, strategyAlertVM, child) {
+        final alerts = strategyAlertVM.alerts;
+        final theme = Theme.of(context);
+
+        if (strategyAlertVM.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (strategyAlertVM.errorMessage != null) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '오류가 발생했습니다',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  strategyAlertVM.errorMessage!,
+                  style: TextStyle(color: theme.disabledColor),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => strategyAlertVM.refreshAlerts(),
+                  child: const Text('다시 시도'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (alerts.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.smart_toy_outlined,
+                  size: 64,
+                  color: theme.disabledColor,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '전략 기반 알림이 없습니다',
+                  style: TextStyle(fontSize: 18, color: theme.disabledColor),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '단타매매 전략을 설정하여\n스마트한 알림을 받아보세요',
+                  style: TextStyle(color: theme.disabledColor),
+                  textAlign: TextAlign.center,
+                ),
+                if (_tabController.index == 2) ...[
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('전략 알림 추가'),
+                    onPressed: () => _showAddStrategyAlertDialog(cryptoVM),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () => strategyAlertVM.refreshAlerts(),
+          child: CustomScrollView(
+            slivers: [
+              // 필터 영역
+              SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildStrategyFilterChip('전체', null, strategyAlertVM),
+                        const SizedBox(width: 8),
+                        _buildStrategyFilterChip(
+                          '대기중',
+                          'pending',
+                          strategyAlertVM,
+                        ),
+                        const SizedBox(width: 8),
+                        _buildStrategyFilterChip(
+                          '발생됨',
+                          'triggered',
+                          strategyAlertVM,
+                        ),
+                        const SizedBox(width: 8),
+                        _buildStrategyFilterChip(
+                          '비활성',
+                          'disabled',
+                          strategyAlertVM,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // 알림 목록
+              SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final alert = alerts[index];
+                  return _buildStrategyAlertCard(
+                    alert,
+                    cryptoVM,
+                    strategyAlertVM,
+                  );
+                }, childCount: alerts.length),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 전략 필터 칩
+  Widget _buildStrategyFilterChip(
+    String label,
+    String? filterValue,
+    StrategyAlertViewModel strategyAlertVM,
+  ) {
+    final theme = Theme.of(context);
+    final isSelected = strategyAlertVM.selectedStatusFilter == filterValue;
+
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        strategyAlertVM.setStatusFilter(selected ? filterValue : null);
+      },
+      selectedColor: theme.colorScheme.primaryContainer,
+      checkmarkColor: theme.colorScheme.primary,
+    );
+  }
+
+  // 전략 알림 카드
+  Widget _buildStrategyAlertCard(
+    StrategyAlert alert,
+    CryptoViewModel cryptoVM,
+    StrategyAlertViewModel strategyAlertVM,
+  ) {
+    final theme = Theme.of(context);
+    final triggerCondition = alert.triggerCondition;
+    final strategyDisplayName = StrategyTemplates.getStrategyDisplayName(
+      alert.strategyName,
+    );
+    final description =
+        triggerCondition['description'] ??
+        StrategyTemplates.getStrategyDescription(alert.strategyName);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: _getStrategyColor(alert.strategyName),
+          child: Text(
+            alert.coinSymbol,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '$strategyDisplayName - ${alert.coinSymbol}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            _buildStrategyStatusBadge(alert, theme),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text(
+              description,
+              style: TextStyle(
+                color: theme.textTheme.bodySmall?.color,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(
+                  _getRiskIcon(alert.riskLevel),
+                  size: 14,
+                  color: _getRiskColor(alert.riskLevel),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _getRiskText(alert.riskLevel),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _getRiskColor(alert.riskLevel),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  _formatDateTime(alert.createdAt),
+                  style: TextStyle(fontSize: 11, color: theme.disabledColor),
+                ),
+              ],
+            ),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) =>
+              _handleStrategyAlertAction(value, alert, strategyAlertVM),
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'toggle',
+              child: Row(
+                children: [
+                  Icon(alert.isEnabled ? Icons.pause : Icons.play_arrow),
+                  const SizedBox(width: 8),
+                  Text(alert.isEnabled ? '비활성화' : '활성화'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'edit',
+              child: Row(
+                children: [Icon(Icons.edit), SizedBox(width: 8), Text('수정')],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('삭제', style: TextStyle(color: Colors.red)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        onTap: () => _showStrategyAlertDetails(alert),
+      ),
+    );
+  }
+
+  // 새 전략 기반 알림 추가 다이얼로그
+  void _showAddStrategyAlertDialog(CryptoViewModel cryptoVM) {
+    final coins = cryptoVM.coins;
+    final strategies = StrategyTemplates.getAllStrategies();
+
+    String? selectedCoinId;
+    String? selectedStrategy;
+    String selectedRiskLevel = 'medium';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('전략 기반 알림 추가'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 코인 선택
+                const Text(
+                  '코인 선택',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedCoinId,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: '코인을 선택하세요',
+                  ),
+                  items: coins
+                      .map(
+                        (coin) => DropdownMenuItem(
+                          value: coin.id,
+                          child: Row(
+                            children: [
+                              if (coin.imageUrl != null)
+                                Image.network(
+                                  coin.imageUrl!,
+                                  width: 24,
+                                  height: 24,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(
+                                        Icons.currency_bitcoin,
+                                        size: 24,
+                                      ),
+                                ),
+                              const SizedBox(width: 8),
+                              Text('${coin.name} (${coin.symbol})'),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(() => selectedCoinId = value),
+                ),
+                const SizedBox(height: 16),
+
+                // 전략 선택
+                const Text(
+                  '전략 선택',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedStrategy,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: '전략을 선택하세요',
+                  ),
+                  items: strategies
+                      .map(
+                        (strategy) => DropdownMenuItem(
+                          value: strategy['name'] as String,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(strategy['displayName'] as String),
+                              Text(
+                                strategy['description'] as String,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => selectedStrategy = value),
+                ),
+                const SizedBox(height: 16),
+
+                // 위험도 선택
+                const Text(
+                  '위험도',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'low', label: Text('낮음')),
+                    ButtonSegment(value: 'medium', label: Text('중간')),
+                    ButtonSegment(value: 'high', label: Text('높음')),
+                  ],
+                  selected: {selectedRiskLevel},
+                  onSelectionChanged: (value) =>
+                      setState(() => selectedRiskLevel = value.first),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              onPressed: (selectedCoinId != null && selectedStrategy != null)
+                  ? () => _createStrategyAlert(
+                      selectedCoinId!,
+                      selectedStrategy!,
+                      selectedRiskLevel,
+                      coins,
+                    )
+                  : null,
+              child: const Text('생성'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 전략 기반 알림 생성
+  void _createStrategyAlert(
+    String coinId,
+    String strategyName,
+    String riskLevel,
+    List<Coin> coins,
+  ) async {
+    final strategyAlertVM = Provider.of<StrategyAlertViewModel>(
+      context,
+      listen: false,
+    );
+    final coin = coins.firstWhere((c) => c.id == coinId);
+
+    final success = await strategyAlertVM.createStrategyAlertFromTemplate(
+      coinId: coinId,
+      coinSymbol: coin.symbol,
+      strategyName: strategyName,
+      riskLevel: riskLevel,
+    );
+
+    if (mounted) {
+      Navigator.of(context).pop();
+
+      if (success) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('전략 기반 알림이 생성되었습니다')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(strategyAlertVM.errorMessage ?? '알림 생성에 실패했습니다'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  // 헬퍼 메서드들
+  Color _getStrategyColor(String strategyName) {
+    switch (strategyName) {
+      case 'breakout':
+        return Colors.orange;
+      case 'pullback':
+        return Colors.blue;
+      case 'rsi_reversal':
+        return Colors.green;
+      case 'golden_cross':
+        return Colors.amber;
+      case 'dead_cross':
+        return Colors.red;
+      case 'candle_pattern':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildStrategyStatusBadge(StrategyAlert alert, ThemeData theme) {
+    String text;
+    Color color;
+
+    if (!alert.isEnabled) {
+      text = '비활성';
+      color = theme.disabledColor;
+    } else if (alert.isTriggered) {
+      text = '발생됨';
+      color = theme.colorScheme.error;
+    } else {
+      text = '대기중';
+      color = theme.colorScheme.primary;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  IconData _getRiskIcon(String riskLevel) {
+    switch (riskLevel) {
+      case 'low':
+        return Icons.security;
+      case 'high':
+        return Icons.warning;
+      default:
+        return Icons.info;
+    }
+  }
+
+  Color _getRiskColor(String riskLevel) {
+    switch (riskLevel) {
+      case 'low':
+        return Colors.green;
+      case 'high':
+        return Colors.red;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  String _getRiskText(String riskLevel) {
+    switch (riskLevel) {
+      case 'low':
+        return '저위험';
+      case 'high':
+        return '고위험';
+      default:
+        return '중위험';
+    }
+  }
+
+  void _handleStrategyAlertAction(
+    String action,
+    StrategyAlert alert,
+    StrategyAlertViewModel strategyAlertVM,
+  ) async {
+    switch (action) {
+      case 'toggle':
+        await strategyAlertVM.toggleAlert(alert.id);
+        break;
+      case 'edit':
+        // 편집 다이얼로그 표시
+        break;
+      case 'delete':
+        await strategyAlertVM.deleteAlert(alert.id);
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('알림이 삭제되었습니다')));
+        }
+        break;
+    }
+  }
+
+  void _showStrategyAlertDetails(StrategyAlert alert) {
+    // 상세 정보 다이얼로그 표시
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          '${alert.coinSymbol} - ${StrategyTemplates.getStrategyDisplayName(alert.strategyName)}',
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('위험도: ${_getRiskText(alert.riskLevel)}'),
+            const SizedBox(height: 8),
+            Text('상태: ${alert.statusText}'),
+            const SizedBox(height: 8),
+            Text('생성일: ${_formatDateTime(alert.createdAt, detailed: true)}'),
+            if (alert.triggeredAt != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '발생일: ${_formatDateTime(alert.triggeredAt!, detailed: true)}',
+              ),
+            ],
+            if (alert.notes != null && alert.notes!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('메모: ${alert.notes}'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('닫기'),
+          ),
+        ],
+      ),
+    );
   }
 }

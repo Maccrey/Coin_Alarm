@@ -201,6 +201,106 @@
 - [x] 차트 페이지 캐시/로딩 UX 개선 (캐시 hit 시 즉시 차트 표시, 네트워크는 백그라운드, 안내 메시지 등) - 2024-06-22
 - [ ] 단위 테스트 작성 (TDD)
 
+### 11. 단타매매 전략 기반 코인 알림 시스템 (MSA & TDD, Hive 기반)
+
+**목적**: 가격 알림을 넘어선 고급 알림 시스템으로 단타매매 전략 기반 알림 제공
+
+#### 11.1 전략 기반 알림 시스템 기획 및 요구사항 정리 ✅
+
+- [x] README.md에 전략 알림 시스템 상세 기획 추가
+- [x] 지원 전략: 돌파매매, 눌림목 매매, RSI 반등, 골든크로스, 캔들 패턴
+- [x] Hive 로컬 저장소 기반 설계 확정
+- [x] MSA 아키텍처 및 TDD 개발 방식 적용
+
+#### 11.2 Hive 기반 StrategyAlert 모델 구조 설계 및 생성 ✅
+
+- [x] `lib/model/strategy_alert_model.dart` 생성
+- [x] Hive 어댑터 자동 생성 (`build_runner build`)
+- [x] JSON 직렬화/역직렬화 지원
+- [x] 전략별 조건 저장을 위한 JSON 필드 구조
+
+#### 11.3 StrategyAlert 서비스 구현 ✅
+
+- [x] `lib/services/strategy_alert_service.dart` 구현
+- [x] Hive 기반 CRUD 작업 구현
+- [x] 전략별 조건 검증 로직
+- [x] 상태 관리 및 필터링 기능
+
+#### 11.4 StrategyAlert ViewModel 구현 ✅
+
+- [x] `lib/viewmodel/strategy_alert_viewmodel.dart` 구현
+- [x] Provider 패턴 상태 관리
+- [x] 전략별 필터링 및 정렬 기능
+- [x] 비즈니스 로직 분리
+
+#### 11.5 main.dart에서 Hive 초기화 및 어댑터 등록 ✅
+
+- [x] StrategyAlert 어댑터 등록
+- [x] 서비스 초기화
+- [x] Provider 등록
+- [x] 포그라운드 서비스 초기화 추가
+
+#### 11.6 전략 템플릿 유틸리티 클래스 생성 ✅
+
+- [x] `lib/utils/strategy_templates.dart` 구현
+- [x] 전략별 기본 템플릿 제공
+- [x] 디스플레이명 및 설명 매핑
+- [x] 기본 조건 생성 함수
+
+#### 11.7 기존 alerts_screen.dart 확장 ✅
+
+- [x] 전략 기반 알림 탭 추가 (3번째 탭)
+- [x] 알림 목록 UI 구현
+- [x] 전략별 필터링 기능
+- [x] 상세 다이얼로그 및 추가/편집 기능
+
+#### 11.8 포그라운드 서비스 구현 🔄
+
+- [x] `flutter_foreground_task`, `flutter_local_notifications` 패키지 추가
+- [x] `lib/services/strategy_monitoring_service.dart` 구현
+- [x] 30초마다 전략 조건 체크
+- [x] 로컬 푸시 알림 발송 기능
+- [x] 백그라운드 실행 권한 관리
+- [ ] 전략별 조건 체크 로직 고도화 (현재 간단한 구현)
+
+#### 11.9 설정 화면에 전략 모니터링 서비스 제어 UI 추가 ✅
+
+- [x] 서비스 상태 표시
+- [x] 시작/중지 토글 버튼
+- [x] 권한 요청 및 안내
+- [x] 배터리 최적화 설정 안내
+
+#### 11.10 Android/iOS 플랫폼별 설정 ✅
+
+- [x] Android: `AndroidManifest.xml`에 포그라운드 서비스 권한 추가
+- [x] Android: 알림, WAKE_LOCK, 배터리 최적화 권한 추가
+- [x] iOS: `Info.plist`에 백그라운드 모드 설정
+- [x] iOS: 로컬 알림 권한 설명 추가
+
+#### 11.11 테스트 코드 작성 📋
+
+- [ ] StrategyAlert 모델 단위 테스트
+- [ ] StrategyAlertService 단위 테스트
+- [ ] StrategyAlertViewModel 단위 테스트
+- [ ] 전략별 조건 체크 로직 테스트
+- [ ] 포그라운드 서비스 통합 테스트
+
+#### 11.12 문서 업데이트 🔄
+
+- [x] README.md에 전략 기반 알림 시스템 설명 추가
+- [x] development.md에 개발 가이드라인 추가
+- [x] Tasklist.md 진행 상황 업데이트
+- [ ] work.md에 작업 로그 추가
+
+**현재 상태**:
+
+- ✅ 핵심 기능 구현 완료 (모델, 서비스, UI, 포그라운드 서비스)
+- 🔄 전략별 조건 체크 로직 고도화 진행 중
+- 📋 테스트 코드 작성 대기
+- 실제 전략 계산을 위한 기술적 지표 라이브러리 추가 검토 필요
+
+**주요 기술 스택**: Flutter, Hive, Provider, MVVM, flutter_foreground_task, flutter_local_notifications
+
 ---
 
 ## [완료/Done]
