@@ -48,3 +48,4 @@ app.*.map.json
 # 환경 변수 파일
 .env
 webcrawler/shared/crawled_news_20250608124644.json
+webcrawler/coin-alarm-scheduler.tar
