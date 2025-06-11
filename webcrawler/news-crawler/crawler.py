@@ -19,19 +19,21 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 
+# 공유 디렉토리
+SHARED_DIR = os.environ.get('SHARED_DIR', 'webcrawler/shared')
+# 로그 디렉토리 자동 생성
+os.makedirs(SHARED_DIR, exist_ok=True)
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('/app/shared/crawler.log')
+        logging.FileHandler(os.path.join(SHARED_DIR, 'crawler.log'))
     ]
 )
 logger = logging.getLogger(__name__)
-
-# 공유 디렉토리
-SHARED_DIR = '/app/shared'
 
 # 크롤링 사이트 정보
 SITES = {
@@ -195,7 +197,7 @@ def crawl_site(site_name):
         html = driver.page_source
         # 디버깅용: HTML 저장
         try:
-            with open(f'/app/shared/{site_name}_debug.html', 'w', encoding='utf-8') as f:
+            with open(os.path.join(SHARED_DIR, f'{site_name}_debug.html'), 'w', encoding='utf-8') as f:
                 f.write(html)
         except Exception as e:
             logger.warning(f"{site_name} HTML 저장 실패: {e}")
@@ -247,10 +249,23 @@ def crawl_site(site_name):
                         article_soup = BeautifulSoup(article_html, 'lxml')
                         # 사이트별 본문 추출 로직
                         if site_name == 'coinreaders':
-                            # 코인리더스는 특별한 처리가 필요함
-                            content_elem = article_soup.select_one('#article-view-content-div')
-                            if content_elem:
-                                content = content_elem.get_text().strip()
+                            # 여러 selector를 시도하여 본문 추출
+                            selectors = [
+                                '#article-view-content-div',
+                                '.article_body',
+                                '.view-content',
+                                '.view_content',
+                                '.article',
+                                '#article-view-content-div .article',
+                                '#textinput'
+                            ]
+                            for sel in selectors:
+                                content_elem = article_soup.select_one(sel)
+                                if content_elem and content_elem.get_text(strip=True):
+                                    content = content_elem.get_text().strip()
+                                    break
+                            if not content:
+                                logger.warning(f"코인리더스 본문 추출 실패: {link}")
                         else:
                             # 다른 사이트는 기존 방식 사용
                             for selector in site_info.get('content_selector', []):
