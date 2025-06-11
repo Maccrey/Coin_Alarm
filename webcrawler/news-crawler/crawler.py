@@ -46,10 +46,10 @@ SITES = {
     },
     'coinreaders': {
         'url': 'https://www.coinreaders.com/sub.html?section=sc21',
-        'article_selector': '.section-list .media',
-        'title_selector': 'h4 a',
-        'link_selector': 'h4 a',
-        'date_selector': '.write-time',
+        'article_selector': '.sub_read_list_box',
+        'title_selector': 'dl dt a',
+        'link_selector': 'dl dt a',
+        'date_selector': 'dd.etc',
         'base_url': 'https://www.coinreaders.com',
         'content_selector': ['#article-view-content-div']
     },
@@ -142,8 +142,14 @@ def parse_date(date_str, site):
             except ValueError:
                 return datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M")
         elif site == 'coinreaders':
-            # 예: "2023-06-25"
-            return datetime.strptime(date_str.strip(), "%Y-%m-%d")
+            # 예: "홍길동 기자 | 2025.06.11 12:40"
+            try:
+                # 날짜 부분만 추출하기
+                date_part = date_str.strip().split('|')[-1].strip()
+                return datetime.strptime(date_part, "%Y.%m.%d %H:%M")
+            except Exception as e:
+                logger.warning(f"코인리더스 날짜 파싱 오류: {e}, 원본: {date_str}")
+                return datetime.now(pytz.timezone('Asia/Seoul'))
         elif site == 'bloomingbit':
             # 예: "2023.06.25"
             return datetime.strptime(date_str.strip(), "%Y.%m.%d")
@@ -208,7 +214,11 @@ def crawl_site(site_name):
                 
                 # 상대경로인 경우 base_url 추가
                 if link and not link.startswith(('http://', 'https://')):
-                    link = site_info['base_url'] + link
+                    # 코인리더스의 경우 /숫자 형태로 링크가 제공됨 (예: /165823)
+                    if site_name == 'coinreaders' and link.startswith('/'):
+                        link = site_info['base_url'] + link
+                    else:
+                        link = site_info['base_url'] + link
                 
                 date_str = date_elem.get_text().strip() if date_elem else ""
                 published_at = parse_date(date_str, site_name)
@@ -231,14 +241,37 @@ def crawl_site(site_name):
                         article_html = driver.page_source
                         driver.quit()
                         article_soup = BeautifulSoup(article_html, 'lxml')
-                        for selector in site_info.get('content_selector', []):
-                            content_elem = article_soup.select_one(selector)
+                        # 사이트별 본문 추출 로직
+                        if site_name == 'coinreaders':
+                            # 코인리더스는 특별한 처리가 필요함
+                            content_elem = article_soup.select_one('#article-view-content-div')
                             if content_elem:
                                 content = content_elem.get_text().strip()
-                                break
-                        og_image = article_soup.find('meta', property='og:image')
-                        if og_image and og_image.get('content'):
-                            image_url = og_image.get('content')
+                        else:
+                            # 다른 사이트는 기존 방식 사용
+                            for selector in site_info.get('content_selector', []):
+                                content_elem = article_soup.select_one(selector)
+                                if content_elem:
+                                    content = content_elem.get_text().strip()
+                                    break
+                        # 이미지 URL 추출
+                        if site_name == 'coinreaders':
+                            # 코인리더스는 기사 내부 이미지 찾기
+                            img_elem = article_soup.select_one('.article img')
+                            if img_elem and img_elem.get('src'):
+                                image_url = img_elem.get('src')
+                                if not image_url.startswith(('http://', 'https://')):
+                                    image_url = site_info['base_url'] + image_url
+                            # 이미지를 못 찾으면 og:image 사용
+                            if not image_url:
+                                og_image = article_soup.find('meta', property='og:image')
+                                if og_image and og_image.get('content'):
+                                    image_url = og_image.get('content')
+                        else:
+                            # 다른 사이트는 기존 방식 사용
+                            og_image = article_soup.find('meta', property='og:image')
+                            if og_image and og_image.get('content'):
+                                image_url = og_image.get('content')
                     except Exception as e:
                         logger.warning(f"본문/이미지 가져오기 실패: {link}, 오류: {e}")
                 

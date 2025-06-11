@@ -97,6 +97,74 @@ def get_news_hash(title, url):
     return hashlib.md5(key).hexdigest()
 
 
+def clean_news(news_list):
+    """
+    뉴스 정제 로직
+    
+    Args:
+        news_list (list): 원본 뉴스 리스트
+        
+    Returns:
+        list: 정제된 뉴스 리스트
+    """
+    logger.info(f"정제 시작: {len(news_list)}개 뉴스")
+    
+    cleaned_list = []
+    unique_hashes = set()
+    
+    for news in news_list:
+        try:
+            # 기본 텍스트 정제
+            title = clean_text(news.get("title", ""))
+            content = clean_text(news.get("content", ""))
+            
+            # 너무 짧은 컨텐츠 필터링
+            if len(content) < MIN_CONTENT_LENGTH:
+                logger.info(f"짧은 내용 필터링: {title[:30]}...")
+                continue
+                
+            # 광고성 키워드 필터링
+            is_ad = False
+            for keyword in AD_KEYWORDS:
+                if keyword in title or keyword in content[:100]:
+                    logger.info(f"광고성 필터링: {title[:30]}..., 키워드: {keyword}")
+                    is_ad = True
+                    break
+                    
+            if is_ad:
+                continue
+                
+            # 해시값으로 중복 체크
+            news_hash = get_news_hash(title, news.get("url", ""))
+            if news_hash in unique_hashes:
+                logger.info(f"중복 필터링: {title[:30]}...")
+                continue
+                
+            unique_hashes.add(news_hash)
+            
+            # 정제된 뉴스 추가
+            cleaned_news = {
+                "title": title,
+                "content": content,
+                "url": news.get("url", ""),
+                "imageUrl": news.get("imageUrl", ""),
+                "published_at": news.get("published_at", ""),
+                "source": news.get("source", ""),
+                "hash": news_hash,
+                "cleaned_at": datetime.now(pytz.timezone("Asia/Seoul")).strftime("%Y-%m-%d %H:%M:%S"),
+                "related_coins": news.get("related_coins", [])
+            }
+            
+            cleaned_list.append(cleaned_news)
+            
+        except Exception as e:
+            logger.error(f"뉴스 정제 오류: {str(e)}")
+            continue
+    
+    logger.info(f"정제 완료: {len(cleaned_list)}개 정제됨, {len(news_list) - len(cleaned_list)}개 필터링됨")
+    return cleaned_list
+
+
 def process_news_file(file_path):
     """
     정제된 뉴스 파일 처리
@@ -108,12 +176,16 @@ def process_news_file(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             news_list = json.load(f)
         logger.info(f"읽기 완료: {len(news_list)}개 뉴스")
-        # 정제 로직 수행 (예시)
+        # 정제 로직 수행
         cleaned_news_list = clean_news(news_list)
         # 정제된 파일명 생성
-        cleaned_file_path = file_path.replace('crawled_news_', 'cleaned_news_')
-        save_cleaned_news(cleaned_news_list, cleaned_file_path)
-        logger.info(f"정제 파일 저장 완료: {cleaned_file_path}")
+        base_name = os.path.basename(file_path)
+        timestamp = datetime.now(pytz.timezone("Asia/Seoul")).strftime("%Y%m%d%H%M%S")
+        cleaned_file_path = os.path.join(SHARED_DIR, f'cleaned_news_{timestamp}.json')
+        # 파일 저장
+        with open(cleaned_file_path, 'w', encoding='utf-8') as f:
+            json.dump(cleaned_news_list, f, ensure_ascii=False, indent=2)
+        logger.info(f"정제 파일 저장 완료: {cleaned_file_path}, {len(cleaned_news_list)}개 뉴스")
         # 원본 파일 삭제
         try:
             os.remove(file_path)
@@ -124,23 +196,17 @@ def process_news_file(file_path):
         logger.error(f"파일 처리 오류: {file_path}, {e}")
 
 
-def save_cleaned_news(news_list, original_file):
+def save_cleaned_news(news_list, output_file):
     """
     정제된 뉴스 저장
     
     Args:
         news_list (list): 정제된 뉴스 리스트
-        original_file (str): 원본 파일 이름
+        output_file (str): 출력 파일 경로
     """
     if not news_list:
         logger.warning("저장할 뉴스가 없습니다.")
         return
-    
-    # 원본 파일 이름에서 타임스탬프 부분 추출
-    base_name = os.path.basename(original_file)
-    timestamp = "".join(filter(str.isdigit, base_name))
-    
-    output_file = os.path.join(SHARED_DIR, f'cleaned_news_{timestamp}.json')
     
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -160,7 +226,35 @@ def main():
             file_path = os.path.join(SHARED_DIR, file_name)
             process_news_file(file_path)
     
-    logger.info("뉴스 정제 서비스 종료")
+    # 파일 시스템 감시
+    event_handler = FileSystemEventHandler()
+    event_handler.on_created = lambda event: process_file_event(event)
+    
+    observer = Observer()
+    observer.schedule(event_handler, SHARED_DIR, recursive=False)
+    observer.start()
+    
+    try:
+        logger.info("파일 감시 시작...")
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+        logger.info("파일 감시 종료")
+    
+    observer.join()
+
+
+def process_file_event(event):
+    """파일 생성 이벤트 처리"""
+    if event.is_directory:
+        return
+    
+    file_path = event.src_path
+    if file_path.endswith('.json') and 'crawled_news_' in file_path:
+        # 파일 생성 후 약간의 지연시간을 두고 처리 (파일 쓰기 완료 대기)
+        time.sleep(1)
+        process_news_file(file_path)
 
 
 if __name__ == "__main__":

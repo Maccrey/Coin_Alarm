@@ -135,11 +135,12 @@ def clean_news(news_list):
                 "title": title,
                 "content": content,
                 "url": news.get("url", ""),
-                "image_url": news.get("image_url", ""),
+                "imageUrl": news.get("imageUrl", ""),
                 "published_at": news.get("published_at", ""),
                 "source": news.get("source", ""),
                 "hash": news_hash,
-                "cleaned_at": datetime.now(pytz.timezone("Asia/Seoul")).strftime("%Y-%m-%d %H:%M:%S")
+                "cleaned_at": datetime.now(pytz.timezone("Asia/Seoul")).strftime("%Y-%m-%d %H:%M:%S"),
+                "related_coins": news.get("related_coins", [])
             }
             
             cleaned_list.append(cleaned_news)
@@ -190,6 +191,13 @@ def process_file(file_path):
             
         logger.info(f"저장 완료: {output_path}, {len(cleaned_data)}개 뉴스")
         
+        # 원본 파일 삭제
+        try:
+            os.remove(file_path)
+            logger.info(f"원본 파일 삭제 완료: {file_path}")
+        except Exception as e:
+            logger.error(f"원본 파일 삭제 오류: {file_path}, {e}")
+        
     except Exception as e:
         logger.error(f"파일 처리 오류: {file_path}, {str(e)}")
 
@@ -211,21 +219,30 @@ class NewsHandler(FileSystemEventHandler):
 
 def main():
     """메인 함수"""
-    logger.info("뉴스 크롤러 시작 (6시간마다 1회 실행)")
-
-    while True:
-        # 각 사이트 크롤링
-        all_news = []
-        for site_name in SITES.keys():
-            site_news = crawl_site(site_name)
-            all_news.extend(site_news)
-            time.sleep(2)  # 사이트 간 딜레이
-
-        # 수집된 뉴스 저장
-        save_to_shared(all_news)
-
-        logger.info("크롤링 및 저장 완료. 6시간 대기 후 재실행")
-        time.sleep(60 * 60 * 6)  # 6시간 대기
+    logger.info("뉴스 정제 서비스 시작")
+    
+    # 감시 설정
+    event_handler = NewsHandler()
+    observer = Observer()
+    observer.schedule(event_handler, SHARED_DIR, recursive=False)
+    observer.start()
+    
+    # 기존 파일 처리
+    try:
+        for filename in os.listdir(SHARED_DIR):
+            if filename.endswith(".json") and filename.startswith("crawled_news_"):
+                file_path = os.path.join(SHARED_DIR, filename)
+                process_file(file_path)
+    except Exception as e:
+        logger.error(f"기존 파일 처리 오류: {str(e)}")
+    
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    
+    observer.join()
 
 
 if __name__ == "__main__":
