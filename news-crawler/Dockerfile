@@ -5,7 +5,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 크롬/크롬드라이버 설치 (아키텍처별 분기, 한 RUN에 모두 포함)
 RUN apt-get update && \
     apt-get install -y wget unzip curl gnupg && \
     if [ "$(uname -m)" = "x86_64" ]; then \
@@ -20,17 +19,12 @@ RUN apt-get update && \
       chmod +x /usr/bin/chromedriver && \
       rm -rf /tmp/chromedriver.zip /usr/bin/chromedriver-linux64; \
     elif [ "$(uname -m)" = "aarch64" ]; then \
-      CHROME_VERSION=124.0.6367.207 && \
-      wget -O /tmp/chrome.deb "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux-arm64/chrome-linux-arm64.deb" && \
-      apt-get install -y /tmp/chrome.deb || true && \
-      rm /tmp/chrome.deb && \
-      wget -O /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/arm64/chromedriver-arm64.zip" && \
-      unzip /tmp/chromedriver.zip -d /usr/bin && \
-      mv /usr/bin/chromedriver-arm64/chromedriver /usr/bin/chromedriver && \
-      chmod +x /usr/bin/chromedriver && \
-      rm -rf /tmp/chromedriver.zip /usr/bin/chromedriver-arm64; \
+      wget -O /tmp/chromium.deb "http://ftp.debian.org/debian/pool/main/c/chromium/chromium_137.0.7151.68-1_arm64.deb" && \
+      apt-get install -y /tmp/chromium.deb || true && \
+      rm /tmp/chromium.deb; \
+      # chromedriver는 selenium-manager 사용 \
     fi
 
 COPY . .
 
-CMD ["python", "crawler.py"]
+CMD ["python", "crawler.py"] 
