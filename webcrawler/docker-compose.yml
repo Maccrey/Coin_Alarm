@@ -13,6 +13,7 @@ services:
     networks:
       - crawler-network
     restart: unless-stopped
+    command: python crawler.py
 
   # 뉴스 정제 서비스
   news-cleaner:

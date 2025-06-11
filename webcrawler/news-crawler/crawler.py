@@ -46,10 +46,10 @@ SITES = {
     },
     'coinreaders': {
         'url': 'https://www.coinreaders.com/sub.html?section=sc21',
-        'article_selector': '.media',
-        'title_selector': '.media-body h4 a',
-        'link_selector': '.media-body h4 a',
-        'date_selector': '.media-body .write-time',
+        'article_selector': '.section-list .media',
+        'title_selector': 'h4 a',
+        'link_selector': 'h4 a',
+        'date_selector': '.write-time',
         'base_url': 'https://www.coinreaders.com',
         'content_selector': ['#article-view-content-div']
     },
@@ -64,10 +64,10 @@ SITES = {
     # },
     'digitaltoday': {
         'url': 'https://www.digitaltoday.co.kr/news/articleList.html?sc_section_code=S1N9&view_type=sm',
-        'article_selector': 'div.list-block',
-        'title_selector': 'a.article-title',
-        'link_selector': 'a.article-title',
-        'date_selector': 'span.byline-date',
+        'article_selector': 'section#section-list ul.type2 > li',
+        'title_selector': 'h4.titles a',
+        'link_selector': 'h4.titles a',
+        'date_selector': 'span.byline em',
         'base_url': 'https://www.digitaltoday.co.kr',
         'content_selector': ['#article-view-content-div']
     },
@@ -173,28 +173,24 @@ def crawl_site(site_name):
     
     try:
         url = site_info['url']
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        }
-        # Selenium을 사용할 사이트 분기
-        if site_name in ['coinreaders', 'bloomingbit']:
-            options = Options()
-            options.add_argument('--headless')
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-gpu')
-            # Chromium 사용
-            service = Service('/usr/bin/chromedriver')
-            driver = webdriver.Chrome(service=service, options=options)
-            driver.get(url)
-            time.sleep(3)  # JS 렌더링 대기
-            html = driver.page_source
-            driver.quit()
-            soup = BeautifulSoup(html, 'lxml')
-        else:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'lxml')
+        options = Options()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        service = Service('/usr/bin/chromedriver')
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.get(url)
+        time.sleep(3)
+        html = driver.page_source
+        # 디버깅용: HTML 저장
+        try:
+            with open(f'/app/shared/{site_name}_debug.html', 'w', encoding='utf-8') as f:
+                f.write(html)
+        except Exception as e:
+            logger.warning(f"{site_name} HTML 저장 실패: {e}")
+        driver.quit()
+        soup = BeautifulSoup(html, 'lxml')
         articles = soup.select(site_info['article_selector'])
         
         news_list = []
@@ -222,25 +218,19 @@ def crawl_site(site_name):
                 image_url = ""
                 if link:
                     try:
-                        # 본문도 Selenium으로 접근 필요 (coinreaders, bloomingbit)
-                        if site_name in ['coinreaders', 'bloomingbit']:
-                            options = Options()
-                            options.add_argument('--headless')
-                            options.add_argument('--no-sandbox')
-                            options.add_argument('--disable-dev-shm-usage')
-                            options.add_argument('--disable-gpu')
-                            # Chromium 사용
-                            service = Service('/usr/bin/chromedriver')
-                            driver = webdriver.Chrome(service=service, options=options)
-                            driver.get(link)
-                            time.sleep(2)
-                            article_html = driver.page_source
-                            driver.quit()
-                            article_soup = BeautifulSoup(article_html, 'lxml')
-                        else:
-                            article_response = requests.get(link, headers=headers)
-                            article_response.raise_for_status()
-                            article_soup = BeautifulSoup(article_response.text, 'lxml')
+                        # 본문도 Selenium으로 접근
+                        options = Options()
+                        options.add_argument('--headless')
+                        options.add_argument('--no-sandbox')
+                        options.add_argument('--disable-dev-shm-usage')
+                        options.add_argument('--disable-gpu')
+                        service = Service('/usr/bin/chromedriver')
+                        driver = webdriver.Chrome(service=service, options=options)
+                        driver.get(link)
+                        time.sleep(2)
+                        article_html = driver.page_source
+                        driver.quit()
+                        article_soup = BeautifulSoup(article_html, 'lxml')
                         for selector in site_info.get('content_selector', []):
                             content_elem = article_soup.select_one(selector)
                             if content_elem:
@@ -249,14 +239,6 @@ def crawl_site(site_name):
                         og_image = article_soup.find('meta', property='og:image')
                         if og_image and og_image.get('content'):
                             image_url = og_image.get('content')
-                        else:
-                            img_elem = (
-                                article_soup.select_one('.view-cont img') or
-                                article_soup.select_one('.entry-content img') or
-                                article_soup.select_one('.post-content img')
-                            )
-                            if img_elem and img_elem.get('src'):
-                                image_url = img_elem.get('src')
                     except Exception as e:
                         logger.warning(f"본문/이미지 가져오기 실패: {link}, 오류: {e}")
                 
@@ -265,13 +247,13 @@ def crawl_site(site_name):
                 
                 news = {
                     'title': title,
-                    'content': content[:500] + ('...' if len(content) > 500 else ''),  # 미리보기 500자로 제한
+                    'content': content[:500] + ('...' if len(content) > 500 else ''),
                     'url': link,
                     'source': site_name,
                     'published_at': published_at.isoformat(),
                     'related_coins': related_coins,
                     'crawled_at': datetime.now().isoformat(),
-                    'imageUrl': image_url  # 대표 이미지 필드 추가
+                    'imageUrl': image_url
                 }
                 
                 news_list.append(news)
