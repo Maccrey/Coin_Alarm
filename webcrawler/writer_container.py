@@ -112,7 +112,7 @@ def save_to_supabase(news_list):
                     "url": news.get('url', ''),
                     "source": news.get('source', ''),
                     "published_at": news.get('published_at', datetime.now(pytz.timezone('Asia/Seoul')).isoformat()),
-                    "created_at": datetime.now().isoformat(),
+                    "created_at": datetime.now(pytz.timezone('Asia/Seoul')).isoformat(),
                     "image_url": get_image_url(news),
                     "related_coins": related_coins
                 }

@@ -89,7 +89,7 @@ def mark_file_as_processed(filename):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('INSERT OR REPLACE INTO processed_files VALUES (?, ?)', 
-                 (filename, datetime.now().isoformat()))
+                 (filename, datetime.now(pytz.timezone('Asia/Seoul')).isoformat()))
     conn.commit()
     conn.close()
 
@@ -107,7 +107,7 @@ def mark_news_as_processed(news_id, title):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('INSERT OR REPLACE INTO processed_news VALUES (?, ?, ?)', 
-                 (news_id, title, datetime.now().isoformat()))
+                 (news_id, title, datetime.now(pytz.timezone('Asia/Seoul')).isoformat()))
     conn.commit()
     conn.close()
 
@@ -361,14 +361,14 @@ def process_existing_files():
 def cleanup_old_files():
     """오래된 파일 정리"""
     # 현재 시간으로부터 하루 이상 지난 파일 삭제
-    cutoff_time = datetime.now() - timedelta(days=1)
+    cutoff_time = datetime.now(pytz.timezone('Asia/Seoul')) - timedelta(days=1)
     
     # 모든 JSON 파일 확인
     all_files = glob.glob(os.path.join(SHARED_DIR, '*.json'))
     for file_path in all_files:
         try:
             file_stats = os.stat(file_path)
-            file_time = datetime.fromtimestamp(file_stats.st_mtime)
+            file_time = datetime.fromtimestamp(file_stats.st_mtime, pytz.timezone('Asia/Seoul'))
             
             if file_time < cutoff_time:
                 logger.info(f"오래된 파일 삭제: {file_path}")
@@ -382,7 +382,7 @@ def cleanup_old_files():
     
     # 오래된 DB 기록 정리 (30일 이상)
     try:
-        cutoff_time = datetime.now() - timedelta(days=30)
+        cutoff_time = datetime.now(pytz.timezone('Asia/Seoul')) - timedelta(days=30)
         cutoff_str = cutoff_time.isoformat()
         
         conn = sqlite3.connect(DB_FILE)
@@ -414,12 +414,12 @@ def main():
     
     try:
         # 매 시간마다 파일 정리
-        last_cleanup = datetime.now()
+        last_cleanup = datetime.now(pytz.timezone('Asia/Seoul'))
         while True:
             time.sleep(60)  # 1분마다 체크
             
             # 3시간마다 파일 정리 (서버 사용량 감소)
-            now = datetime.now()
+            now = datetime.now(pytz.timezone('Asia/Seoul'))
             if (now - last_cleanup).total_seconds() > 10800:  # 3시간(10800초)
                 logger.info("정기 파일 정리 시작")
                 cleanup_old_files()

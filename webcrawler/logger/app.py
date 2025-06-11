@@ -286,7 +286,7 @@ if __name__ == '__main__':
     for log_file in LOG_FILES.values():
         if not os.path.exists(log_file):
             with open(log_file, 'w', encoding='utf-8') as f:
-                f.write(f"Log file created at {datetime.now().isoformat()}\n")
+                f.write(f"Log file created at {datetime.now(pytz.timezone('Asia/Seoul')).isoformat()}\n")
     
     logger.info("로깅 서비스 시작")
     app.run(host='0.0.0.0', port=5000) 

@@ -130,7 +130,7 @@ def parse_date(date_str, site):
         site (str): 사이트 이름
         
     Returns:
-        datetime: 파싱된 날짜
+        datetime: 파싱된 날짜 (KST 시간대 정보 포함)
     """
     try:
         now = datetime.now(pytz.timezone('Asia/Seoul'))
@@ -138,21 +138,25 @@ def parse_date(date_str, site):
         if site == 'blockmedia':
             # "2023-06-25 08:30:45" 또는 "2023-06-25 08:30"
             try:
-                return datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M:%S")
+                dt = datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M:%S")
+                return pytz.timezone('Asia/Seoul').localize(dt)
             except ValueError:
-                return datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M")
+                dt = datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M")
+                return pytz.timezone('Asia/Seoul').localize(dt)
         elif site == 'coinreaders':
             # 예: "홍길동 기자 | 2025.06.11 12:40"
             try:
                 # 날짜 부분만 추출하기
                 date_part = date_str.strip().split('|')[-1].strip()
-                return datetime.strptime(date_part, "%Y.%m.%d %H:%M")
+                dt = datetime.strptime(date_part, "%Y.%m.%d %H:%M")
+                return pytz.timezone('Asia/Seoul').localize(dt)
             except Exception as e:
                 logger.warning(f"코인리더스 날짜 파싱 오류: {e}, 원본: {date_str}")
                 return datetime.now(pytz.timezone('Asia/Seoul'))
         elif site == 'bloomingbit':
             # 예: "2023.06.25"
-            return datetime.strptime(date_str.strip(), "%Y.%m.%d")
+            dt = datetime.strptime(date_str.strip(), "%Y.%m.%d")
+            return pytz.timezone('Asia/Seoul').localize(dt)
         else:
             return now
     except Exception as e:
@@ -285,7 +289,7 @@ def crawl_site(site_name):
                     'source': site_name,
                     'published_at': published_at.isoformat(),
                     'related_coins': related_coins,
-                    'crawled_at': datetime.now().isoformat(),
+                    'crawled_at': datetime.now(pytz.timezone('Asia/Seoul')).isoformat(),
                     'imageUrl': image_url
                 }
                 
@@ -315,7 +319,7 @@ def save_to_shared(news_list):
         logger.warning("저장할 뉴스가 없습니다.")
         return
     
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y%m%d%H%M%S")
     output_file = os.path.join(SHARED_DIR, f'crawled_news_{timestamp}.json')
     
     try:
