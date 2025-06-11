@@ -46,22 +46,31 @@ SITES = {
     },
     'coinreaders': {
         'url': 'https://www.coinreaders.com/sub.html?section=sc21',
-        'article_selector': '.section-list .media',
-        'title_selector': 'h4 a',
-        'link_selector': 'h4 a',
-        'date_selector': '.write-time',
-        'base_url': 'https://coinreaders.com',
+        'article_selector': '.media',
+        'title_selector': '.media-body h4 a',
+        'link_selector': '.media-body h4 a',
+        'date_selector': '.media-body .write-time',
+        'base_url': 'https://www.coinreaders.com',
         'content_selector': ['#article-view-content-div']
     },
-    'bloomingbit': {
-        'url': 'https://bloomingbit.io/news',
-        'article_selector': '.news-list > li',
-        'title_selector': '.news-title',
-        'link_selector': '.news-title a',
-        'date_selector': '.news-date',
-        'base_url': 'https://bloomingbit.io',
-        'content_selector': ['.news-content']
-    }
+    # 'bloomingbit': {
+    #     'url': 'https://bloomingbit.io/news',
+    #     'article_selector': '.news-list > li',
+    #     'title_selector': '.news-title',
+    #     'link_selector': '.news-title a',
+    #     'date_selector': '.news-date',
+    #     'base_url': 'https://bloomingbit.io',
+    #     'content_selector': ['.news-content']
+    # },
+    'digitaltoday': {
+        'url': 'https://www.digitaltoday.co.kr/news/articleList.html?sc_section_code=S1N9&view_type=sm',
+        'article_selector': 'div.list-block',
+        'title_selector': 'a.article-title',
+        'link_selector': 'a.article-title',
+        'date_selector': 'span.byline-date',
+        'base_url': 'https://www.digitaltoday.co.kr',
+        'content_selector': ['#article-view-content-div']
+    },
 }
 
 # 코인 데이터 (dummy_coins.dart 참조)
@@ -304,19 +313,21 @@ def save_to_shared(news_list):
 
 def main():
     """메인 함수"""
-    logger.info("뉴스 크롤러 시작")
-    
-    # 각 사이트 크롤링
-    all_news = []
-    for site_name in SITES.keys():
-        site_news = crawl_site(site_name)
-        all_news.extend(site_news)
-        time.sleep(2)  # 사이트 간 딜레이
-    
-    # 수집된 뉴스 저장
-    save_to_shared(all_news)
-    
-    logger.info("뉴스 크롤러 종료")
+    logger.info("뉴스 크롤러 시작 (6시간마다 1회 실행)")
+
+    while True:
+        # 각 사이트 크롤링
+        all_news = []
+        for site_name in SITES.keys():
+            site_news = crawl_site(site_name)
+            all_news.extend(site_news)
+            time.sleep(2)  # 사이트 간 딜레이
+
+        # 수집된 뉴스 저장
+        save_to_shared(all_news)
+
+        logger.info("크롤링 및 저장 완료. 6시간 대기 후 재실행")
+        time.sleep(60 * 60 * 6)  # 6시간 대기
 
 
 if __name__ == "__main__":

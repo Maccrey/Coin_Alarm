@@ -210,31 +210,22 @@ class NewsHandler(FileSystemEventHandler):
 
 
 def main():
-    """
-    메인 함수
-    """
-    logger.info("뉴스 정제 서비스 시작")
-    
-    # 기존 파일 처리
-    for filename in os.listdir(SHARED_DIR):
-        if filename.endswith(".json") and filename.startswith("crawled_news_"):
-            file_path = os.path.join(SHARED_DIR, filename)
-            process_file(file_path)
-    
-    # 파일 감시 설정
-    event_handler = NewsHandler()
-    observer = Observer()
-    observer.schedule(event_handler, path=SHARED_DIR, recursive=False)
-    observer.start()
-    
-    try:
-        while True:
-            time.sleep(5)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
-    
-    logger.info("뉴스 정제 서비스 종료")
+    """메인 함수"""
+    logger.info("뉴스 크롤러 시작 (6시간마다 1회 실행)")
+
+    while True:
+        # 각 사이트 크롤링
+        all_news = []
+        for site_name in SITES.keys():
+            site_news = crawl_site(site_name)
+            all_news.extend(site_news)
+            time.sleep(2)  # 사이트 간 딜레이
+
+        # 수집된 뉴스 저장
+        save_to_shared(all_news)
+
+        logger.info("크롤링 및 저장 완료. 6시간 대기 후 재실행")
+        time.sleep(60 * 60 * 6)  # 6시간 대기
 
 
 if __name__ == "__main__":
