@@ -17,3 +17,8 @@ x86/
 !*.[Cc]ache/
 
 webcrawler/coin-alarm-scheduler.tar
+
+# 디버그용 HTML 파일
+*.html
+webcrawler/shared/*.html
+webcrawler/news-crawler/webcrawler/shared/*.html

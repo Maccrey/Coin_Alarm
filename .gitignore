@@ -49,3 +49,8 @@ app.*.map.json
 .env
 webcrawler/shared/crawled_news_20250608124644.json
 webcrawler/coin-alarm-scheduler.tar
+
+# 디버그용 HTML 파일
+*.html
+webcrawler/shared/*.html
+webcrawler/news-crawler/webcrawler/shared/*.html
