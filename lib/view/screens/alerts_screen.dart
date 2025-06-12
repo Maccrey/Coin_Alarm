@@ -517,7 +517,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                       if (alert.triggeredAt != null) ...[
                         const SizedBox(height: 4),
                         Text(
-                          _formatDateTime(alert.triggeredAt!),
+                          _formatDateTime(alert.triggeredAt!, detailed: true),
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.grey[600],

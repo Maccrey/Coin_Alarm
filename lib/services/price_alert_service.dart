@@ -5,6 +5,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../model/price_alert_model.dart';
 import '../model/coin_model.dart';
+import 'package:mailer/mailer.dart';
+import 'package:mailer/smtp_server.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// 가격 알림 관련 서비스
 class PriceAlertService {
@@ -191,12 +194,49 @@ class PriceAlertService {
         triggeredAlerts.add(updatedAlert);
 
         debugPrint(
-          'PriceAlertService: 알림 발생 - ${alert.coinSymbol} (${alert.isAbove ? '이상' : '이하'} ${alert.priceTarget})',
+          'PriceAlertService: 알림 발생 - \\${alert.coinSymbol} (\\${alert.isAbove ? '이상' : '이하'} \\${alert.priceTarget})',
         );
+
+        // 이메일 전송 (Gmail SMTP)
+        await sendAlertEmail(alert.userId, updatedAlert);
       }
     }
 
     return triggeredAlerts;
+  }
+
+  /// 알림 발생 시 이메일 전송 (Gmail SMTP)
+  Future<void> sendAlertEmail(String userId, PriceAlert alert) async {
+    final email = await _getUserEmailById(userId);
+    final subject = '[코인알람] 알림 발생: ${alert.coinSymbol}';
+    final body =
+        '알림 조건: ${alert.conditionText}\n발생 시각: ${alert.triggeredAt}\n메모: ${alert.notes ?? ''}';
+
+    // Gmail SMTP 정보 (앱 비밀번호 사용)
+    final gmailUser = dotenv.env['GMAIL_USER'] ?? 'your_email@gmail.com';
+    final gmailAppPassword =
+        dotenv.env['GMAIL_APP_PASSWORD'] ?? 'your_app_password';
+    final smtpServer = gmail(gmailUser, gmailAppPassword);
+
+    final message = Message()
+      ..from = Address(gmailUser, '코인알람')
+      ..recipients.add(email)
+      ..subject = subject
+      ..text = body;
+
+    try {
+      final sendReport = await send(message, smtpServer);
+      print('이메일 전송 성공: ' + sendReport.toString());
+    } on MailerException catch (e) {
+      print('이메일 전송 실패: $e');
+    }
+  }
+
+  /// userId로 이메일 주소 조회 (더미)
+  Future<String> _getUserEmailById(String userId) async {
+    // TODO: 실제 DB에서 userId로 이메일 조회 구현
+    // 현재는 테스트용 이메일 반환
+    return 'test@example.com';
   }
 
   /// 초기화 확인 및 필요시 초기화
