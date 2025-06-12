@@ -8,6 +8,7 @@ import '../model/coin_model.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../services/supabase_service.dart';
 
 /// 가격 알림 관련 서비스
 class PriceAlertService {
@@ -198,7 +199,7 @@ class PriceAlertService {
         );
 
         // 이메일 전송 (Gmail SMTP)
-        await sendAlertEmail(alert.userId, updatedAlert);
+        await sendAlertEmail(userId, updatedAlert);
       }
     }
 
@@ -207,15 +208,16 @@ class PriceAlertService {
 
   /// 알림 발생 시 이메일 전송 (Gmail SMTP)
   Future<void> sendAlertEmail(String userId, PriceAlert alert) async {
-    final email = await _getUserEmailById(userId);
+    final email = await SupabaseService().getUserEmailById(userId);
     final subject = '[코인알람] 알림 발생: ${alert.coinSymbol}';
     final body =
         '알림 조건: ${alert.conditionText}\n발생 시각: ${alert.triggeredAt}\n메모: ${alert.notes ?? ''}';
 
     // Gmail SMTP 정보 (앱 비밀번호 사용)
-    final gmailUser = dotenv.env['GMAIL_USER'] ?? 'your_email@gmail.com';
+    // TODO: 추후 변경 실제 이메일로 변경
+    final gmailUser = dotenv.env['GMAIL_USER'] ?? 'maccrey@gmail.com';
     final gmailAppPassword =
-        dotenv.env['GMAIL_APP_PASSWORD'] ?? 'your_app_password';
+        dotenv.env['GMAIL_APP_PASSWORD'] ?? 'Maccrey03120214';
     final smtpServer = gmail(gmailUser, gmailAppPassword);
 
     final message = Message()
@@ -230,13 +232,6 @@ class PriceAlertService {
     } on MailerException catch (e) {
       print('이메일 전송 실패: $e');
     }
-  }
-
-  /// userId로 이메일 주소 조회 (더미)
-  Future<String> _getUserEmailById(String userId) async {
-    // TODO: 실제 DB에서 userId로 이메일 조회 구현
-    // 현재는 테스트용 이메일 반환
-    return 'test@example.com';
   }
 
   /// 초기화 확인 및 필요시 초기화

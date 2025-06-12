@@ -733,6 +733,32 @@ class SupabaseService {
       // 더미 데이터 없음: 아무 동작도 하지 않음
     }
   }
+
+  /// userId로 이메일 조회
+  Future<String?> getUserEmailById(String userId) async {
+    if (!_initialized) {
+      throw Exception('Supabase가 초기화되지 않았습니다.');
+    }
+    if (_useRealSupabase) {
+      try {
+        final response = await _client
+            .from('users')
+            .select('email')
+            .eq('id', userId)
+            .maybeSingle();
+        return response?['email'];
+      } catch (e) {
+        debugPrint('userId로 이메일 조회 실패: $e');
+        return null;
+      }
+    } else {
+      // 더미 모드: _users 맵에서 id로 조회
+      final user = (_client as DummySupabaseClient)._users.values
+          .cast<app_user.User?>()
+          .firstWhere((u) => u?.id == userId, orElse: () => null);
+      return user?.email;
+    }
+  }
 }
 
 /// 더미 Supabase 클라이언트 클래스
