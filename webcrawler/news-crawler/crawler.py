@@ -31,8 +31,27 @@ logging.basicConfig(
     handlers=[
         logging.StreamHandler(),
         logging.FileHandler(os.path.join(SHARED_DIR, 'crawler.log'))
-    ]
+    ],
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
+
+# 로그 시간을 KST로 변환하는 필터 클래스
+class KSTFormatter(logging.Formatter):
+    def converter(self, timestamp):
+        dt = datetime.fromtimestamp(timestamp)
+        return dt.replace(tzinfo=pytz.UTC).astimezone(pytz.timezone('Asia/Seoul'))
+        
+    def formatTime(self, record, datefmt=None):
+        dt = self.converter(record.created)
+        if datefmt:
+            return dt.strftime(datefmt)
+        else:
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+
+# KST 포맷터 적용
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(KSTFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+
 logger = logging.getLogger(__name__)
 
 # 크롤링 사이트 정보
@@ -190,6 +209,8 @@ def crawl_site(site_name):
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
+        # User-Agent 추가 (blockmedia 차단 우회)
+        options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
         service = Service('/usr/bin/chromedriver')
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
@@ -240,6 +261,8 @@ def crawl_site(site_name):
                         options.add_argument('--no-sandbox')
                         options.add_argument('--disable-dev-shm-usage')
                         options.add_argument('--disable-gpu')
+                        # User-Agent 추가 (blockmedia 차단 우회)
+                        options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
                         service = Service('/usr/bin/chromedriver')
                         driver = webdriver.Chrome(service=service, options=options)
                         driver.get(link)

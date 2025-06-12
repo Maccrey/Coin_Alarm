@@ -10,6 +10,7 @@ services:
       - ./news-crawler:/app
     environment:
       - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
     networks:
       - crawler-network
     restart: unless-stopped
@@ -24,6 +25,7 @@ services:
       - ./news-cleaner:/app
     environment:
       - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
     depends_on:
       - news-crawler
     networks:
@@ -41,6 +43,7 @@ services:
       - PYTHONUNBUFFERED=1
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_API_KEY=${SUPABASE_API_KEY}
+      - TZ=Asia/Seoul
     env_file:
       - ../.env
     depends_on:
@@ -60,6 +63,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
     depends_on:
       - news-crawler
       - news-cleaner
@@ -80,6 +84,7 @@ services:
       - "5001:5000"
     environment:
       - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
     networks:
       - crawler-network
     restart: unless-stopped

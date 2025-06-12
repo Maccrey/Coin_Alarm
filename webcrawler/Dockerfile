@@ -33,4 +33,7 @@ RUN mkdir -p /app/logs
 
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
+ENV TZ=Asia/Seoul
+RUN ln -snf /usr/share/zoneinfo/Asia/Seoul /etc/localtime && echo "Asia/Seoul" > /etc/timezone
+
 CMD ["/usr/local/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] 
