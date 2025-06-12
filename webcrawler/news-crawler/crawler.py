@@ -279,7 +279,9 @@ def crawl_site(site_name):
                             img_elem = article_soup.select_one('.article img')
                             if img_elem and img_elem.get('src'):
                                 image_url = img_elem.get('src')
-                                if not image_url.startswith(('http://', 'https://')):
+                                if image_url.startswith('//'):
+                                    image_url = 'https:' + image_url
+                                elif not image_url.startswith(('http://', 'https://')):
                                     image_url = site_info['base_url'] + image_url
                             # 이미지를 못 찾으면 og:image 사용
                             if not image_url:
