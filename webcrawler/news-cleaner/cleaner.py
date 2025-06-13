@@ -19,19 +19,20 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import re
 
-# 로깅 설정
+# 공유 디렉토리 (항상 절대경로로 고정)
+SHARED_DIR = os.path.abspath(os.environ.get('SHARED_DIR', './shared'))
+os.makedirs(SHARED_DIR, exist_ok=True)
+
+# 로깅 설정 (SHARED_DIR 기반)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("/app/shared/cleaner.log")
+        logging.FileHandler(os.path.join(SHARED_DIR, 'cleaner.log'))
     ]
 )
 logger = logging.getLogger(__name__)
-
-# 공유 디렉토리
-SHARED_DIR = "/app/shared"
 
 # 광고성 키워드 (필터링 대상)
 AD_KEYWORDS = [

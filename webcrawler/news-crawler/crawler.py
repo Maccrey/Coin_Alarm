@@ -18,8 +18,8 @@ import pytz
 import asyncio
 from playwright.async_api import async_playwright
 
-# 공유 디렉토리
-SHARED_DIR = os.environ.get('SHARED_DIR', 'webcrawler/shared')
+# 공유 디렉토리 (항상 절대경로로 고정)
+SHARED_DIR = os.path.abspath(os.environ.get('SHARED_DIR', './shared'))
 # 로그 디렉토리 자동 생성
 os.makedirs(SHARED_DIR, exist_ok=True)
 
@@ -209,6 +209,11 @@ def save_to_shared(news_list):
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(news_list, f, ensure_ascii=False, indent=2)
         logger.info(f"뉴스 저장 완료: {output_file}")
+        # 파일 실제 존재 여부 즉시 체크
+        if os.path.exists(output_file):
+            logger.info(f"[파일 확인] 실제로 파일이 존재합니다: {output_file}")
+        else:
+            logger.error(f"[파일 확인] 파일이 존재하지 않습니다(경로 문제): {output_file}")
     except Exception as e:
         logger.error(f"파일 저장 오류: {e}")
 
@@ -520,5 +525,24 @@ async def crawl_digitaltoday_playwright():
 # asyncio.run(crawl_digitaltoday_playwright())
 
 if __name__ == "__main__":
-    # Playwright 기반 비동기 크롤러만 실행
-    asyncio.run(main_async()) 
+    import sys
+    import asyncio
+    # 단독 실행 시 1회만 크롤링 후 종료 (테스트/운영 모두 지원)
+    logger.info("[Playwright] 뉴스 크롤러 단독 실행 시작")
+    try:
+        loop = asyncio.get_event_loop()
+        all_news = []
+        blockmedia_news = loop.run_until_complete(crawl_blockmedia_playwright())
+        all_news.extend(blockmedia_news)
+        coinreaders_news = loop.run_until_complete(crawl_coinreaders_playwright())
+        all_news.extend(coinreaders_news)
+        digitaltoday_news = loop.run_until_complete(crawl_digitaltoday_playwright())
+        all_news.extend(digitaltoday_news)
+        if not all_news:
+            logger.warning("수집된 뉴스가 없습니다. (모든 사이트)")
+        else:
+            save_to_shared(all_news)
+            logger.info(f"총 {len(all_news)}개 뉴스 저장 완료.")
+    except Exception as e:
+        logger.error(f"크롤러 단독 실행 중 예외 발생: {e}")
+    logger.info("[Playwright] 뉴스 크롤러 단독 실행 종료") 

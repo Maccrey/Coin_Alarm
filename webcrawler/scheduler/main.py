@@ -7,79 +7,70 @@
 - 각 서비스를 순차적으로 실행하여 end-to-end 파이프라인 구성
 """
 
+import os
 import time
 import subprocess
 import logging
-import os
+from datetime import datetime
+import pytz
 
-# 로깅 설정
+# 공유 디렉토리 (항상 절대경로로 고정)
+SHARED_DIR = os.path.abspath(os.environ.get('SHARED_DIR', './shared'))
+os.makedirs(SHARED_DIR, exist_ok=True)
+
+# 로깅 설정 (SHARED_DIR 기반)
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('/app/shared/scheduler.log')
+        logging.FileHandler(os.path.join(SHARED_DIR, 'scheduler.log'))
     ]
 )
 logger = logging.getLogger(__name__)
 
-def run_docker_command(container_name, command):
+CRAWLER_CMD = ["python3", "webcrawler/news-crawler/crawler.py"]
+CLEANER_CMD = ["python3", "webcrawler/news-cleaner/cleaner.py"]
+WRITER_CMD = ["python3", "webcrawler/news-writer/writer.py"]
+
+
+def run_step(cmd, step_name):
     """
-    도커 컨테이너에서 명령어 실행
-    
-    Args:
-        container_name (str): 컨테이너 이름
-        command (str): 실행할 명령어
+    각 단계별 서브프로세스 실행 및 robust 예외 처리
     """
-    logger.info(f"{container_name} 컨테이너에서 '{command}' 실행 시작")
-    
+    logger.info(f"[{step_name}] 실행 시작: {cmd}")
     try:
-        result = subprocess.run(
-            ["docker", "exec", container_name, "python", command],
-            capture_output=True,
-            text=True
-        )
-        
-        if result.stdout:
-            logger.info(f"{container_name} 출력:\n{result.stdout}")
-        
-        if result.returncode == 0:
-            logger.info(f"{container_name} 실행 완료 (성공)")
-        else:
-            logger.error(f"{container_name} 실행 실패 (코드: {result.returncode})")
-            if result.stderr:
-                logger.error(f"{container_name} 오류:\n{result.stderr}")
-                
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        logger.info(f"[{step_name}] 실행 완료 (stdout):\n{result.stdout}")
+        if result.stderr:
+            logger.warning(f"[{step_name}] stderr:\n{result.stderr}")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"[{step_name}] 실행 실패: {e}\nstdout:\n{e.stdout}\nstderr:\n{e.stderr}")
+        return False
     except Exception as e:
-        logger.error(f"{container_name} 실행 중 예외 발생: {e}")
+        logger.error(f"[{step_name}] 예외 발생: {e}")
+        return False
 
-def execute_pipeline():
-    """뉴스 파이프라인 전체 실행"""
-    logger.info("=== 뉴스 파이프라인 전체 실행 시작 ===")
-    
-    # 1. 뉴스 크롤링
-    run_docker_command("news-crawler", "/app/crawler.py")
-    
-    # 2. 뉴스 정제
-    run_docker_command("news-cleaner", "/app/cleaner.py")
-    
-    # 3. 뉴스 저장
-    run_docker_command("news-writer", "/app/writer.py")
-    
-    logger.info("=== 뉴스 파이프라인 전체 실행 완료 ===")
-
-def main():
-    """메인 함수"""
-    logger.info("스케줄러 서비스 시작")
-    
-    # 초기 실행
-    execute_pipeline()
-    
-    # 3시간마다 반복 실행
+def main_loop():
+    """
+    크롤러 → 클리너 → writer 순차 실행, writer 끝나면 2시간 대기 후 반복
+    """
+    logger.info("=== 뉴스 파이프라인 순차 실행 스케줄러 시작 ===")
     while True:
-        logger.info("3시간 휴면 상태로 대기 후 다음 실행")
-        time.sleep(60 * 60 * 3)  # 3시간 대기
-        execute_pipeline()
+        # 1. 크롤러 실행
+        if not run_step(CRAWLER_CMD, "크롤러"):  # 실패해도 다음 단계로 진행
+            logger.warning("크롤러 단계에서 오류 발생. 다음 단계로 진행합니다.")
+        time.sleep(2)
+        # 2. 클리너 실행
+        if not run_step(CLEANER_CMD, "클리너"):
+            logger.warning("클리너 단계에서 오류 발생. 다음 단계로 진행합니다.")
+        time.sleep(2)
+        # 3. writer 실행
+        if not run_step(WRITER_CMD, "writer"):
+            logger.warning("writer 단계에서 오류 발생. 다음 반복으로 진행합니다.")
+        logger.info("=== 저장 완료. 2시간 대기 후 재시작 ===")
+        time.sleep(60 * 60 * 2)  # 2시간 대기
 
 if __name__ == "__main__":
-    main() 
+    main_loop() 

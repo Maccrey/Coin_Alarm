@@ -25,22 +25,23 @@ import sqlite3
 # 환경 변수 로드
 load_dotenv()
 
-# 로깅 설정
+# 공유 디렉토리 (항상 절대경로로 고정)
+SHARED_DIR = os.path.abspath(os.environ.get('SHARED_DIR', './shared'))
+os.makedirs(SHARED_DIR, exist_ok=True)
+
+# 로깅 설정 (SHARED_DIR 기반)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('/app/shared/writer.log')
+        logging.FileHandler(os.path.join(SHARED_DIR, 'writer.log'))
     ]
 )
 logger = logging.getLogger(__name__)
 
-# 공유 디렉토리
-SHARED_DIR = '/app/shared'
-
 # 로컬 DB 파일 (처리된 파일 추적용)
-DB_FILE = '/app/shared/processed_files.db'
+DB_FILE = os.path.join(SHARED_DIR, 'processed_files.db')
 
 # Supabase 설정
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -135,48 +136,46 @@ def create_news_hash(title):
     return hashlib.md5(title.encode('utf-8')).hexdigest()
 
 def save_to_supabase(news_data):
-    """뉴스 데이터 Supabase에 저장"""
+    """뉴스 데이터 Supabase에 저장 (신뢰성 강화)"""
     if not SUPABASE_URL or not SUPABASE_KEY:
         logger.error("Supabase URL 또는 Key가 설정되지 않았습니다.")
         return 0
 
-    # 현재 시간
     now = datetime.now(pytz.timezone('Asia/Seoul')).isoformat()
-    
-    # 저장 성공 카운트 및 타이틀 리스트
     success_count = 0
     saved_titles = []
 
-    # Supabase에 저장할 항목 추가
     for news in news_data:
         try:
+            # 필수 필드 체크
+            if not news.get('title') or not news.get('url') or not news.get('published_at'):
+                logger.error(f"필수 필드 누락: {news}")
+                continue
+
             # news_hash가 없으면 타이틀 기반으로 생성
             if 'id' not in news or not news['id']:
                 news_hash = create_news_hash(news['title'])
                 logger.warning(f"news_hash 없음, 자동 생성: {news['title']}")
                 news['id'] = news_hash
-            
+
             # 이미 처리된 뉴스인지 확인
             if is_news_processed(news['id'], news['title']):
                 logger.info(f"이미 처리된 뉴스 건너뛰기: {news['title']}")
                 continue
-            
+
             # 기존 뉴스 데이터 확인
             existing_news = get_existing_news(news['id'])
-            
-            # 기존 데이터가 있고 image_url과 related_coins 필드가 있으면 그대로 유지
             if existing_news:
                 if (existing_news.get('image_url') and not news.get('image_url')) or \
                    (existing_news.get('image_url') and news.get('image_url') == ''):
                     logger.info(f"기존 이미지 URL 유지: {existing_news.get('image_url')}")
                     news['image_url'] = existing_news.get('image_url')
-                
                 if (existing_news.get('related_coins') and existing_news.get('related_coins') != '{}') and \
                    (not news.get('related_coins') or news.get('related_coins') == '{}'):
                     logger.info(f"기존 관련 코인 유지: {existing_news.get('related_coins')}")
                     news['related_coins'] = existing_news.get('related_coins')
-            
-            # 이미지 URL 처리 - JSON 파일에서는 'imageUrl'로 되어있음
+
+            # 이미지 URL 처리
             if 'imageUrl' in news and news['imageUrl']:
                 news['image_url'] = news['imageUrl']
                 logger.info(f"이미지 URL 매핑: {news['imageUrl']}")
@@ -184,16 +183,14 @@ def save_to_supabase(news_data):
                 news['image_url'] = ''
                 logger.warning(f"image_url 필드가 비어 있음: {news['title']}")
 
-            # 관련 코인 처리 - PostgreSQL 배열 형식으로 변환
+            # 관련 코인 처리
             if 'related_coins' in news:
                 if isinstance(news['related_coins'], list):
                     if len(news['related_coins']) > 0:
-                        # PostgreSQL 배열 형식으로 변환: '{item1,item2,item3}'
-                        coins_str = "{" + ",".join([f'"{coin}"' for coin in news['related_coins']]) + "}"
+                        coins_str = "{" + ",".join([f'\"{coin}\"' for coin in news['related_coins']]) + "}"
                         news['related_coins'] = coins_str
                         logger.info(f"관련 코인 변환: {coins_str}")
                     else:
-                        # 빈 배열
                         news['related_coins'] = "{}"
                 elif news['related_coins'] == '[]':
                     news['related_coins'] = "{}"
@@ -205,43 +202,45 @@ def save_to_supabase(news_data):
                 news['created_at'] = now
 
             # 필요없는 필드 제거
-            if 'crawled_at' in news:
-                del news['crawled_at']
-            if 'imageUrl' in news:
-                del news['imageUrl']
-            # cleaned_at 필드 제거 (DB 스키마에 없음)
-            if 'cleaned_at' in news:
-                del news['cleaned_at']
-            # hash 필드 제거 (DB 스키마에 없음)
-            if 'hash' in news:
-                del news['hash']
+            for field in ['crawled_at', 'imageUrl', 'cleaned_at', 'hash']:
+                if field in news:
+                    del news[field]
 
-            # Supabase에 저장
             url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_NEWS_TABLE}"
-            
-            logger.info(f"뉴스 저장 시도: {news['title']}")
-            logger.info(f"뉴스 저장 요청 데이터: {news}")
-            logger.info(f"뉴스 저장 요청 URL: '{url}'")
-            
-            try:
-                response = requests.post(url, json=news, headers=headers)
-                logger.info(f"뉴스 저장 응답 코드: {response.status_code}")
-                logger.info(f"뉴스 저장 응답 본문: {response.text}")
-                
-                if response.status_code == 201 or response.status_code == 200:
-                    logger.info(f"뉴스 저장 성공: {news['title']}")
-                    # 처리 성공한 뉴스 기록
-                    mark_news_as_processed(news['id'], news['title'])
-                    success_count += 1
-                    saved_titles.append(news['title'])
-                else:
-                    logger.error(f"뉴스 저장 실패: {news['title']}, 응답 코드: {response.status_code}, 응답: {response.text}")
-            except Exception as e:
-                logger.error(f"뉴스 저장 중 예외 발생: {news['title']}, 에러: {str(e)}")
+
+            # 저장 시도 (최대 3회)
+            for attempt in range(3):
+                try:
+                    response = requests.post(url, json=news, headers=headers, timeout=10)
+                    logger.info(f"[{attempt+1}회차] 뉴스 저장 응답 코드: {response.status_code}")
+                    logger.info(f"[{attempt+1}회차] 뉴스 저장 응답 본문: {response.text}")
+
+                    if response.status_code in (200, 201):
+                        # 저장 후 실제 DB 반영 여부 재확인 (2회까지)
+                        saved = False
+                        for _ in range(2):
+                            time.sleep(0.5)
+                            check = get_existing_news(news['id'])
+                            if check:
+                                saved = True
+                                break
+                        if saved:
+                            logger.info(f"뉴스 저장 및 DB 반영 확인 성공: {news['title']}")
+                            mark_news_as_processed(news['id'], news['title'])
+                            success_count += 1
+                            saved_titles.append(news['title'])
+                            break
+                        else:
+                            logger.error(f"저장 응답은 성공이나 DB 반영 확인 실패: {news['title']}")
+                    else:
+                        logger.error(f"뉴스 저장 실패: {news['title']} | 응답: {response.text} | 요청: {news}")
+                except Exception as e:
+                    logger.error(f"뉴스 저장 중 예외 발생({attempt+1}회차): {news['title']}, 에러: {str(e)}")
+                time.sleep(1)
+            else:
+                logger.error(f"최대 재시도 후에도 저장 실패: {news['title']}")
         except Exception as e:
             logger.error(f"뉴스 처리 중 예외 발생: {str(e)}")
-    
-    # 저장 결과 요약 로그
     logger.info(f"Supabase에 저장된 뉴스 개수: {success_count}")
     if saved_titles:
         logger.info(f"Supabase에 저장된 뉴스 타이틀 목록: {saved_titles}")
