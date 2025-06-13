@@ -225,6 +225,8 @@ def save_to_supabase(news_data):
                                 saved = True
                                 break
                         if saved:
+                            # 대시보드에서 인식할 수 있도록 저장 성공 로그 추가
+                            logger.info(f"뉴스 저장 성공: {news['title']}")
                             logger.info(f"뉴스 저장 및 DB 반영 확인 성공: {news['title']}")
                             mark_news_as_processed(news['id'], news['title'])
                             success_count += 1
