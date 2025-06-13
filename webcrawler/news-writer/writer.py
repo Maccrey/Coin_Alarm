@@ -143,8 +143,9 @@ def save_to_supabase(news_data):
     # 현재 시간
     now = datetime.now(pytz.timezone('Asia/Seoul')).isoformat()
     
-    # 저장 성공 카운트
+    # 저장 성공 카운트 및 타이틀 리스트
     success_count = 0
+    saved_titles = []
 
     # Supabase에 저장할 항목 추가
     for news in news_data:
@@ -218,6 +219,7 @@ def save_to_supabase(news_data):
             # Supabase에 저장
             url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_NEWS_TABLE}"
             
+            logger.info(f"뉴스 저장 시도: {news['title']}")
             logger.info(f"뉴스 저장 요청 데이터: {news}")
             logger.info(f"뉴스 저장 요청 URL: '{url}'")
             
@@ -231,13 +233,20 @@ def save_to_supabase(news_data):
                     # 처리 성공한 뉴스 기록
                     mark_news_as_processed(news['id'], news['title'])
                     success_count += 1
+                    saved_titles.append(news['title'])
                 else:
-                    logger.error(f"뉴스 저장 실패: {news['title']}, 코드: {response.status_code}, 응답: {response.text}")
+                    logger.error(f"뉴스 저장 실패: {news['title']}, 응답 코드: {response.status_code}, 응답: {response.text}")
             except Exception as e:
-                logger.error(f"뉴스 저장 중 오류 발생: {str(e)}")
+                logger.error(f"뉴스 저장 중 예외 발생: {news['title']}, 에러: {str(e)}")
         except Exception as e:
             logger.error(f"뉴스 처리 중 예외 발생: {str(e)}")
     
+    # 저장 결과 요약 로그
+    logger.info(f"Supabase에 저장된 뉴스 개수: {success_count}")
+    if saved_titles:
+        logger.info(f"Supabase에 저장된 뉴스 타이틀 목록: {saved_titles}")
+    else:
+        logger.info("Supabase에 저장된 뉴스가 없습니다.")
     return success_count
 
 class NewsHandler(FileSystemEventHandler):

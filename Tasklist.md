@@ -152,7 +152,19 @@
   - [x] 중앙 집중식 로깅 구현
   - [x] 오류 발생 시 알림 기능 구현 (이메일 또는 메시지)
 
-#### 7-2. 뉴스 시스템 앱 연동
+#### 7-2. ARM64 지원을 위한 Playwright 기반 뉴스 크롤러 마이그레이션 (MSA & TDD)
+
+- [ ] Playwright 기반 크롤러 도입 필요성 및 기술 조사
+- [ ] Dockerfile 및 requirements.txt에 Playwright 환경 구축 (ARM64/x86_64 자동 지원)
+- [ ] 기존 Selenium 크롤러 코드 Playwright로 마이그레이션 (blockmedia)
+- [ ] 기존 Selenium 크롤러 코드 Playwright로 마이그레이션 (coinreaders)
+- [ ] 기존 Selenium 크롤러 코드 Playwright로 마이그레이션 (digitaltoday)
+- [ ] Playwright 기반 크롤러 단위 테스트 코드 작성 (TDD)
+- [ ] Supabase 연동, 자동 태깅, 이미지 URL 처리 등 기존 부가 기능 이식
+- [ ] ARM64 환경에서 정상 동작 확인 및 통합 테스트
+- [ ] README.md, development.md, Tasklist.md에 기술 전환 및 진행상황 업데이트
+
+#### 7-3. 뉴스 시스템 앱 연동
 
 - [x] 뉴스 모델 클래스 구현 (News, NewsCoin)
 - [x] 뉴스 서비스 및 Repository 구현
