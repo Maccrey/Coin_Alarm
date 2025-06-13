@@ -291,17 +291,16 @@ class NewsHandler(FileSystemEventHandler):
         success_count = save_to_supabase(news_data)
         logger.info(f"Supabase 저장 완료: {success_count}개 성공")
         
-        # 처리 완료된 파일 이름 변경
-        processed_file = file_path.replace('cleaned_news_', 'processed_news_').replace('crawled_news_', 'processed_news_')
-        os.rename(file_path, processed_file)
-        logger.info(f"파일 처리 완료: {processed_file}")
-        
-        # 처리 완료된 파일 삭제
-        os.remove(processed_file)
-        logger.info(f"파일 삭제 완료: {processed_file}")
-        
-        # 파일 처리 기록
-        mark_file_as_processed(filename)
+        if success_count == len(news_data):
+            # 전체 성공 시에만 파일 삭제
+            processed_file = file_path.replace('cleaned_news_', 'processed_news_').replace('crawled_news_', 'processed_news_')
+            os.rename(file_path, processed_file)
+            logger.info(f"파일 처리 완료: {processed_file}")
+            os.remove(processed_file)
+            logger.info(f"파일 삭제 완료: {processed_file}")
+            mark_file_as_processed(filename)
+        else:
+            logger.error(f"일부 뉴스 저장 실패! 파일을 삭제하지 않고 남깁니다: {file_path}")
 
 def process_existing_files():
     """기존 파일 처리"""
@@ -324,15 +323,16 @@ def process_existing_files():
             success_count = save_to_supabase(news_data)
             logger.info(f"Supabase 저장 완료: {success_count}개 성공")
             
-            # 처리 완료된 파일 이름 변경 후 삭제
-            processed_file = file_path.replace('cleaned_news_', 'processed_news_')
-            os.rename(file_path, processed_file)
-            logger.info(f"파일 처리 완료: {processed_file}")
-            os.remove(processed_file)
-            logger.info(f"파일 삭제 완료: {processed_file}")
-            
-            # 파일 처리 기록
-            mark_file_as_processed(filename)
+            if success_count == len(news_data):
+                # 전체 성공 시에만 파일 삭제
+                processed_file = file_path.replace('cleaned_news_', 'processed_news_')
+                os.rename(file_path, processed_file)
+                logger.info(f"파일 처리 완료: {processed_file}")
+                os.remove(processed_file)
+                logger.info(f"파일 삭제 완료: {processed_file}")
+                mark_file_as_processed(filename)
+            else:
+                logger.error(f"일부 뉴스 저장 실패! 파일을 삭제하지 않고 남깁니다: {file_path}")
         except Exception as e:
             logger.error(f"기존 파일 처리 중 오류 발생: {str(e)}")
     
@@ -355,15 +355,16 @@ def process_existing_files():
             success_count = save_to_supabase(news_data)
             logger.info(f"Supabase 저장 완료: {success_count}개 성공")
             
-            # 처리 완료된 파일 이름 변경 후 삭제
-            processed_file = file_path.replace('crawled_news_', 'processed_news_')
-            os.rename(file_path, processed_file)
-            logger.info(f"파일 처리 완료: {processed_file}")
-            os.remove(processed_file)
-            logger.info(f"파일 삭제 완료: {processed_file}")
-            
-            # 파일 처리 기록
-            mark_file_as_processed(filename)
+            if success_count == len(news_data):
+                # 전체 성공 시에만 파일 삭제
+                processed_file = file_path.replace('crawled_news_', 'processed_news_')
+                os.rename(file_path, processed_file)
+                logger.info(f"파일 처리 완료: {processed_file}")
+                os.remove(processed_file)
+                logger.info(f"파일 삭제 완료: {processed_file}")
+                mark_file_as_processed(filename)
+            else:
+                logger.error(f"일부 뉴스 저장 실패! 파일을 삭제하지 않고 남깁니다: {file_path}")
         except Exception as e:
             logger.error(f"기존 파일 처리 중 오류 발생: {str(e)}")
 

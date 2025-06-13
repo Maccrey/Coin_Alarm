@@ -409,6 +409,9 @@ async def crawl_coinreaders_playwright():
                     # 카테고리
                     category_elem = detail_soup.select_one('.section_arae a')
                     category = category_elem.get_text(strip=True) if category_elem else ''
+                    # 크롤링 시각(한국시간) 추가
+                    crawled_at = datetime.now(pytz.timezone('Asia/Seoul')).isoformat()
+                    # 뉴스 dict 생성 (crawled_at 포함)
                     news_list.append({
                         'title': detail_title,
                         'url': link,
@@ -416,7 +419,8 @@ async def crawl_coinreaders_playwright():
                         'writer': writer,
                         'content': content,
                         'image_url': img_url,
-                        'category': category
+                        'category': category,
+                        'crawled_at': crawled_at  # 크롤링 시각(한국시간)
                     })
                     await detail_page.close()
                 except Exception as e:
