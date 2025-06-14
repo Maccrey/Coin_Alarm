@@ -15,7 +15,6 @@ import 'viewmodel/price_alert_viewmodel.dart';
 import 'viewmodel/settings_viewmodel.dart';
 import 'viewmodel/crypto_viewmodel.dart';
 import 'view/screens/splash_screen.dart';
-import 'services/supabase_client.dart';
 import 'view/screens/settings_screen.dart';
 import 'viewmodel/chart_viewmodel.dart';
 import 'services/chart_cache_service.dart';
