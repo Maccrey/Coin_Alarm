@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:workmanager/workmanager.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'core/theme.dart';
 import 'services/supabase_service.dart';
@@ -22,6 +24,16 @@ import 'services/chart_cache_service.dart';
 import 'model/chart_data_model.dart';
 import 'model/price_alert_model.dart';
 import 'services/price_alert_service.dart';
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    await PriceAlertViewModel.checkAndNotify(flutterLocalNotificationsPlugin);
+    return Future.value(true);
+  });
+}
 
 // 앱 진입점
 void main() async {
@@ -93,6 +105,22 @@ void main() async {
     await supabaseService.initialize(useRealSupabase: false);
     debugPrint('더미 데이터로 초기화됨');
   }
+
+  // 알림 초기화
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  final InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+  // WorkManager 등록
+  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+  await Workmanager().registerPeriodicTask(
+    "1",
+    "checkPriceAlert",
+    frequency: const Duration(minutes: 15),
+  );
 
   runApp(
     MyApp(supabaseService: supabaseService, settingsService: settingsService),
