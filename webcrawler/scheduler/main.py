@@ -54,7 +54,7 @@ def run_step(cmd, step_name):
 
 def main_loop():
     """
-    크롤러 → 클리너 → writer 순차 실행, writer 끝나면 4시간 대기 후 반복
+    크롤러 → 클리너 → writer 순차 실행, writer 끝나면 2시간 대기 후 반복
     """
     logger.info("=== 뉴스 파이프라인 순차 실행 스케줄러 시작 ===")
     while True:
@@ -69,8 +69,8 @@ def main_loop():
         # 3. writer 실행
         if not run_step(WRITER_CMD, "writer"):
             logger.warning("writer 단계에서 오류 발생. 다음 반복으로 진행합니다.")
-        logger.info("=== 저장 완료. 4시간 대기 후 재시작 ===")
-        time.sleep(60 * 60 * 4)  # 4시간 대기
+        logger.info("=== 저장 완료. 2시간 대기 후 재시작 ===")
+        time.sleep(60 * 60 * 2)  # 2시간 대기
 
 if __name__ == "__main__":
     main_loop() 

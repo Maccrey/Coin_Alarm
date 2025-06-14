@@ -30,30 +30,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 컨테이너/호스트 환경 모두에서 shared/logs 경로를 자동 감지
-def get_shared_dir():
-    # 컨테이너 내부인지 호스트인지 자동 감지
-    if os.path.exists('/app/shared'):
-        return '/app/shared'
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.abspath(os.path.join(base_dir, '../shared'))
+# 공유 디렉토리
+SHARED_DIR = '/app/shared'
+LOGS_DIR = '/app/logs'
 
-def get_logs_dir():
-    if os.path.exists('/app/logs'):
-        return '/app/logs'
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.abspath(os.path.join(base_dir, '../logs'))
-
-SHARED_DIR = get_shared_dir()
-LOGS_DIR = get_logs_dir()
-
-# 로그 파일 목록 (환경에 따라 동적으로 경로 지정)
+# 로그 파일 목록
 LOG_FILES = {
-    'crawler': os.path.join(SHARED_DIR, 'crawler.log'),
-    'cleaner': os.path.join(SHARED_DIR, 'cleaner.log'),
-    'writer': os.path.join(SHARED_DIR, 'writer.log'),
-    'scheduler': os.path.join(SHARED_DIR, 'scheduler.log'),
-    'logger': os.path.join(LOGS_DIR, 'logger.log')
+    'crawler': '/app/shared/crawler.log',
+    'cleaner': '/app/shared/cleaner.log',
+    'writer': '/app/shared/writer.log',
+    'scheduler': '/app/shared/scheduler.log',
+    'logger': '/app/logs/logger.log'
 }
 
 # 서비스 목록
@@ -367,25 +354,10 @@ def index():
         return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
     }
     function parseCrawl(logs) {
-        // 다양한 로그 포맷(한글/영문/공백/Playwright 태그 유무 등) 지원
+        // 'YYYY-MM-DD HH:MM:SS - ...' 형식도 지원
         return logs.filter(line => line.includes('수집 완료')).slice(-100).reverse().map(line => {
-            // 1. 표준 패턴 우선 시도
-            let m = line.match(/^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})(?:,[0-9]+)? - [^ ]+ - [^ ]+ - (?:\[Playwright\] )?([^ ]+) 수집 완료: (.+)$/);
-            if (!m) {
-                // 2. Playwright 태그 없이 한글/영문/공백 등 유연하게 파싱
-                m = line.match(/^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})(?:,[0-9]+)? - [^ ]+ - [^ ]+ - ([^ ]+) 수집 완료: (.+)$/);
-            }
-            if (!m) {
-                // 3. fallback: split으로 최소 정보 추출
-                const parts = line.split(' - ');
-                if (parts.length >= 4 && parts[3].includes('수집 완료:')) {
-                    const t_kr = parseKST(parts[0]);
-                    const source = parts[3].split('수집 완료:')[0].replace(/\[Playwright\]/, '').trim();
-                    const title = parts[3].split('수집 완료:')[1].trim();
-                    return { time: t_kr, source, title };
-                }
-                return null;
-            }
+            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - [^ ]+ - [^ ]+ - [^\[]*\[Playwright\] ([^ ]+) 수집 완료: (.+)$/);
+            if (!m) return null;
             let t_kr = parseKST(m[1]);
             let source = m[2];
             let title = m[3];
