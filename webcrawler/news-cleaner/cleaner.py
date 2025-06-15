@@ -32,7 +32,7 @@ logging.basicConfig(
         logging.FileHandler(os.path.join(SHARED_DIR, 'cleaner.log'))
     ]
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('cleaner')
 
 # 광고성 키워드 (필터링 대상)
 AD_KEYWORDS = [

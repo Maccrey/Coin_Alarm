@@ -300,7 +300,7 @@ def index():
         document.getElementById('kpi-last-crawl').textContent = last;
         if (last !== '-') {
             let dt = new Date(last.replace(/-/g,'/'));
-            dt.setHours(dt.getHours() + 2);
+            dt.setHours(dt.getHours() + 4);
             document.getElementById('kpi-next-crawl').textContent = '다음: ' + dt.toLocaleString('ko-KR');
         } else {
             document.getElementById('kpi-next-crawl').textContent = '';
@@ -356,7 +356,7 @@ def index():
     function parseCrawl(logs) {
         // 'YYYY-MM-DD HH:MM:SS - ...' 형식도 지원
         return logs.filter(line => line.includes('수집 완료')).slice(-100).reverse().map(line => {
-            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - [^ ]+ - [^ ]+ - [^\[]*\[Playwright\] ([^ ]+) 수집 완료: (.+)$/);
+            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - [^ ]+ - [^ ]+ - [^\[]*\[Playwright\] ([a-zA-Z0-9_-]+) 수집 완료: (.+)$/);
             if (!m) return null;
             let t_kr = parseKST(m[1]);
             let source = m[2];
@@ -426,6 +426,12 @@ def index():
             renderTable('save-table', saveRows, ['time','title'], 'search-save');
             let errHtml = errRows.length ? errRows.map(r => `<tr><td class='mono'>${r.time}</td><td>${r.svc}</td><td>${r.level}</td><td class='mono'>${r.msg}</td></tr>`).join('') : `<tr><td colspan='4'>아직 데이터가 없습니다.</td></tr>`;
             document.querySelector('#err-table tbody').innerHTML = errHtml;
+        }).catch(err => {
+            console.error("데이터 로딩 중 오류 발생:", err);
+            // 각 테이블에 오류 메시지 표시
+            document.querySelector('#news-table tbody').innerHTML = "<tr><td colspan='3'>데이터 로딩 실패</td></tr>";
+            document.querySelector('#save-table tbody').innerHTML = "<tr><td colspan='2'>데이터 로딩 실패</td></tr>";
+            document.querySelector('#err-table tbody').innerHTML = "<tr><td colspan='4'>데이터 로딩 실패</td></tr>";
         });
     }
     document.getElementById('search-crawl').oninput = () => renderTable('news-table', crawlRows, ['time','source','title'], 'search-crawl');

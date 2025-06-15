@@ -38,7 +38,7 @@ logging.basicConfig(
         logging.FileHandler(os.path.join(SHARED_DIR, 'writer.log'))
     ]
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('writer')
 
 # 로컬 DB 파일 (처리된 파일 추적용)
 DB_FILE = os.path.join(SHARED_DIR, 'processed_files.db')

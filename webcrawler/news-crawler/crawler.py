@@ -51,7 +51,7 @@ class KSTFormatter(logging.Formatter):
 for handler in logging.getLogger().handlers:
     handler.setFormatter(KSTFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('crawler')
 
 # 크롤링 사이트 정보
 SITES = {
@@ -66,7 +66,7 @@ SITES = {
     },
     'coinreaders': {
         'url': 'https://www.coinreaders.com/sub.html?section=sc21',
-        'article_selector': '.sub_read_list_box',
+        'article_selector': '.sub_read_list',
         'title_selector': 'dl dt a',
         'link_selector': 'dl dt a',
         'date_selector': 'dd.etc',
@@ -164,12 +164,21 @@ def parse_date(date_str, site):
                 dt = datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M")
                 return pytz.timezone('Asia/Seoul').localize(dt)
         elif site == 'coinreaders':
-            # 예: "홍길동 기자 | 2025.06.11 12:40"
+            # 예: "홍길동 기자 | 2025.06.15 13:30" 또는 "기사입력 2025/06/15 [13:30]"
             try:
-                # 날짜 부분만 추출하기
-                date_part = date_str.strip().split('|')[-1].strip()
-                dt = datetime.strptime(date_part, "%Y.%m.%d %H:%M")
-                return pytz.timezone('Asia/Seoul').localize(dt)
+                import re
+                match = re.search(r'(\d{4}[./]\d{2}[./]\d{2})\s*\[?(\d{2}:\d{2})\]?', date_str)
+                if match:
+                    date_part = match.group(1).replace('/', '.')
+                    time_part = match.group(2)
+                    dt_str = f"{date_part} {time_part}"
+                    dt = datetime.strptime(dt_str, "%Y.%m.%d %H:%M")
+                    return pytz.timezone('Asia/Seoul').localize(dt)
+                else:
+                    # Fallback for old format
+                    date_part = date_str.strip().split('|')[-1].strip()
+                    dt = datetime.strptime(date_part, "%Y.%m.%d %H:%M")
+                    return pytz.timezone('Asia/Seoul').localize(dt)
             except Exception as e:
                 logger.warning(f"코인리더스 날짜 파싱 오류: {e}, 원본: {date_str}")
                 return datetime.now(pytz.timezone('Asia/Seoul'))
@@ -358,19 +367,22 @@ async def crawl_coinreaders_playwright():
             await page.wait_for_timeout(3000)
             html = await page.content()
             soup = BeautifulSoup(html, "lxml")
-            articles = soup.select('.sub_read_list_box .sub_read_list')
+            articles = soup.select(site_info['article_selector'])
             for article in articles[:10]:
                 try:
-                    title_elem = article.select_one('dl dt a')
-                    if not title_elem:
+                    title_elem = article.select_one(site_info['title_selector'])
+                    link_elem = article.select_one(site_info['link_selector'])
+                    date_elem = article.select_one(site_info['date_selector'])
+
+                    if not title_elem or not link_elem:
                         continue
+                    
                     title = title_elem.get_text().strip()
-                    link = title_elem.get('href', '')
+                    link = link_elem.get('href', '')
 
                     if link and not link.startswith('http'):
                         link = site_info['base_url'] + link
                     
-                    date_elem = article.select_one('dd.etc')
                     date_str = date_elem.get_text().strip() if date_elem else ""
 
                     published_at = parse_date(date_str, 'coinreaders')
@@ -386,9 +398,14 @@ async def crawl_coinreaders_playwright():
                             detail_html = await detail_page.content()
                             detail_soup = BeautifulSoup(detail_html, 'lxml')
                             
-                            content_elem = detail_soup.select_one('#article-view-content-div')
-                            content = content_elem.get_text().strip() if content_elem else ""
-
+                            # 본문 추출
+                            for selector in site_info.get('content_selector', []):
+                                content_elem = detail_soup.select_one(selector)
+                                if content_elem:
+                                    content = content_elem.get_text().strip()
+                                    break
+                            
+                            # 이미지 추출 (og:image 우선)
                             og_image = detail_soup.find('meta', property='og:image')
                             if og_image and og_image.get('content'):
                                 image_url = og_image.get('content')
@@ -397,6 +414,7 @@ async def crawl_coinreaders_playwright():
                         except Exception as e:
                             logger.warning(f"coinreaders 본문/이미지 추출 실패: {link}, 오류: {e}")
 
+                    # 관련 코인 태깅
                     related_coins = get_related_coins(title, content)
                     
                     news = {
