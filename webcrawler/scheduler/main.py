@@ -11,12 +11,14 @@ import os
 import time
 import subprocess
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
+import json
 
 # 공유 디렉토리 (항상 절대경로로 고정)
 SHARED_DIR = os.path.abspath(os.environ.get('SHARED_DIR', './shared'))
 os.makedirs(SHARED_DIR, exist_ok=True)
+STATUS_FILE = os.path.join(SHARED_DIR, 'pipeline_status.json')
 
 # 로깅 설정 (SHARED_DIR 기반)
 logging.basicConfig(
@@ -27,11 +29,30 @@ logging.basicConfig(
         logging.FileHandler(os.path.join(SHARED_DIR, 'scheduler.log'))
     ]
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('scheduler')
 
 CRAWLER_CMD = ["python3", "webcrawler/news-crawler/crawler.py"]
 CLEANER_CMD = ["python3", "webcrawler/news-cleaner/cleaner.py"]
 WRITER_CMD = ["python3", "webcrawler/news-writer/writer.py"]
+
+
+def update_status(status, step=None):
+    """파이프라인 상태를 JSON 파일에 기록"""
+    now = datetime.now(pytz.timezone('Asia/Seoul'))
+    data = {
+        'status': status,
+        'step': step,
+        'timestamp': now.isoformat()
+    }
+    if status == 'waiting':
+        next_run = now + timedelta(hours=4)
+        data['next_run'] = next_run.isoformat()
+    
+    try:
+        with open(STATUS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"상태 파일 업데이트 실패: {e}")
 
 
 def run_step(cmd, step_name):
@@ -39,6 +60,7 @@ def run_step(cmd, step_name):
     각 단계별 서브프로세스 실행 및 robust 예외 처리
     """
     logger.info(f"[{step_name}] 실행 시작: {cmd}")
+    update_status('running', step_name)
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         logger.info(f"[{step_name}] 실행 완료 (stdout):\n{result.stdout}")
@@ -69,7 +91,8 @@ def main_loop():
         # 3. writer 실행
         if not run_step(WRITER_CMD, "writer"):
             logger.warning("writer 단계에서 오류 발생. 다음 반복으로 진행합니다.")
-        logger.info("=== 저장 완료. 4시간 대기 후 재시작 ===")
+        logger.info("=== 파이프라인 1회 실행 완료. 4시간 대기 후 재시작 ===")
+        update_status('waiting')
         time.sleep(60 * 60 * 4)  # 4시간 대기
 
 if __name__ == "__main__":

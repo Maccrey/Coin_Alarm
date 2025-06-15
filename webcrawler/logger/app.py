@@ -28,11 +28,12 @@ logging.basicConfig(
         logging.FileHandler('/app/logs/logger.log')
     ]
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('logger')
 
 # 공유 디렉토리
 SHARED_DIR = '/app/shared'
 LOGS_DIR = '/app/logs'
+STATUS_FILE = os.path.join(SHARED_DIR, 'pipeline_status.json')
 
 # 로그 파일 목록
 LOG_FILES = {
@@ -73,21 +74,13 @@ def get_log_files():
 @app.route('/api/logs/<service>', methods=['GET'])
 def get_logs(service):
     """
-    특정 서비스의 로그 조회
-    
-    Args:
-        service (str): 서비스 이름
-        
-    Returns:
-        JSON: 로그 데이터
+    특정 서비스의 로그 조회 (파일 없으면 빈 목록 반환)
     """
     if service not in LOG_FILES:
         return jsonify({"status": "error", "message": "서비스를 찾을 수 없습니다."}), 404
     
     log_file = LOG_FILES[service]
-    
-    # 최대 라인 수 (기본값: 100)
-    lines = request.args.get('lines', default=100, type=int)
+    lines = request.args.get('lines', default=500, type=int)
     
     try:
         if os.path.exists(log_file):
@@ -96,18 +89,36 @@ def get_logs(service):
                 log_data = all_lines[-lines:] if lines < len(all_lines) else all_lines
             
             return jsonify({
-                "status": "ok",
-                "service": service,
-                "logs": log_data,
-                "total_lines": len(all_lines),
-                "showing_lines": len(log_data)
+                "status": "ok", "service": service, "logs": log_data,
+                "total_lines": len(all_lines), "showing_lines": len(log_data)
             })
         else:
-            return jsonify({"status": "error", "message": "로그 파일이 존재하지 않습니다."}), 404
-    
+            logger.warning(f"요청된 로그 파일 없음: {log_file}. 빈 목록을 반환합니다.")
+            return jsonify({
+                "status": "ok", "service": service, "logs": [],
+                "total_lines": 0, "showing_lines": 0, "message": "Log file not found."
+            })
     except Exception as e:
-        logger.error(f"로그 조회 오류: {e}")
+        logger.error(f"로그 조회 오류 ({service}): {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/pipeline_status', methods=['GET'])
+def get_pipeline_status():
+    """파이프라인 현재 상태 조회"""
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, 'r', encoding='utf-8') as f:
+                status_data = json.load(f)
+            return jsonify({"status": "ok", "data": status_data})
+        except Exception as e:
+            logger.error(f"상태 파일 읽기 오류: {e}")
+            return jsonify({"status": "error", "message": str(e)}), 500
+    else:
+        return jsonify({
+            "status": "ok", 
+            "data": { "status": "unknown", "timestamp": datetime.now(pytz.timezone('Asia/Seoul')).isoformat() }
+        })
 
 
 # 서비스 상태 조회
@@ -197,7 +208,7 @@ def index():
     <!DOCTYPE html>
     <html lang='ko'>
     <head>
-        <title>암호화폐 뉴스 데이터 분석 대시보드</title>
+        <title>암호화폐 뉴스 데이터 파이프라인 대시보드</title>
         <meta charset='UTF-8'>
         <meta name='viewport' content='width=device-width, initial-scale=1.0'>
         <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
@@ -205,11 +216,14 @@ def index():
             body { font-family: 'Pretendard', 'Noto Sans KR', Arial, sans-serif; margin: 0; padding: 0; background: #181c23; color: #e6eaf3; }
             h1 { color: #fff; margin: 0 0 16px 0; font-size: 2.2rem; }
             h2 { color: #7ecfff; margin: 32px 0 12px 0; font-size: 1.3rem; }
-            .dashboard { max-width: 1200px; margin: 0 auto; padding: 32px 16px; }
-            .kpi-row { display: flex; gap: 24px; margin-bottom: 32px; }
-            .kpi-card { flex: 1; background: #232936; border-radius: 12px; box-shadow: 0 2px 8px #0003; padding: 24px 18px; display: flex; flex-direction: column; align-items: flex-start; }
+            .dashboard { max-width: 1400px; margin: 0 auto; padding: 32px 16px; }
+            .kpi-row { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 32px; }
+            .kpi-card { flex: 1; background: #232936; border-radius: 12px; box-shadow: 0 2px 8px #0003; padding: 24px 18px; display: flex; flex-direction: column; align-items: flex-start; min-width: 180px;}
             .kpi-label { color: #b0b8c9; font-size: 1rem; margin-bottom: 6px; }
-            .kpi-value { font-size: 2.1rem; font-weight: bold; color: #7ecfff; }
+            .kpi-value { font-size: 2.1rem; font-weight: bold; }
+            #kpi-pipeline-status.waiting { color: #28a745; }
+            #kpi-pipeline-status.running { color: #0099ff; }
+            #kpi-pipeline-status.unknown { color: #aaa; }
             .kpi-sub { color: #b0b8c9; font-size: 0.95rem; margin-top: 4px; }
             .chart-section { background: #232936; border-radius: 12px; box-shadow: 0 2px 8px #0003; padding: 24px; margin-bottom: 32px; height: 320px; }
             .flex-row { display: flex; gap: 24px; }
@@ -223,23 +237,24 @@ def index():
             .center { text-align: center; }
             .search-box { background: #232936; border: 1px solid #2c3240; color: #e6eaf3; border-radius: 6px; padding: 6px 12px; margin-bottom: 8px; width: 220px; }
             .table-scroll { max-height: 340px; overflow-y: auto; }
-            .status { padding: 4px 10px; border-radius: 4px; font-size: 13px; display: inline-block; }
-            .status.ok { background: #1e3a2e; color: #7ecfff; }
+            .status { padding: 4px 10px; border-radius: 4px; font-size: 13px; display: inline-block; font-weight: 500; }
             .status.error { background: #3a1e1e; color: #ff7e7e; }
             .status.warning { background: #3a2e1e; color: #ffe07e; }
+            @media (max-width: 1200px) { .kpi-card { min-width: 150px; } }
             @media (max-width: 900px) { .kpi-row, .flex-row { flex-direction: column; } }
         </style>
     </head>
     <body>
     <div class='dashboard'>
-        <h1>암호화폐 뉴스 데이터 분석 대시보드</h1>
+        <h1>암호화폐 뉴스 데이터 파이프라인 대시보드</h1>
         <!-- KPI 카드 -->
         <div class='kpi-row' id='kpi-row'>
+            <div class='kpi-card'><div class='kpi-label'>파이프라인 상태</div><div class='kpi-value' id='kpi-pipeline-status'>-</div><div class='kpi-sub' id='kpi-pipeline-step'>&nbsp;</div></div>
             <div class='kpi-card'><div class='kpi-label'>전체 크롤링</div><div class='kpi-value' id='kpi-crawl'>-</div><div class='kpi-sub'>건</div></div>
             <div class='kpi-card'><div class='kpi-label'>Supabase 저장</div><div class='kpi-value' id='kpi-save'>-</div><div class='kpi-sub'>건</div></div>
             <div class='kpi-card'><div class='kpi-label'>에러/경고</div><div class='kpi-value' id='kpi-err'>-</div><div class='kpi-sub'>건</div></div>
             <div class='kpi-card'><div class='kpi-label'>성공률</div><div class='kpi-value' id='kpi-success'>-</div><div class='kpi-sub'>%</div></div>
-            <div class='kpi-card'><div class='kpi-label'>마지막 크롤링</div><div class='kpi-value' id='kpi-last-crawl'>-</div><div class='kpi-sub' id='kpi-next-crawl'></div></div>
+            <div class='kpi-card'><div class='kpi-label'>마지막 크롤링 시간</div><div class='kpi-value' id='kpi-last-crawl'>-</div><div class='kpi-sub' id='kpi-next-crawl'>&nbsp;</div></div>
         </div>
         <!-- 트렌드 차트 -->
         <div class='chart-section'>
@@ -299,11 +314,9 @@ def index():
         let last = crawlRows.length ? crawlRows[0].time : '-';
         document.getElementById('kpi-last-crawl').textContent = last;
         if (last !== '-') {
-            let dt = new Date(last.replace(/-/g,'/'));
-            dt.setHours(dt.getHours() + 4);
-            document.getElementById('kpi-next-crawl').textContent = '다음: ' + dt.toLocaleString('ko-KR');
+            document.getElementById('kpi-next-crawl').textContent = '다음 크롤링 시간은 상태 카드를 확인하세요.';
         } else {
-            document.getElementById('kpi-next-crawl').textContent = '';
+            document.getElementById('kpi-next-crawl').textContent = '&nbsp;';
         }
     }
     // 2. 트렌드 차트(최근 24시간)
@@ -354,90 +367,109 @@ def index():
         return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
     }
     function parseCrawl(logs) {
-        // 'YYYY-MM-DD HH:MM:SS - ...' 형식도 지원
+        // 'YYYY-MM-DD HH:MM:SS - crawler - INFO - [Playwright] blockmedia 수집 완료: TITLE'
         return logs.filter(line => line.includes('수집 완료')).slice(-100).reverse().map(line => {
-            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - [^ ]+ - [^ ]+ - [^\[]*\[Playwright\] ([a-zA-Z0-9_-]+) 수집 완료: (.+)$/);
+            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?\[Playwright\]\s*([a-zA-Z0-9_-]+)\s*수집 완료:\s*(.+)$/);
             if (!m) return null;
-            let t_kr = parseKST(m[1]);
-            let source = m[2];
-            let title = m[3];
-            return { time: t_kr, source, title };
+            return { time: parseKST(m[1]), source: m[2], title: m[3] };
         }).filter(Boolean);
     }
     function parseSave(logs) {
-        // 'YYYY-MM-DD HH:MM:SS - ...' 형식도 지원
-        return logs.filter(line => line.includes('저장 성공')).slice(-100).reverse().map(line => {
-            // 새 형식: "  - 저장 성공: TITLE" 또는 "뉴스 저장 및 DB 반영 확인 성공: TITLE"
-            const m = line.match(/(?:저장 성공|반영 확인 성공): (.+)$/);
-            if (!m || !m[1]) return null;
-
-            // 시간은 같은 줄의 타임스탬프에서 가져오기
-            const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
-            let t_kr = tsMatch ? parseKST(tsMatch[1]) : '-';
-            let title = m[1] || '-';
-
-            return { time: t_kr, title };
+        // 'YYYY-MM-DD HH:MM:SS - writer - INFO -   - 저장 성공: TITLE'
+        return logs.filter(line => line.includes('저장 성공:')).slice(-100).reverse().map(line => {
+            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?저장 성공:\s*(.+)$/);
+            if (!m) return null;
+            return { time: parseKST(m[1]), title: m[2] };
         }).filter(Boolean);
     }
-    function parseErr(cLogs, wLogs) {
-        // 멀티라인 로그 병합: 타임스탬프로 시작하지 않는 줄은 직전 메시지에 이어붙임
-        const lines = cLogs.concat(wLogs).filter(line => line.includes('ERROR') || line.includes('WARNING'));
+    function parseErr(allLogs) {
+        const lines = allLogs.filter(line => line.includes('ERROR') || line.includes('WARNING'));
         let merged = [];
         let last = null;
-        const tsPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:,\d+)? - /;
+        const tsPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
         for (let i = 0; i < lines.length; i++) {
             if (tsPattern.test(lines[i])) {
                 if (last) merged.push(last);
                 last = lines[i];
             } else if (last) {
-                last += '\n' + lines[i];
+                last += '\\n' + lines[i];
             }
         }
         if (last) merged.push(last);
+        
         return merged.slice(-100).reverse().map(line => {
-            // 표준 로그 패턴: 2025-06-14 01:50:48 - __main__ - WARNING - 메시지
-            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - ([^ ]+) - (ERROR|WARNING) - ([\s\S]+)$/);
+            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*? - (crawler|writer|cleaner|scheduler|logger) - (ERROR|WARNING) - ([\s\S]+)$/);
             if (m) {
-                let t_kr = parseKST(m[1]);
-                return { time: t_kr, svc: m[2], level: m[3], msg: m[4].replace(/\n/g, '<br>') };
-            } else {
-                // 패턴이 맞지 않는 경우에도 최대한 정보 추출
-                const m2 = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - ([^ ]+) - ([^ ]+) - ([\s\S]+)$/);
-                if (m2) {
-                    let t_kr = parseKST(m2[1]);
-                    return { time: t_kr, svc: m2[2], level: m2[3], msg: m2[4].replace(/\n/g, '<br>') };
-                }
-                return { time: '-', svc: '-', level: '-', msg: line.replace(/\n/g, '<br>') };
+                return { time: parseKST(m[1]), svc: m[2], level: m[3], msg: m[4].replace(/\\n/g, '<br>') };
             }
+            return { time: '-', svc: '-', level: '-', msg: line.replace(/\\n/g, '<br>') };
         });
     }
     // 5. 데이터 로드 및 UI 갱신
     function loadAll() {
         Promise.all([
             fetch('/api/logs/crawler?lines=500').then(r=>r.json()),
-            fetch('/api/logs/writer?lines=500').then(r=>r.json())
-        ]).then(([c, w]) => {
-            crawlRows = parseCrawl(c.logs);
-            saveRows = parseSave(w.logs);
-            errRows = parseErr(c.logs, w.logs);
+            fetch('/api/logs/writer?lines=500').then(r=>r.json()),
+            fetch('/api/logs/cleaner?lines=500').then(r=>r.json())
+        ]).then(([c, w, cl]) => {
+            if (c.status !== 'ok' || w.status !== 'ok' || cl.status !== 'ok') {
+                console.error("하나 이상의 로그 API가 에러를 반환했습니다.", {c,w,cl});
+            }
+            crawlRows = parseCrawl(c.logs || []);
+            saveRows = parseSave(w.logs || []);
+            errRows = parseErr((c.logs || []).concat(w.logs || []).concat(cl.logs || []));
             updateKPI();
             updateChart();
             renderTable('news-table', crawlRows, ['time','source','title'], 'search-crawl');
             renderTable('save-table', saveRows, ['time','title'], 'search-save');
-            let errHtml = errRows.length ? errRows.map(r => `<tr><td class='mono'>${r.time}</td><td>${r.svc}</td><td>${r.level}</td><td class='mono'>${r.msg}</td></tr>`).join('') : `<tr><td colspan='4'>아직 데이터가 없습니다.</td></tr>`;
+            let errHtml = errRows.length ? errRows.map(r => `<tr><td class='mono'>${r.time}</td><td>${r.svc}</td><td><span class='status ${r.level.toLowerCase()}'>${r.level}</span></td><td class='mono'>${r.msg}</td></tr>`).join('') : `<tr><td colspan='4'>데이터가 없습니다.</td></tr>`;
             document.querySelector('#err-table tbody').innerHTML = errHtml;
         }).catch(err => {
             console.error("데이터 로딩 중 오류 발생:", err);
-            // 각 테이블에 오류 메시지 표시
-            document.querySelector('#news-table tbody').innerHTML = "<tr><td colspan='3'>데이터 로딩 실패</td></tr>";
-            document.querySelector('#save-table tbody').innerHTML = "<tr><td colspan='2'>데이터 로딩 실패</td></tr>";
-            document.querySelector('#err-table tbody').innerHTML = "<tr><td colspan='4'>데이터 로딩 실패</td></tr>";
+            document.querySelector('#news-table tbody').innerHTML = "<tr><td colspan='3'>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#save-table tbody').innerHTML = "<tr><td colspan='2'>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#err-table tbody').innerHTML = "<tr><td colspan='4'>데이터 로딩 실패 (API 오류)</td></tr>";
         });
+    }
+    function updatePipelineStatus() {
+        fetch('/api/pipeline_status')
+            .then(r => r.json())
+            .then(res => {
+                if (res.status !== 'ok') return;
+                const data = res.data;
+                const statusElem = document.getElementById('kpi-pipeline-status');
+                const stepElem = document.getElementById('kpi-pipeline-step');
+                
+                statusElem.className = 'kpi-value'; // Reset classes
+                if (data.status === 'waiting') {
+                    statusElem.textContent = '대기 중';
+                    statusElem.classList.add('waiting');
+                    let nextRun = new Date(data.next_run).toLocaleString('ko-KR');
+                    stepElem.textContent = `다음 실행: ${nextRun}`;
+                } else if (data.status === 'running') {
+                    statusElem.textContent = '실행 중';
+                    statusElem.classList.add('running');
+                    stepElem.textContent = `단계: ${data.step || ''}`;
+                } else {
+                    statusElem.textContent = '상태 미확인';
+                    statusElem.classList.add('unknown');
+                    stepElem.textContent = '...';
+                }
+            }).catch(err => {
+                console.error('파이프라인 상태 로딩 오류:', err);
+                const statusElem = document.getElementById('kpi-pipeline-status');
+                statusElem.textContent = '오류';
+                statusElem.className = 'kpi-value';
+            });
     }
     document.getElementById('search-crawl').oninput = () => renderTable('news-table', crawlRows, ['time','source','title'], 'search-crawl');
     document.getElementById('search-save').oninput = () => renderTable('save-table', saveRows, ['time','title'], 'search-save');
     loadAll();
-    setInterval(loadAll, 5000); // 5초마다 실시간 갱신
+    updatePipelineStatus();
+    setInterval(() => {
+        loadAll();
+        updatePipelineStatus();
+    }, 5000); // 5초마다 실시간 갱신
     </script>
     </body>
     </html>
