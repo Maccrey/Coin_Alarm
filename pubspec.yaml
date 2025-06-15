@@ -40,7 +40,7 @@ dependencies:
   flutter_riverpod: ^2.4.9
 
   # 네트워크 및 데이터
-  http: ^1.1.2
+  http: ^1.2.1
   dio: ^5.4.0
   shared_preferences: ^2.2.2
   crypto: ^3.0.3
@@ -66,6 +66,7 @@ dependencies:
   internet_connection_checker: ^3.0.1
   url_launcher: ^6.2.5
   local_auth: ^2.1.7
+  workmanager: ^0.6.0
 
   # Supabase (주석 처리 - 더미데이터로 대체)
   # supabase_flutter: ^1.10.25

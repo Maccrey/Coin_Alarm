@@ -222,22 +222,27 @@ async def main_async():
     """
     Playwright 기반 비동기 메인 함수 (모든 사이트 크롤링)
     """
-    logger.info("[Playwright] 뉴스 크롤러 시작 (6시간마다 1회 실행)")
-    while True:
-        all_news = []
+    logger.info("[Playwright] 뉴스 크롤러 시작 (1회 실행)")
+    all_news = []
+    try:
         # 각 사이트별 Playwright 크롤러 호출
         blockmedia_news = await crawl_blockmedia_playwright()
         all_news.extend(blockmedia_news)
         await asyncio.sleep(2)
+        
         coinreaders_news = await crawl_coinreaders_playwright()
         all_news.extend(coinreaders_news)
         await asyncio.sleep(2)
+        
         digitaltoday_news = await crawl_digitaltoday_playwright()
         all_news.extend(digitaltoday_news)
+        
         # 수집된 뉴스 저장
         save_to_shared(all_news)
-        logger.info("[Playwright] 크롤링 및 저장 완료. 2시간 대기 후 재실행")
-        await asyncio.sleep(60 * 60 * 2)  # 2시간 대기
+        logger.info("[Playwright] 크롤링 및 저장 완료.")
+        
+    except Exception as e:
+        logger.error(f"main_async 실행 중 예외 발생: {e}")
 
 
 def get_playwright_browser():
@@ -353,84 +358,65 @@ async def crawl_coinreaders_playwright():
             await page.wait_for_timeout(3000)
             html = await page.content()
             soup = BeautifulSoup(html, "lxml")
-            articles = soup.select('ul.type2 > li')
+            articles = soup.select('.sub_read_list_box .sub_read_list')
             for article in articles[:10]:
                 try:
-                    title_elem = article.select_one('h4.titles > a')
-                    title = title_elem.get_text().strip() if title_elem else ''
-                    link = title_elem['href'] if title_elem else ''
+                    title_elem = article.select_one('dl dt a')
+                    if not title_elem:
+                        continue
+                    title = title_elem.get_text().strip()
+                    link = title_elem.get('href', '')
+
                     if link and not link.startswith('http'):
                         link = site_info['base_url'] + link
-                    date_elem = article.select_one('span.byline > em')
+                    
+                    date_elem = article.select_one('dd.etc')
                     date_str = date_elem.get_text().strip() if date_elem else ""
+
                     published_at = parse_date(date_str, 'coinreaders')
-                    # 상세 페이지 진입 및 본문/이미지/작성자/카테고리 추출
-                    detail_page = await context.new_page()
-                    await detail_page.goto(link, timeout=40000, wait_until="domcontentloaded")
-                    detail_html = await detail_page.content()
-                    detail_soup = BeautifulSoup(detail_html, "lxml")
-                    # 제목
-                    detail_title_elem = detail_soup.select_one('h1.read_title, h2.read_title')
-                    detail_title = detail_title_elem.get_text(strip=True) if detail_title_elem else title
-                    # 작성자
-                    writer_elem = detail_soup.select_one('.writer_time .writer')
-                    writer = writer_elem.get_text(strip=True) if writer_elem else ''
-                    # 날짜 (입력: 또는 기사입력 모두 대응)
-                    date_elem = detail_soup.select_one('.writer_time')
-                    detail_date_str = ''
-                    if date_elem:
-                        import re
-                        m = re.search(r'(입력|기사입력)\s*:?\s*([\d/]+\s*\[\d+:\d+\])', date_elem.get_text())
-                        if m:
-                            detail_date_str = m.group(2)
-                    # 본문 (p 태그만)
-                    content_elem = detail_soup.select_one('#textinput')
-                    if content_elem:
-                        paragraphs = [p.get_text(strip=True) for p in content_elem.find_all('p') if p.get_text(strip=True)]
-                        content = '\n'.join(paragraphs)
-                    else:
-                        content = ''
-                    # 대표 이미지 (절대경로 변환)
-                    img_elem = content_elem.select_one('img') if content_elem else None
-                    img_url = ''
-                    if img_elem and img_elem.get('src'):
-                        img_url = img_elem['src']
-                        if img_url.startswith('//'):
-                            img_url = 'https:' + img_url
-                        elif img_url.startswith('/'):
-                            img_url = 'https://www.coinreaders.com' + img_url
-                    elif detail_soup.find('meta', property='og:image'):
-                        img_url = detail_soup.find('meta', property='og:image')['content']
-                        if img_url.startswith('//'):
-                            img_url = 'https:' + img_url
-                        elif img_url.startswith('/'):
-                            img_url = 'https://www.coinreaders.com' + img_url
-                    elif detail_soup.find('link', rel='image_src'):
-                        img_url = detail_soup.find('link', rel='image_src')['href']
-                        if img_url.startswith('//'):
-                            img_url = 'https:' + img_url
-                        elif img_url.startswith('/'):
-                            img_url = 'https://www.coinreaders.com' + img_url
-                    # 카테고리
-                    category_elem = detail_soup.select_one('.section_arae a')
-                    category = category_elem.get_text(strip=True) if category_elem else ''
-                    # 크롤링 시각(한국시간) 추가
-                    crawled_at = datetime.now(pytz.timezone('Asia/Seoul')).isoformat()
-                    # 뉴스 dict 생성 (crawled_at 포함)
-                    news_list.append({
-                        'title': detail_title,
+
+                    # 본문/이미지 추출
+                    content = ""
+                    image_url = ""
+                    if link:
+                        try:
+                            detail_page = await context.new_page()
+                            await detail_page.goto(link, timeout=40000, wait_until="domcontentloaded")
+                            await detail_page.wait_for_timeout(2000)
+                            detail_html = await detail_page.content()
+                            detail_soup = BeautifulSoup(detail_html, 'lxml')
+                            
+                            content_elem = detail_soup.select_one('#article-view-content-div')
+                            content = content_elem.get_text().strip() if content_elem else ""
+
+                            og_image = detail_soup.find('meta', property='og:image')
+                            if og_image and og_image.get('content'):
+                                image_url = og_image.get('content')
+                            
+                            await detail_page.close()
+                        except Exception as e:
+                            logger.warning(f"coinreaders 본문/이미지 추출 실패: {link}, 오류: {e}")
+
+                    related_coins = get_related_coins(title, content)
+                    
+                    news = {
+                        'title': title,
+                        'content': content[:500] + ('...' if len(content) > 500 else ''),
                         'url': link,
-                        'published_at': detail_date_str or date_str,
-                        'writer': writer,
-                        'content': content,
-                        'image_url': img_url,
-                        'category': category,
-                        'crawled_at': crawled_at  # 크롤링 시각(한국시간)
-                    })
-                    await detail_page.close()
+                        'source': 'coinreaders',
+                        'published_at': published_at.isoformat(),
+                        'related_coins': related_coins,
+                        'crawled_at': datetime.now(pytz.timezone('Asia/Seoul')).isoformat(),
+                        'imageUrl': image_url
+                    }
+                    news_list.append(news)
+                    logger.info(f"[Playwright] coinreaders 수집 완료: {title}")
+
                 except Exception as e:
                     logger.error(f"[Playwright] coinreaders 기사 파싱 오류: {e}")
+                    continue
             await browser.close()
+        logger.info(f"[Playwright] coinreaders 크롤링 완료: {len(news_list)}개 수집")
     except Exception as e:
         logger.error(f"[Playwright] coinreaders 크롤링 오류: {e}")
     return news_list
@@ -462,10 +448,10 @@ async def crawl_digitaltoday_playwright():
             except Exception as e:
                 logger.warning(f"digitaltoday HTML 저장 실패: {e}")
             soup = BeautifulSoup(html, 'lxml')
-            articles = soup.select('ul.type2 > li')
+            articles = soup.select('section#section-list ul.type2 > li')
             for article in articles[:10]:
                 try:
-                    title_elem = article.select_one('h4.titles > a')
+                    title_elem = article.select_one('h4.titles a')
                     title = title_elem.get_text().strip() if title_elem else ''
                     link = title_elem['href'] if title_elem else ''
                     if link and not link.startswith('http'):
@@ -530,19 +516,26 @@ if __name__ == "__main__":
     # 단독 실행 시 1회만 크롤링 후 종료 (테스트/운영 모두 지원)
     logger.info("[Playwright] 뉴스 크롤러 단독 실행 시작")
     try:
-        loop = asyncio.get_event_loop()
-        all_news = []
-        blockmedia_news = loop.run_until_complete(crawl_blockmedia_playwright())
-        all_news.extend(blockmedia_news)
-        coinreaders_news = loop.run_until_complete(crawl_coinreaders_playwright())
-        all_news.extend(coinreaders_news)
-        digitaltoday_news = loop.run_until_complete(crawl_digitaltoday_playwright())
-        all_news.extend(digitaltoday_news)
-        if not all_news:
+        async def run_crawlers():
+            all_news = []
+            blockmedia_news = await crawl_blockmedia_playwright()
+            all_news.extend(blockmedia_news)
+            
+            coinreaders_news = await crawl_coinreaders_playwright()
+            all_news.extend(coinreaders_news)
+            
+            digitaltoday_news = await crawl_digitaltoday_playwright()
+            all_news.extend(digitaltoday_news)
+            return all_news
+
+        all_news_results = asyncio.run(run_crawlers())
+
+        if not all_news_results:
             logger.warning("수집된 뉴스가 없습니다. (모든 사이트)")
         else:
-            save_to_shared(all_news)
-            logger.info(f"총 {len(all_news)}개 뉴스 저장 완료.")
+            save_to_shared(all_news_results)
+            logger.info(f"총 {len(all_news_results)}개 뉴스 저장 완료.")
+            
     except Exception as e:
         logger.error(f"크롤러 단독 실행 중 예외 발생: {e}")
     logger.info("[Playwright] 뉴스 크롤러 단독 실행 종료") 

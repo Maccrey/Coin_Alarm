@@ -162,6 +162,11 @@ def process_file(file_path):
         file_path (str): 처리할 파일 경로
     """
     try:
+        # 경쟁 조건 방지를 위해 파일 존재 여부 재확인
+        if not os.path.exists(file_path):
+            logger.warning(f"파일이 이미 삭제되어 건너뛰었습니다: {file_path}")
+            return
+            
         logger.info(f"파일 처리: {file_path}")
         
         # 파일 읽기
@@ -203,47 +208,26 @@ def process_file(file_path):
         logger.error(f"파일 처리 오류: {file_path}, {str(e)}")
 
 
-class NewsHandler(FileSystemEventHandler):
-    """
-    뉴스 파일 감시 핸들러
-    """
-    def on_created(self, event):
-        if event.is_directory:
-            return
-            
-        file_path = event.src_path
-        if file_path.endswith(".json") and "crawled_news_" in file_path:
-            # 파일 생성 후 약간의 지연시간을 두고 처리 (파일 쓰기 완료 대기)
-            time.sleep(1)
-            process_file(file_path)
-
-
 def main():
     """메인 함수"""
-    logger.info("뉴스 정제 서비스 시작")
-    
-    # 감시 설정
-    event_handler = NewsHandler()
-    observer = Observer()
-    observer.schedule(event_handler, SHARED_DIR, recursive=False)
-    observer.start()
+    logger.info("뉴스 정제 서비스 시작 (1회 실행)")
     
     # 기존 파일 처리
     try:
+        processed_count = 0
         for filename in os.listdir(SHARED_DIR):
             if filename.endswith(".json") and filename.startswith("crawled_news_"):
                 file_path = os.path.join(SHARED_DIR, filename)
                 process_file(file_path)
+                processed_count += 1
+        
+        if processed_count == 0:
+            logger.info("처리할 새로운 크롤링 파일이 없습니다.")
+
     except Exception as e:
         logger.error(f"기존 파일 처리 오류: {str(e)}")
     
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-    
-    observer.join()
+    logger.info("뉴스 정제 서비스 종료")
 
 
 if __name__ == "__main__":

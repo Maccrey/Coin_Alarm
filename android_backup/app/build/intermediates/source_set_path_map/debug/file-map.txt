@@ -1,0 +1,8 @@
+com.example.coin_alarm.app-pngs-0 /Users/maccrey/Development/coin_alarm/android/app/build/generated/res/pngs/debug
+com.example.coin_alarm.app-resValues-1 /Users/maccrey/Development/coin_alarm/android/app/build/generated/res/resValues/debug
+com.example.coin_alarm.app-rs-2 /Users/maccrey/Development/coin_alarm/android/app/build/generated/res/rs/debug
+com.example.coin_alarm.app-mergeDebugResources-3 /Users/maccrey/Development/coin_alarm/android/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+com.example.coin_alarm.app-mergeDebugResources-4 /Users/maccrey/Development/coin_alarm/android/app/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+com.example.coin_alarm.app-merged_res-5 /Users/maccrey/Development/coin_alarm/android/app/build/intermediates/merged_res/debug
+com.example.coin_alarm.app-debug-6 /Users/maccrey/Development/coin_alarm/android/app/src/debug/res
+com.example.coin_alarm.app-main-7 /Users/maccrey/Development/coin_alarm/android/app/src/main/res

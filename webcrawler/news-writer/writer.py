@@ -143,109 +143,96 @@ def save_to_supabase(news_data):
 
     now = datetime.now(pytz.timezone('Asia/Seoul')).isoformat()
     success_count = 0
-    saved_titles = []
-
+    
+    # 1. ID 없는 데이터에 ID 생성 (cleaner의 'hash' 필드 사용)
     for news in news_data:
-        try:
-            # 필수 필드 체크
-            if not news.get('title') or not news.get('url') or not news.get('published_at'):
-                logger.error(f"필수 필드 누락: {news}")
-                continue
-
-            # news_hash가 없으면 타이틀 기반으로 생성
-            if 'id' not in news or not news['id']:
+        if 'id' not in news or not news['id']:
+            if 'hash' in news and news['hash']:
+                news['id'] = news['hash']
+                logger.info(f"ID 필드를 hash 값으로 설정: {news['title']}")
+            else:
                 news_hash = create_news_hash(news['title'])
-                logger.warning(f"news_hash 없음, 자동 생성: {news['title']}")
+                logger.warning(f"ID(hash) 없음, 자동 생성: {news['title']}")
                 news['id'] = news_hash
 
-            # 이미 처리된 뉴스인지 확인
-            if is_news_processed(news['id'], news['title']):
-                logger.info(f"이미 처리된 뉴스 건너뛰기: {news['title']}")
+    # 2. Supabase에 이미 존재하는지 ID로 일괄 확인
+    news_ids = [news['id'] for news in news_data if 'id' in news]
+    existing_ids = set()
+    if news_ids:
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_NEWS_TABLE}?select=id&id=in.({','.join(news_ids)})"
+            response = requests.get(url, headers={'apikey': SUPABASE_KEY, 'Content-Type': 'application/json'})
+            if response.status_code == 200:
+                existing_ids = {item['id'] for item in response.json()}
+                logger.info(f"Supabase에서 {len(existing_ids)}개의 기존 뉴스 ID 확인")
+            else:
+                logger.error(f"Supabase 기존 뉴스 ID 확인 실패: {response.text}")
+        except Exception as e:
+            logger.error(f"Supabase 기존 뉴스 ID 확인 중 예외: {e}")
+
+    # 3. 신규 뉴스만 저장 시도
+    news_to_save = []
+    for news in news_data:
+        if news.get('id') not in existing_ids:
+            # 필수 필드 체크
+            if not news.get('title') or not news.get('url') or not news.get('published_at'):
+                logger.error(f"필수 필드 누락, 건너뛰기: {news.get('title')}")
                 continue
-
-            # 기존 뉴스 데이터 확인
-            existing_news = get_existing_news(news['id'])
-            if existing_news:
-                if (existing_news.get('image_url') and not news.get('image_url')) or \
-                   (existing_news.get('image_url') and news.get('image_url') == ''):
-                    logger.info(f"기존 이미지 URL 유지: {existing_news.get('image_url')}")
-                    news['image_url'] = existing_news.get('image_url')
-                if (existing_news.get('related_coins') and existing_news.get('related_coins') != '{}') and \
-                   (not news.get('related_coins') or news.get('related_coins') == '{}'):
-                    logger.info(f"기존 관련 코인 유지: {existing_news.get('related_coins')}")
-                    news['related_coins'] = existing_news.get('related_coins')
-
-            # 이미지 URL 처리
-            if 'imageUrl' in news and news['imageUrl']:
-                news['image_url'] = news['imageUrl']
-                logger.info(f"이미지 URL 매핑: {news['imageUrl']}")
-            elif 'image_url' not in news or not news['image_url']:
-                news['image_url'] = ''
-                logger.warning(f"image_url 필드가 비어 있음: {news['title']}")
-
-            # 관련 코인 처리
-            if 'related_coins' in news:
-                if isinstance(news['related_coins'], list):
-                    if len(news['related_coins']) > 0:
-                        coins_str = "{" + ",".join([f'\"{coin}\"' for coin in news['related_coins']]) + "}"
-                        news['related_coins'] = coins_str
-                        logger.info(f"관련 코인 변환: {coins_str}")
-                    else:
-                        news['related_coins'] = "{}"
-                elif news['related_coins'] == '[]':
-                    news['related_coins'] = "{}"
+            
+            # 필드 정리 및 추가
+            news['image_url'] = news.get('imageUrl', news.get('image_url', ''))
+            
+            if 'related_coins' in news and isinstance(news['related_coins'], list):
+                news['related_coins'] = "{" + ",".join([f'\\"{c}\\"' for c in news['related_coins']]) + "}"
             else:
                 news['related_coins'] = "{}"
 
-            # 생성 시간 추가
-            if 'created_at' not in news:
-                news['created_at'] = now
-
-            # 필요없는 필드 제거
+            news['created_at'] = news.get('created_at', now)
+            
+            # 불필요한 필드 제거
             for field in ['crawled_at', 'imageUrl', 'cleaned_at', 'hash']:
                 if field in news:
                     del news[field]
 
-            url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_NEWS_TABLE}"
+            news_to_save.append(news)
+        else:
+            logger.info(f"이미 저장된 뉴스 건너뛰기: {news.get('title')}")
+    
+    if not news_to_save:
+        logger.info("새로 저장할 뉴스가 없습니다.")
+        return 0
 
-            # 저장 시도 (최대 3회)
-            for attempt in range(3):
+    # 4. 일괄 저장 (bulk insert)
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_NEWS_TABLE}"
+        response = requests.post(url, json=news_to_save, headers=headers, timeout=30)
+
+        if response.status_code in (200, 201):
+            success_count = len(news_to_save)
+            logger.info(f"Supabase에 뉴스 {success_count}개 저장 성공!")
+            for news in news_to_save:
+                 logger.info(f"  - 저장 성공: {news['title']}")
+        else:
+            logger.error(f"Supabase 뉴스 일괄 저장 실패: {response.status_code} | {response.text}")
+            # 개별 저장으로 재시도
+            logger.info("개별 저장으로 재시도합니다.")
+            individual_success = 0
+            for news in news_to_save:
                 try:
-                    response = requests.post(url, json=news, headers=headers, timeout=10)
-                    logger.info(f"[{attempt+1}회차] 뉴스 저장 응답 코드: {response.status_code}")
-                    logger.info(f"[{attempt+1}회차] 뉴스 저장 응답 본문: {response.text}")
-
-                    if response.status_code in (200, 201):
-                        # 저장 후 실제 DB 반영 여부 재확인 (2회까지)
-                        saved = False
-                        for _ in range(2):
-                            time.sleep(0.5)
-                            check = get_existing_news(news['id'])
-                            if check:
-                                saved = True
-                                break
-                        if saved:
-                            logger.info(f"뉴스 저장 및 DB 반영 확인 성공: {news['title']}")
-                            mark_news_as_processed(news['id'], news['title'])
-                            success_count += 1
-                            saved_titles.append(news['title'])
-                            break
-                        else:
-                            logger.error(f"저장 응답은 성공이나 DB 반영 확인 실패: {news['title']}")
+                    res_ind = requests.post(url, json=news, headers=headers, timeout=10)
+                    if res_ind.status_code in (200, 201):
+                        individual_success += 1
+                        logger.info(f"  - 개별 저장 성공: {news['title']}")
                     else:
-                        logger.error(f"뉴스 저장 실패: {news['title']} | 응답: {response.text} | 요청: {news}")
-                except Exception as e:
-                    logger.error(f"뉴스 저장 중 예외 발생({attempt+1}회차): {news['title']}, 에러: {str(e)}")
-                time.sleep(1)
-            else:
-                logger.error(f"최대 재시도 후에도 저장 실패: {news['title']}")
-        except Exception as e:
-            logger.error(f"뉴스 처리 중 예외 발생: {str(e)}")
-    logger.info(f"Supabase에 저장된 뉴스 개수: {success_count}")
-    if saved_titles:
-        logger.info(f"Supabase에 저장된 뉴스 타이틀 목록: {saved_titles}")
-    else:
-        logger.info("Supabase에 저장된 뉴스가 없습니다.")
+                        logger.error(f"  - 개별 저장 실패: {news['title']} | {res_ind.text}")
+                except Exception as e_ind:
+                    logger.error(f"  - 개별 저장 예외: {news['title']} | {e_ind}")
+            success_count = individual_success
+
+    except Exception as e:
+        logger.error(f"Supabase 저장 중 예외 발생: {str(e)}")
+
+    logger.info(f"Supabase 저장 완료: {success_count}개 성공")
     return success_count
 
 class NewsHandler(FileSystemEventHandler):
@@ -406,37 +393,14 @@ def cleanup_old_files():
 
 def main():
     """메인 함수"""
-    logger.info("뉴스 저장 서비스 시작")
+    logger.info("뉴스 저장 서비스 시작 (1회 실행)")
+    init_db()  # DB 초기화
     
-    # DB 초기화
-    init_db()
-    
-    # 기존 파일 처리 및 정리
+    # 처리되지 않은 기존 파일 처리
     process_existing_files()
+    
+    # 오래된 파일 정리
     cleanup_old_files()
-    
-    # 감시자 설정
-    event_handler = NewsHandler()
-    observer = Observer()
-    observer.schedule(event_handler, path=SHARED_DIR, recursive=False)
-    observer.start()
-    
-    try:
-        # 매 시간마다 파일 정리
-        last_cleanup = datetime.now(pytz.timezone('Asia/Seoul'))
-        while True:
-            time.sleep(60)  # 1분마다 체크
-            
-            # 3시간마다 파일 정리 (서버 사용량 감소)
-            now = datetime.now(pytz.timezone('Asia/Seoul'))
-            if (now - last_cleanup).total_seconds() > 10800:  # 3시간(10800초)
-                logger.info("정기 파일 정리 시작")
-                cleanup_old_files()
-                last_cleanup = now
-            
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
     
     logger.info("뉴스 저장 서비스 종료")
 

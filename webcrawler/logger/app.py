@@ -366,11 +366,16 @@ def index():
     }
     function parseSave(logs) {
         // 'YYYY-MM-DD HH:MM:SS - ...' 형식도 지원
-        return logs.filter(line => line.includes('뉴스 저장 성공')).slice(-100).reverse().map(line => {
-            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - [^ ]+ - [^ ]+ - 뉴스 저장 성공: (.+)$/);
-            if (!m || !m[1] || !m[2]) return null;
-            let t_kr = parseKST(m[1]);
-            let title = m[2] || '-';
+        return logs.filter(line => line.includes('저장 성공')).slice(-100).reverse().map(line => {
+            // 새 형식: "  - 저장 성공: TITLE" 또는 "뉴스 저장 및 DB 반영 확인 성공: TITLE"
+            const m = line.match(/(?:저장 성공|반영 확인 성공): (.+)$/);
+            if (!m || !m[1]) return null;
+
+            // 시간은 같은 줄의 타임스탬프에서 가져오기
+            const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+            let t_kr = tsMatch ? parseKST(tsMatch[1]) : '-';
+            let title = m[1] || '-';
+
             return { time: t_kr, title };
         }).filter(Boolean);
     }
