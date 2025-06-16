@@ -136,7 +136,7 @@ def create_news_hash(title):
     return hashlib.md5(title.encode('utf-8')).hexdigest()
 
 def save_to_supabase(news_data):
-    """뉴스 데이터 Supabase에 저장 (신뢰성 강화)"""
+    """뉴스 데이터 Supabase에 저장 (신뢰성 강화, 재시도 로직 추가)"""
     if not SUPABASE_URL or not SUPABASE_KEY:
         logger.error("Supabase URL 또는 Key가 설정되지 않았습니다.")
         return 0
@@ -202,35 +202,50 @@ def save_to_supabase(news_data):
         logger.info("새로 저장할 뉴스가 없습니다.")
         return 0
 
-    # 4. 일괄 저장 (bulk insert)
-    try:
-        url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_NEWS_TABLE}"
-        response = requests.post(url, json=news_to_save, headers=headers, timeout=30)
-
-        if response.status_code in (200, 201):
-            success_count = len(news_to_save)
-            logger.info(f"Supabase에 뉴스 {success_count}개 저장 성공!")
-            for news in news_to_save:
-                 logger.info(f"  - 저장 성공: {news['title']}")
-        else:
-            logger.error(f"Supabase 뉴스 일괄 저장 실패: {response.status_code} | {response.text}")
-            # 개별 저장으로 재시도
-            logger.info("개별 저장으로 재시도합니다.")
-            individual_success = 0
-            for news in news_to_save:
+    # 4. 일괄 저장 (bulk insert, 최대 3회 재시도)
+    url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_NEWS_TABLE}"
+    max_retry = 3
+    for attempt in range(1, max_retry+1):
+        try:
+            response = requests.post(url, json=news_to_save, headers=headers, timeout=30)
+            if response.status_code in (200, 201):
+                success_count = len(news_to_save)
+                logger.info(f"Supabase에 뉴스 {success_count}개 저장 성공! (시도 {attempt}회차)")
+                for news in news_to_save:
+                    logger.info(f"  - 저장 성공: {news['title']}")
+                break
+            else:
+                logger.error(f"Supabase 뉴스 일괄 저장 실패 (시도 {attempt}회차): {response.status_code} | {response.text}")
+                if attempt == max_retry:
+                    logger.error("일괄 저장 3회 실패, 개별 저장으로 전환합니다.")
+                else:
+                    time.sleep(2)
+        except Exception as e:
+            logger.error(f"Supabase 일괄 저장 중 예외 발생 (시도 {attempt}회차): {str(e)}")
+            if attempt == max_retry:
+                logger.error("일괄 저장 3회 예외 발생, 개별 저장으로 전환합니다.")
+            else:
+                time.sleep(2)
+    else:
+        # 일괄 저장 3회 실패 시 개별 저장
+        individual_success = 0
+        for news in news_to_save:
+            for attempt in range(1, max_retry+1):
                 try:
                     res_ind = requests.post(url, json=news, headers=headers, timeout=10)
                     if res_ind.status_code in (200, 201):
                         individual_success += 1
-                        logger.info(f"  - 개별 저장 성공: {news['title']}")
+                        logger.info(f"  - 개별 저장 성공: {news['title']} (시도 {attempt}회차)")
+                        break
                     else:
-                        logger.error(f"  - 개별 저장 실패: {news['title']} | {res_ind.text}")
+                        logger.error(f"  - 개별 저장 실패: {news['title']} | {res_ind.text} (시도 {attempt}회차)")
+                        if attempt < max_retry:
+                            time.sleep(2)
                 except Exception as e_ind:
-                    logger.error(f"  - 개별 저장 예외: {news['title']} | {e_ind}")
-            success_count = individual_success
-
-    except Exception as e:
-        logger.error(f"Supabase 저장 중 예외 발생: {str(e)}")
+                    logger.error(f"  - 개별 저장 예외: {news['title']} | {e_ind} (시도 {attempt}회차)")
+                    if attempt < max_retry:
+                        time.sleep(2)
+        success_count = individual_success
 
     logger.info(f"Supabase 저장 완료: {success_count}개 성공")
     return success_count
@@ -258,35 +273,48 @@ class NewsHandler(FileSystemEventHandler):
                     logger.error(f"파일 처리 중 오류 발생: {str(e)}")
     
     def process_file(self, file_path):
-        """뉴스 파일 처리"""
+        """뉴스 파일 처리 (파일 삭제/이동 예외 처리 강화)"""
         filename = os.path.basename(file_path)
         
         # 이미 처리된 파일인지 확인
         if is_file_processed(filename):
             logger.info(f"이미 처리된 파일 건너뛰기: {filename}")
             return
-        
-        # 파일 읽기
-        with open(file_path, 'r', encoding='utf-8') as f:
-            news_data = json.load(f)
-        
-        logger.info(f"읽기 완료: {len(news_data)}개 뉴스")
-        
-        # Supabase에 저장
-        logger.info(f"Supabase에 {len(news_data)}개 뉴스 저장 시작")
-        success_count = save_to_supabase(news_data)
-        logger.info(f"Supabase 저장 완료: {success_count}개 성공")
-        
-        if success_count == len(news_data):
-            # 전체 성공 시에만 파일 삭제
-            processed_file = file_path.replace('cleaned_news_', 'processed_news_').replace('crawled_news_', 'processed_news_')
-            os.rename(file_path, processed_file)
-            logger.info(f"파일 처리 완료: {processed_file}")
-            os.remove(processed_file)
-            logger.info(f"파일 삭제 완료: {processed_file}")
-            mark_file_as_processed(filename)
-        else:
-            logger.error(f"일부 뉴스 저장 실패! 파일을 삭제하지 않고 남깁니다: {file_path}")
+        try:
+            # 파일 읽기
+            with open(file_path, 'r', encoding='utf-8') as f:
+                news_data = json.load(f)
+            logger.info(f"읽기 완료: {len(news_data)}개 뉴스")
+            # Supabase에 저장
+            logger.info(f"Supabase에 {len(news_data)}개 뉴스 저장 시작")
+            success_count = save_to_supabase(news_data)
+            logger.info(f"Supabase 저장 완료: {success_count}개 성공")
+            if success_count == len(news_data):
+                # 전체 성공 시에만 파일 삭제
+                processed_file = file_path.replace('cleaned_news_', 'processed_news_').replace('crawled_news_', 'processed_news_')
+                try:
+                    os.rename(file_path, processed_file)
+                    logger.info(f"파일 처리 완료: {processed_file}")
+                except Exception as e:
+                    logger.error(f"파일 이동(이름 변경) 실패: {file_path} → {processed_file}, 오류: {e}")
+                    return
+                try:
+                    os.remove(processed_file)
+                    logger.info(f"파일 삭제 완료: {processed_file}")
+                except Exception as e:
+                    logger.error(f"파일 삭제 실패: {processed_file}, 오류: {e}")
+                    # 삭제 실패 시 중복 처리 방지 위해 파일명에 .fail 추가
+                    fail_file = processed_file + '.fail'
+                    try:
+                        os.rename(processed_file, fail_file)
+                        logger.info(f"삭제 실패 파일을 .fail로 이동: {fail_file}")
+                    except Exception as e2:
+                        logger.error(f".fail 이동도 실패: {processed_file} → {fail_file}, 오류: {e2}")
+                mark_file_as_processed(filename)
+            else:
+                logger.error(f"일부 뉴스 저장 실패! 파일을 삭제하지 않고 남깁니다: {file_path}")
+        except Exception as e:
+            logger.error(f"파일 처리 중 오류 발생: {file_path}, 오류: {e}")
 
 def process_existing_files():
     """기존 파일 처리"""

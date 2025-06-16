@@ -202,54 +202,62 @@ def parse_date(date_str, site):
 
 def save_to_shared(news_list):
     """
-    수집된 뉴스를 공유 디렉토리에 저장
-    
+    수집된 뉴스를 공유 디렉토리에 저장 (robust 예외 처리, 3회 재시도, .fail 처리)
     Args:
         news_list (list): 뉴스 리스트
     """
     if not news_list:
         logger.warning("저장할 뉴스가 없습니다.")
         return
-    
     timestamp = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y%m%d%H%M%S")
     output_file = os.path.join(SHARED_DIR, f'crawled_news_{timestamp}.json')
-    
-    try:
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(news_list, f, ensure_ascii=False, indent=2)
-        logger.info(f"뉴스 저장 완료: {output_file}")
-        # 파일 실제 존재 여부 즉시 체크
-        if os.path.exists(output_file):
-            logger.info(f"[파일 확인] 실제로 파일이 존재합니다: {output_file}")
-        else:
-            logger.error(f"[파일 확인] 파일이 존재하지 않습니다(경로 문제): {output_file}")
-    except Exception as e:
-        logger.error(f"파일 저장 오류: {e}")
+    for attempt in range(1, 4):
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(news_list, f, ensure_ascii=False, indent=2)
+            logger.info(f"뉴스 저장 완료: {output_file}")
+            if os.path.exists(output_file):
+                logger.info(f"[파일 확인] 실제로 파일이 존재합니다: {output_file}")
+            else:
+                logger.error(f"[파일 확인] 파일이 존재하지 않습니다(경로 문제): {output_file}")
+            break
+        except Exception as e:
+            logger.error(f"파일 저장 오류 (시도 {attempt}회차): {e}")
+            if attempt < 3:
+                time.sleep(2)
+            else:
+                fail_file = output_file + '.fail'
+                try:
+                    os.rename(output_file, fail_file)
+                    logger.info(f"저장 실패 파일을 .fail로 이동: {fail_file}")
+                except Exception as e2:
+                    logger.error(f".fail 이동도 실패: {output_file} → {fail_file}, 오류: {e2}")
 
 
 async def main_async():
     """
-    Playwright 기반 비동기 메인 함수 (모든 사이트 크롤링)
+    Playwright 기반 비동기 메인 함수 (모든 사이트 robust 크롤링)
     """
     logger.info("[Playwright] 뉴스 크롤러 시작 (1회 실행)")
     all_news = []
     try:
-        # 각 사이트별 Playwright 크롤러 호출
-        blockmedia_news = await crawl_blockmedia_playwright()
-        all_news.extend(blockmedia_news)
-        await asyncio.sleep(2)
-        
-        coinreaders_news = await crawl_coinreaders_playwright()
-        all_news.extend(coinreaders_news)
-        await asyncio.sleep(2)
-        
-        digitaltoday_news = await crawl_digitaltoday_playwright()
-        all_news.extend(digitaltoday_news)
-        
-        # 수집된 뉴스 저장
+        # 각 사이트별 Playwright 크롤러 robust 호출
+        for site_func in [crawl_blockmedia_playwright, crawl_coinreaders_playwright, crawl_digitaltoday_playwright]:
+            for attempt in range(1, 4):
+                try:
+                    site_news = await site_func()
+                    all_news.extend(site_news)
+                    await asyncio.sleep(2)
+                    break
+                except Exception as e:
+                    logger.error(f"{site_func.__name__} 실행 오류 (시도 {attempt}회차): {e}")
+                    if attempt < 3:
+                        await asyncio.sleep(2)
+                    else:
+                        logger.error(f"{site_func.__name__} 3회 실패, 해당 사이트 건너뜀")
+        # 수집된 뉴스 robust 저장
         save_to_shared(all_news)
         logger.info("[Playwright] 크롤링 및 저장 완료.")
-        
     except Exception as e:
         logger.error(f"main_async 실행 중 예외 발생: {e}")
 
@@ -262,89 +270,88 @@ def get_playwright_browser():
 
 async def crawl_blockmedia_playwright():
     """
-    Playwright 기반 blockmedia 뉴스 크롤러 (최신 10개)
+    Playwright 기반 blockmedia 뉴스 크롤러 (최신 10개, robust 예외 처리)
     """
     site_info = SITES['blockmedia']
     url = site_info['url']
     news_list = []
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-            )
-            page = await context.new_page()
-            await page.goto(url, timeout=40000, wait_until="domcontentloaded")
-            await page.wait_for_timeout(3000)  # 3초 대기
-            html = await page.content()
-            # 디버깅용: HTML 저장
-            try:
-                with open(os.path.join(SHARED_DIR, 'blockmedia_debug_playwright.html'), 'w', encoding='utf-8') as f:
-                    f.write(html)
-            except Exception as e:
-                logger.warning(f"blockmedia HTML 저장 실패: {e}")
-            soup = BeautifulSoup(html, 'lxml')
-            articles = soup.select(site_info['article_selector'])
-            for article in articles[:10]:
+    for attempt in range(1, 4):
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+                )
+                page = await context.new_page()
+                await page.goto(url, timeout=40000, wait_until="domcontentloaded")
+                await page.wait_for_timeout(3000)
+                html = await page.content()
                 try:
-                    title_elem = article.select_one(site_info['title_selector'])
-                    link_elem = article.select_one(site_info['link_selector'])
-                    date_elem = article.select_one(site_info['date_selector'])
-                    if not title_elem or not link_elem:
-                        continue
-                    title = title_elem.get_text().strip()
-                    link = link_elem.get('href', '')
-                    # 상대경로 처리
-                    if link and not link.startswith(('http://', 'https://')):
-                        link = site_info['base_url'] + link
-                    date_str = date_elem.get_text().strip() if date_elem else ""
-                    published_at = parse_date(date_str, 'blockmedia')
-                    # 본문/이미지 추출
-                    content = ""
-                    image_url = ""
-                    if link:
-                        try:
-                            detail_page = await context.new_page()
-                            await detail_page.goto(link, timeout=40000, wait_until="domcontentloaded")
-                            await detail_page.wait_for_timeout(2000)
-                            detail_html = await detail_page.content()
-                            detail_soup = BeautifulSoup(detail_html, 'lxml')
-                            # 본문 추출
-                            for selector in site_info.get('content_selector', []):
-                                content_elem = detail_soup.select_one(selector)
-                                if content_elem:
-                                    content = content_elem.get_text().strip()
-                                    break
-                            # 이미지 추출 (og:image 우선)
-                            og_image = detail_soup.find('meta', property='og:image')
-                            if og_image and og_image.get('content'):
-                                image_url = og_image.get('content')
-                            await detail_page.close()
-                        except Exception as e:
-                            logger.warning(f"blockmedia 본문/이미지 추출 실패: {link}, 오류: {e}")
-                    # 관련 코인 태깅
-                    related_coins = get_related_coins(title, content)
-                    news = {
-                        'title': title,
-                        'content': content[:500] + ('...' if len(content) > 500 else ''),
-                        'url': link,
-                        'source': 'blockmedia',
-                        'published_at': published_at.isoformat(),
-                        'related_coins': related_coins,
-                        'crawled_at': datetime.now(pytz.timezone('Asia/Seoul')).isoformat(),
-                        'imageUrl': image_url
-                    }
-                    news_list.append(news)
-                    logger.info(f"[Playwright] blockmedia 수집 완료: {title}")
+                    with open(os.path.join(SHARED_DIR, 'blockmedia_debug_playwright.html'), 'w', encoding='utf-8') as f:
+                        f.write(html)
                 except Exception as e:
-                    logger.error(f"[Playwright] blockmedia 기사 파싱 오류: {e}")
-                    continue
-            await browser.close()
-        logger.info(f"[Playwright] blockmedia 크롤링 완료: {len(news_list)}개 수집")
-        return news_list
-    except Exception as e:
-        logger.error(f"[Playwright] blockmedia 크롤링 오류: {e}")
-        return []
+                    logger.warning(f"blockmedia HTML 저장 실패: {e}")
+                soup = BeautifulSoup(html, 'lxml')
+                articles = soup.select(site_info['article_selector'])
+                for article in articles[:10]:
+                    try:
+                        title_elem = article.select_one(site_info['title_selector'])
+                        link_elem = article.select_one(site_info['link_selector'])
+                        date_elem = article.select_one(site_info['date_selector'])
+                        if not title_elem or not link_elem:
+                            continue
+                        title = title_elem.get_text().strip()
+                        link = link_elem.get('href', '')
+                        if link and not link.startswith(('http://', 'https://')):
+                            link = site_info['base_url'] + link
+                        date_str = date_elem.get_text().strip() if date_elem else ""
+                        published_at = parse_date(date_str, 'blockmedia')
+                        content = ""
+                        image_url = ""
+                        if link:
+                            try:
+                                detail_page = await context.new_page()
+                                await detail_page.goto(link, timeout=40000, wait_until="domcontentloaded")
+                                await detail_page.wait_for_timeout(2000)
+                                detail_html = await detail_page.content()
+                                detail_soup = BeautifulSoup(detail_html, 'lxml')
+                                for selector in site_info.get('content_selector', []):
+                                    content_elem = detail_soup.select_one(selector)
+                                    if content_elem:
+                                        content = content_elem.get_text().strip()
+                                        break
+                                og_image = detail_soup.find('meta', property='og:image')
+                                if og_image and og_image.get('content'):
+                                    image_url = og_image.get('content')
+                                await detail_page.close()
+                            except Exception as e:
+                                logger.warning(f"blockmedia 본문/이미지 추출 실패: {link}, 오류: {e}")
+                        related_coins = get_related_coins(title, content)
+                        news = {
+                            'title': title,
+                            'content': content[:500] + ('...' if len(content) > 500 else ''),
+                            'url': link,
+                            'source': 'blockmedia',
+                            'published_at': published_at.isoformat(),
+                            'related_coins': related_coins,
+                            'crawled_at': datetime.now(pytz.timezone('Asia/Seoul')).isoformat(),
+                            'imageUrl': image_url
+                        }
+                        news_list.append(news)
+                        logger.info(f"[Playwright] blockmedia 수집 완료: {title}")
+                    except Exception as e:
+                        logger.error(f"[Playwright] blockmedia 기사 파싱 오류: {e}")
+                        continue
+                await browser.close()
+            logger.info(f"[Playwright] blockmedia 크롤링 완료: {len(news_list)}개 수집")
+            return news_list
+        except Exception as e:
+            logger.error(f"[Playwright] blockmedia 크롤링 오류 (시도 {attempt}회차): {e}")
+            if attempt < 3:
+                await asyncio.sleep(2)
+            else:
+                logger.error("blockmedia 크롤링 3회 실패, 빈 리스트 반환")
+                return []
 
 # (테스트용) 아래와 같이 실행 가능:
 # asyncio.run(crawl_blockmedia_playwright())

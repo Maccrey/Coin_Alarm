@@ -2,15 +2,10 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# 필요한 패키지 설치
-RUN apt-get update && apt-get install -y \
-    cron \
-    gcc \
-    python3-dev \
-    curl \
-    gnupg \
-    lsb-release \
-    && rm -rf /var/lib/apt/lists/*
+# Install build tools for psutil etc.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc python3-dev curl gpg lsb-release cron && \
+    rm -rf /var/lib/apt/lists/*
 
 # Docker CLI 설치
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \

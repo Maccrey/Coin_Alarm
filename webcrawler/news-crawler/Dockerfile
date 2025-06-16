@@ -1,19 +1,16 @@
-FROM --platform=$BUILDPLATFORM python:3.10-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Install system dependencies for playwright and other packages
 RUN apt-get update && \
-    apt-get install -y gcc python3-dev wget unzip curl ca-certificates && \
-    rm -rf /var/lib/apt/lists/* && \
-    pip install --no-cache-dir -r requirements.txt && \
-    python -m playwright install --with-deps
+    apt-get install -y --no-install-recommends gcc python3-dev wget unzip curl && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY . .
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && \
+    playwright install --with-deps
 
-RUN mkdir -p /app/logs
-
-ENV TZ=Asia/Seoul
-RUN ln -snf /usr/share/zoneinfo/Asia/Seoul /etc/localtime && echo "Asia/Seoul" > /etc/timezone
+COPY crawler.py .
 
 CMD ["python", "crawler.py"]
