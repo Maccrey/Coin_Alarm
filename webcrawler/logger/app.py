@@ -74,20 +74,46 @@ def get_log_files():
 @app.route('/api/logs/<service>', methods=['GET'])
 def get_logs(service):
     """
-    특정 서비스의 로그 조회 (파일 없으면 빈 목록 반환)
+    특정 서비스의 로그 조회 (lines, level, since 파라미터 지원)
+    Args:
+        service (str): 서비스명
+    Query Params:
+        lines (int): 최근 몇 줄 (기본 500)
+        level (str): 로그 레벨 필터 (INFO, WARNING, ERROR 등)
+        since (str): ISO8601 타임스탬프 이후 로그만 (예: 2025-06-16T14:00:00)
+    Returns:
+        JSON: 로그 데이터
     """
     if service not in LOG_FILES:
         return jsonify({"status": "error", "message": "서비스를 찾을 수 없습니다."}), 404
-    
     log_file = LOG_FILES[service]
     lines = request.args.get('lines', default=500, type=int)
-    
+    level = request.args.get('level', default=None, type=str)
+    since = request.args.get('since', default=None, type=str)
     try:
         if os.path.exists(log_file):
             with open(log_file, 'r', encoding='utf-8') as f:
                 all_lines = f.readlines()
-                log_data = all_lines[-lines:] if lines < len(all_lines) else all_lines
-            
+            # 최근 lines개만 추출
+            log_data = all_lines[-lines:] if lines < len(all_lines) else all_lines
+            # level 필터링
+            if level:
+                level_upper = level.upper()
+                log_data = [l for l in log_data if f'- {level_upper} -' in l]
+            # since 필터링
+            if since:
+                try:
+                    since_dt = datetime.fromisoformat(since)
+                    def line_after(line):
+                        try:
+                            ts = line.split(' - ')[0]
+                            dt = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S,%f')
+                            return dt >= since_dt
+                        except Exception:
+                            return True
+                    log_data = [l for l in log_data if line_after(l)]
+                except Exception:
+                    pass
             return jsonify({
                 "status": "ok", "service": service, "logs": log_data,
                 "total_lines": len(all_lines), "showing_lines": len(log_data)
@@ -288,6 +314,66 @@ def index():
                 </div>
             </div>
         </div>
+        <!-- 전체 크롤러 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 크롤러 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-crawler' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-crawler-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-crawler-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+        <!-- 전체 writer 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 writer 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-writer' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-writer-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-writer-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+        <!-- 전체 cleaner 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 cleaner 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-cleaner' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-cleaner-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-cleaner-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+        <!-- 전체 scheduler 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 scheduler 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-scheduler' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-scheduler-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-scheduler-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+        <!-- 전체 logger 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 logger 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-logger' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-logger-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-logger-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
         <div class='table-section'>
             <h2>에러/경고 내역</h2>
             <div class='table-scroll'>
@@ -302,7 +388,7 @@ def index():
     </div>
     <script>
     // KPI, 차트, 테이블용 데이터 변수
-    let crawlRows = [], saveRows = [], errRows = [];
+    let crawlRows = [], saveRows = [], errRows = [], rawCrawlerLogs = [], rawWriterLogs = [], rawCleanerLogs = [], rawSchedulerLogs = [], rawLoggerLogs = [];
     // 1. 크롤링/저장/에러 KPI 및 차트 데이터 집계
     function updateKPI() {
         document.getElementById('kpi-crawl').textContent = crawlRows.length;
@@ -405,29 +491,61 @@ def index():
             return { time: '-', svc: '-', level: '-', msg: line.replace(/\\n/g, '<br>') };
         });
     }
+    function renderRawLogTable(id, logs, searchId) {
+      let q = document.getElementById(searchId).value.trim();
+      let filtered = q ? logs.filter(line => line.includes(q)) : logs;
+      let html = filtered.length ? filtered.map(line => `<tr><td class='mono'>${line}</td></tr>`).join('') : "<tr><td>아직 데이터가 없습니다.</td></tr>";
+      document.querySelector(`#${id} tbody`).innerHTML = html;
+    }
+    function downloadLog(id) {
+      let rows = Array.from(document.querySelectorAll(`#${id} tbody tr td`)).map(td => td.textContent);
+      let blob = new Blob([rows.join('\n')], {type: 'text/plain'});
+      let a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = id + '.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
     // 5. 데이터 로드 및 UI 갱신
     function loadAll() {
         Promise.all([
             fetch('/api/logs/crawler?lines=500').then(r=>r.json()),
             fetch('/api/logs/writer?lines=500').then(r=>r.json()),
-            fetch('/api/logs/cleaner?lines=500').then(r=>r.json())
-        ]).then(([c, w, cl]) => {
-            if (c.status !== 'ok' || w.status !== 'ok' || cl.status !== 'ok') {
-                console.error("하나 이상의 로그 API가 에러를 반환했습니다.", {c,w,cl});
+            fetch('/api/logs/cleaner?lines=500').then(r=>r.json()),
+            fetch('/api/logs/scheduler?lines=500').then(r=>r.json()),
+            fetch('/api/logs/logger?lines=500').then(r=>r.json())
+        ]).then(([c, w, cl, s, lg]) => {
+            if (c.status !== 'ok' || w.status !== 'ok' || cl.status !== 'ok' || s.status !== 'ok' || lg.status !== 'ok') {
+                console.error("하나 이상의 로그 API가 에러를 반환했습니다.", {c,w,cl,s,lg});
             }
             crawlRows = parseCrawl(c.logs || []);
             saveRows = parseSave(w.logs || []);
-            errRows = parseErr((c.logs || []).concat(w.logs || []).concat(cl.logs || []));
+            errRows = parseErr((c.logs || []).concat(w.logs || []).concat(cl.logs || []).concat(s.logs || []).concat(lg.logs || []));
+            rawCrawlerLogs = c.logs || [];
+            rawWriterLogs = w.logs || [];
+            rawCleanerLogs = cl.logs || [];
+            rawSchedulerLogs = s.logs || [];
+            rawLoggerLogs = lg.logs || [];
             updateKPI();
             updateChart();
             renderTable('news-table', crawlRows, ['time','source','title'], 'search-crawl');
             renderTable('save-table', saveRows, ['time','title'], 'search-save');
+            renderRawLogTable('raw-crawler-log', rawCrawlerLogs, 'search-raw-crawler');
+            renderRawLogTable('raw-writer-log', rawWriterLogs, 'search-raw-writer');
+            renderRawLogTable('raw-cleaner-log', rawCleanerLogs, 'search-raw-cleaner');
+            renderRawLogTable('raw-scheduler-log', rawSchedulerLogs, 'search-raw-scheduler');
+            renderRawLogTable('raw-logger-log', rawLoggerLogs, 'search-raw-logger');
             let errHtml = errRows.length ? errRows.map(r => `<tr><td class='mono'>${r.time}</td><td>${r.svc}</td><td><span class='status ${r.level.toLowerCase()}'>${r.level}</span></td><td class='mono'>${r.msg}</td></tr>`).join('') : `<tr><td colspan='4'>데이터가 없습니다.</td></tr>`;
             document.querySelector('#err-table tbody').innerHTML = errHtml;
         }).catch(err => {
             console.error("데이터 로딩 중 오류 발생:", err);
             document.querySelector('#news-table tbody').innerHTML = "<tr><td colspan='3'>데이터 로딩 실패 (API 오류)</td></tr>";
             document.querySelector('#save-table tbody').innerHTML = "<tr><td colspan='2'>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-crawler-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-writer-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-cleaner-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-scheduler-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-logger-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
             document.querySelector('#err-table tbody').innerHTML = "<tr><td colspan='4'>데이터 로딩 실패 (API 오류)</td></tr>";
         });
     }
@@ -464,6 +582,11 @@ def index():
     }
     document.getElementById('search-crawl').oninput = () => renderTable('news-table', crawlRows, ['time','source','title'], 'search-crawl');
     document.getElementById('search-save').oninput = () => renderTable('save-table', saveRows, ['time','title'], 'search-save');
+    document.getElementById('search-raw-crawler').oninput = () => renderRawLogTable('raw-crawler-log', rawCrawlerLogs, 'search-raw-crawler');
+    document.getElementById('search-raw-writer').oninput = () => renderRawLogTable('raw-writer-log', rawWriterLogs, 'search-raw-writer');
+    document.getElementById('search-raw-cleaner').oninput = () => renderRawLogTable('raw-cleaner-log', rawCleanerLogs, 'search-raw-cleaner');
+    document.getElementById('search-raw-scheduler').oninput = () => renderRawLogTable('raw-scheduler-log', rawSchedulerLogs, 'search-raw-scheduler');
+    document.getElementById('search-raw-logger').oninput = () => renderRawLogTable('raw-logger-log', rawLoggerLogs, 'search-raw-logger');
     loadAll();
     updatePipelineStatus();
     setInterval(() => {

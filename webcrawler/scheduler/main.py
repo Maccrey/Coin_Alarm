@@ -14,11 +14,13 @@ import logging
 from datetime import datetime, timedelta
 import pytz
 import json
+import fcntl
 
 # 공유 디렉토리 (항상 절대경로로 고정)
 SHARED_DIR = os.path.abspath(os.environ.get('SHARED_DIR', './shared'))
 os.makedirs(SHARED_DIR, exist_ok=True)
 STATUS_FILE = os.path.join(SHARED_DIR, 'pipeline_status.json')
+LOCK_FILE = os.path.join(SHARED_DIR, 'scheduler.lock')
 
 # 로깅 설정 (SHARED_DIR 기반)
 logging.basicConfig(
@@ -97,21 +99,30 @@ def main_loop():
     크롤러 → 클리너 → writer robust 순차 실행, writer 끝나면 4시간 대기 후 반복
     """
     logger.info("=== 뉴스 파이프라인 순차 실행 스케줄러 시작 ===")
-    while True:
-        # 1. 크롤러 실행
-        if not run_step(CRAWLER_CMD, "크롤러"):
-            logger.warning("크롤러 단계에서 오류 발생. 다음 단계로 진행합니다.")
-        time.sleep(2)
-        # 2. 클리너 실행
-        if not run_step(CLEANER_CMD, "클리너"):
-            logger.warning("클리너 단계에서 오류 발생. 다음 단계로 진행합니다.")
-        time.sleep(2)
-        # 3. writer 실행
-        if not run_step(WRITER_CMD, "writer"):
-            logger.warning("writer 단계에서 오류 발생. 다음 반복으로 진행합니다.")
-        logger.info("=== 파이프라인 1회 실행 완료. 4시간 대기 후 재시작 ===")
-        update_status('waiting')
-        time.sleep(60 * 60 * 4)
+    # 락 파일로 중복 실행 방지
+    with open(LOCK_FILE, 'w') as lock_fp:
+        try:
+            fcntl.flock(lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            logger.error("[중복 실행] 이미 다른 스케줄러 인스턴스가 실행 중입니다. 종료합니다.")
+            return
+        while True:
+            logger.info("[스케줄러] 파이프라인 실행 시작")
+            # 1. 크롤러 실행
+            if not run_step(CRAWLER_CMD, "크롤러"):
+                logger.warning("크롤러 단계에서 오류 발생. 다음 단계로 진행합니다.")
+            time.sleep(2)
+            # 2. 클리너 실행
+            if not run_step(CLEANER_CMD, "클리너"):
+                logger.warning("클리너 단계에서 오류 발생. 다음 단계로 진행합니다.")
+            time.sleep(2)
+            # 3. writer 실행
+            if not run_step(WRITER_CMD, "writer"):
+                logger.warning("writer 단계에서 오류 발생. 다음 반복으로 진행합니다.")
+            logger.info("=== 파이프라인 1회 실행 완료. 4시간 대기 후 재시작 ===")
+            update_status('waiting')
+            logger.info("[스케줄러] 4시간 대기 진입")
+            time.sleep(60 * 60 * 4)
 
 if __name__ == "__main__":
     main_loop() 
