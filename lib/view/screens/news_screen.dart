@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../viewmodel/news_viewmodel.dart';
-import '../../data/dummy_coins.dart';
+// import '../../data/dummy_coins.dart';
 import '../../model/news_model.dart';
 import '../../core/theme.dart';
 
@@ -43,21 +43,14 @@ class _NewsScreenState extends State<NewsScreen> {
   }
 
   // 필터 적용
-  void _applyFilter(String filter) {
+  void _applyFilter(String filter) async {
     setState(() {
       _selectedFilter = filter;
+      _searchController.clear(); // 필터 선택 시 검색어도 초기화
     });
 
-    // NewsViewModel에 필터 적용
     final newsViewModel = Provider.of<NewsViewModel>(context, listen: false);
-    if (filter == '전체') {
-      newsViewModel.loadNewsByCoinId('');
-    } else {
-      // 코인 심볼(BTC, ETH 등)이나 ID를 적절한 형태로 변환
-      final coin = DummyCoins.getCoinById(filter);
-      final coinId = coin?.id ?? filter; // 코인 ID가 있으면 사용, 없으면 원래 필터값 사용
-      newsViewModel.loadNewsByCoinId(coinId);
-    }
+    await newsViewModel.loadNewsByCoinId(filter);
   }
 
   // 검색 실행
@@ -70,203 +63,59 @@ class _NewsScreenState extends State<NewsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final newsViewModel = Provider.of<NewsViewModel>(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Align(alignment: Alignment.centerLeft, child: Text('뉴스')),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: '뉴스 검색',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          _performSearch('');
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: BorderSide.none,
+    // Provider.of<NewsViewModel>(context) 대신 Consumer 사용
+    return Consumer<NewsViewModel>(
+      builder: (context, newsViewModel, _) {
+        return Scaffold(
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            title: const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('뉴스'),
+            ),
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(60),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
                 ),
-                filled: true,
-                fillColor: theme.colorScheme.surface,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              ),
-              onChanged: _performSearch,
-            ),
-          ),
-        ),
-        actions: [
-          // 오프라인 모드 토글 버튼
-          IconButton(
-            icon: Icon(
-              newsViewModel.isOfflineMode ? Icons.cloud_off : Icons.cloud_done,
-              color: newsViewModel.isOfflineMode
-                  ? theme.colorScheme.error
-                  : newsViewModel.isConnected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.error,
-            ),
-            tooltip: newsViewModel.isOfflineMode ? '오프라인 모드 끄기' : '오프라인 모드 켜기',
-            onPressed: () {
-              final newsViewModel = Provider.of<NewsViewModel>(
-                context,
-                listen: false,
-              );
-              newsViewModel.setOfflineMode(!newsViewModel.isOfflineMode);
-            },
-          ),
-
-          // 필터 버튼
-          PopupMenuButton<String>(
-            tooltip: '코인별 필터링',
-            offset: const Offset(0, 56),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Text(
-                    _selectedFilter == '전체'
-                        ? '전체'
-                        : DummyCoins.getCoinById(_selectedFilter)?.symbol ??
-                              _selectedFilter,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onPrimaryContainer,
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: '뉴스 검색',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              _performSearch('');
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      borderSide: BorderSide.none,
                     ),
+                    filled: true,
+                    fillColor: theme.colorScheme.surface,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.filter_list,
-                    size: 18,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ],
+                  onChanged: _performSearch,
+                ),
               ),
             ),
-            onSelected: _applyFilter,
-            itemBuilder: (context) {
-              // 코인 목록으로 필터 메뉴 아이템 생성
-              final allCoins = [
-                {'id': '전체', 'name': '전체', 'imageUrl': null},
-                ...DummyCoins.popularCoins
-                    .map(
-                      (coin) => {
-                        'id': coin.id,
-                        'name': coin.symbol,
-                        'imageUrl': coin.imageUrl,
-                      },
-                    )
-                    .toList(),
-              ];
-
-              return allCoins.map((coin) {
-                final bool isSelected = _selectedFilter == coin['id'];
-
-                return PopupMenuItem<String>(
-                  value: coin['id'] as String,
-                  child: Row(
-                    children: [
-                      // 선택 표시
-                      if (isSelected)
-                        Icon(
-                          Icons.check_circle,
-                          color: theme.colorScheme.primary,
-                          size: 18,
-                        )
-                      else
-                        const SizedBox(width: 18),
-                      const SizedBox(width: 8),
-
-                      // 코인 아이콘
-                      if (coin['imageUrl'] != null) ...[
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              coin['imageUrl'] as String,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  const Icon(Icons.currency_bitcoin, size: 16),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ] else if (coin['id'] != '전체') ...[
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.currency_bitcoin,
-                            size: 16,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ] else ...[
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.secondaryContainer,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.filter_alt,
-                            size: 16,
-                            color: theme.colorScheme.secondary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-
-                      // 코인 이름
-                      Text(
-                        coin['name'] as String,
-                        style: TextStyle(
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList();
-            },
           ),
-        ],
-      ),
-      body: newsViewModel.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : newsViewModel.errorMessage != null
-          ? _buildErrorView(newsViewModel.errorMessage!)
-          : _searchController.text.isNotEmpty || _selectedFilter != '전체'
-          ? _buildNewsList(newsViewModel)
-          : _buildNewsPageWithSections(newsViewModel),
+          body: newsViewModel.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : newsViewModel.errorMessage != null
+              ? _buildErrorView(newsViewModel.errorMessage!)
+              : _searchController.text.isNotEmpty || _selectedFilter != '전체'
+              ? _buildNewsList(newsViewModel)
+              : _buildNewsPageWithSections(newsViewModel),
+        );
+      },
     );
   }
 
@@ -390,6 +239,10 @@ class _NewsScreenState extends State<NewsScreen> {
                     setState(() {
                       _selectedFilter = '전체';
                     });
+                    final newsViewModel = Provider.of<NewsViewModel>(
+                      context,
+                      listen: false,
+                    );
                     viewModel.loadNewsByCoinId('');
                   },
                   child: const Text('전체 보기'),
@@ -524,11 +377,39 @@ class _NewsScreenState extends State<NewsScreen> {
   Widget _buildNewsList(NewsViewModel viewModel) {
     // 디버깅용 로그 추가
     debugPrint(
-      '뉴스 목록 표시: 필터=${_selectedFilter}, 뉴스 개수=${viewModel.newsList.length}',
+      '뉴스 목록 표시: 필터=[38;5;2m${_selectedFilter}[0m, 뉴스 개수=${viewModel.newsList.length}',
     );
 
-    if (viewModel.newsList.isEmpty) {
+    final filteredList = viewModel.newsList;
+    final onlyFilterList = viewModel.newsListWithoutSearch;
+
+    if (filteredList.isEmpty) {
       debugPrint('뉴스 목록이 비어있음');
+      // 검색어가 있고, 필터만 적용하면 뉴스가 있을 때 fallback
+      if (_searchController.text.isNotEmpty && onlyFilterList.isNotEmpty) {
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '검색 결과가 없습니다.\n필터에 해당하는 모든 뉴스를 보여드립니다.',
+                style: TextStyle(color: Theme.of(context).hintColor),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: onlyFilterList.length,
+                itemBuilder: (context, index) {
+                  final news = onlyFilterList[index];
+                  return _buildNewsItem(news);
+                },
+              ),
+            ),
+          ],
+        );
+      }
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -555,7 +436,12 @@ class _NewsScreenState extends State<NewsScreen> {
                 setState(() {
                   _selectedFilter = '전체';
                 });
-                viewModel.refreshNews();
+                final newsViewModel = Provider.of<NewsViewModel>(
+                  context,
+                  listen: false,
+                );
+                newsViewModel.clearFilter(); // 필터와 검색어 모두 초기화
+                newsViewModel.refreshNews(); // 전체 뉴스 로드
               },
             ),
           ],
@@ -567,9 +453,9 @@ class _NewsScreenState extends State<NewsScreen> {
       onRefresh: () => viewModel.refreshNews(),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: viewModel.newsList.length,
+        itemCount: filteredList.length,
         itemBuilder: (context, index) {
-          final news = viewModel.newsList[index];
+          final news = filteredList[index];
           return _buildNewsItem(news);
         },
       ),
@@ -664,8 +550,7 @@ class _NewsScreenState extends State<NewsScreen> {
                     Wrap(
                       spacing: 8,
                       children: news.relatedCoins.map((coinId) {
-                        final coin = DummyCoins.getCoinById(coinId);
-                        final symbol = coin?.symbol ?? coinId.toUpperCase();
+                        final symbol = coinId.toUpperCase();
 
                         return Container(
                           padding: const EdgeInsets.symmetric(
@@ -761,7 +646,7 @@ class _NewsScreenState extends State<NewsScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '• ${_formatDateTime(news.publishedAt)}',
+                          '• ${news.getTimeAgo()}',
                           style: TextStyle(color: Theme.of(context).hintColor),
                         ),
                       ],
@@ -774,9 +659,8 @@ class _NewsScreenState extends State<NewsScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: news.relatedCoins.map((coinId) {
-                          final coin = DummyCoins.getCoinById(coinId);
-                          final name = coin?.name ?? coinId;
-                          final symbol = coin?.symbol ?? coinId.toUpperCase();
+                          final name = coinId;
+                          final symbol = coinId.toUpperCase();
 
                           return Container(
                             padding: const EdgeInsets.symmetric(

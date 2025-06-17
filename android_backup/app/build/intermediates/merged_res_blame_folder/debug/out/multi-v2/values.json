@@ -1,0 +1,38 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.example.coin_alarm.app-mergeDebugResources-3:/values/values.xml",
+            "map": [
+                {
+                    "source": "/Users/maccrey/Development/coin_alarm/android/app/src/main/res/values/colors.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "56",
+                        "endOffsets": "107"
+                    }
+                },
+                {
+                    "source": "/Users/maccrey/Development/coin_alarm/android/app/src/main/res/values/styles.xml",
+                    "from": {
+                        "startLines": "3,14",
+                        "startColumns": "4,4",
+                        "startOffsets": "173,818",
+                        "endLines": "7,16",
+                        "endColumns": "12,12",
+                        "endOffsets": "476,982"
+                    },
+                    "to": {
+                        "startLines": "3,7",
+                        "startColumns": "4,4",
+                        "startOffsets": "112,293",
+                        "endLines": "6,9",
+                        "endColumns": "12,12",
+                        "endOffsets": "288,457"
+                    }
+                }
+            ]
+        }
+    ]
+}

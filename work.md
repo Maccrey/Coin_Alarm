@@ -111,3 +111,31 @@ return SizedBox(
 - 위젯이 무한한 크기를 가지지 않도록 mainAxisSize: MainAxisSize.min 사용
 - 스크롤 가능한 위젯 내부에서는 SingleChildScrollView나 ListView를 사용하여 오버플로우 방지
 - Center 위젯 내부의 위젯에는 항상 명시적인 너비 제한(SizedBox, ConstrainedBox 등)을 추가
+
+## [2024-06-XX] LateInitializationError: Field '\_box@xxxx' has not been initialized 오류
+
+- **에러 로그:**
+  flutter: UpbitApiService 오류 상세: LateInitializationError: Field '\_box@50167360' has not been initialized.
+- **원인:**
+  main.dart에서 Hive.initFlutter()와 어댑터 등록이 SettingsService.initialize()보다 늦게 실행되어, SettingsService에서 Box를 열기 전에 접근이 발생함.
+- **해결:**
+  Hive 초기화 및 어댑터 등록을 SettingsService.initialize()보다 먼저 실행하도록 main.dart 코드 순서 수정.
+- **Tasklist.md**에 이슈 및 해결 내역 기록.
+
+## [2024-06-22] 차트 페이지 캐시/로딩 UX 개선
+
+- **문제:**
+  - 차트 데이터 로딩 시 캐시가 없거나 만료되면 네트워크 요청이 끝날 때까지 전체 UI가 멈추고, 로딩 인디케이터만 표시되어 UX가 저하됨
+- **원인:**
+  - 캐시 miss 시 네트워크 요청이 await되어 전체 데이터가 올 때까지 화면이 멈춤
+  - 차트 데이터가 많거나, API 응답이 느릴 때 UX가 저하됨
+- **개선 방법:**
+  1. 캐시 데이터가 있으면 즉시 차트에 표시, 네트워크는 백그라운드에서 최신 데이터 요청
+  2. 로딩 중에도 캐시 데이터가 있으면 차트 먼저 보여주고, 하단에 '최신 데이터 수신 중...' 안내 메시지 표시
+  3. 캐시 만료 정책/새로고침 주기 조정(필요시)
+- **적용 내역:**
+  - ChartViewModel.loadChartData()에서 캐시 hit 시 즉시 차트 표시, 네트워크는 백그라운드로 분리
+  - 차트 화면에서 isLoading==true && 차트 데이터가 있으면 차트+안내 메시지, 데이터도 없으면 로딩 인디케이터만 표시
+- **효과:**
+  - 네트워크가 느릴 때도 UX가 쾌적하게 개선됨
+  - 캐시 데이터가 있으면 항상 빠르게 차트가 표시됨

@@ -1,0 +1,786 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+로깅 서비스
+- 로그 수집 및 조회 API
+- 간단한 대시보드 제공
+"""
+
+import os
+import json
+import logging
+from datetime import datetime, timedelta
+import pytz
+from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask_cors import CORS
+import requests
+
+app = Flask(__name__)
+CORS(app)
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('/app/logs/logger.log')
+    ]
+)
+logger = logging.getLogger('logger')
+
+# 공유 디렉토리
+SHARED_DIR = '/app/shared'
+LOGS_DIR = '/app/logs'
+STATUS_FILE = os.path.join(SHARED_DIR, 'pipeline_status.json')
+
+# 로그 파일 목록
+LOG_FILES = {
+    'crawler': '/app/shared/crawler.log',
+    'cleaner': '/app/shared/cleaner.log',
+    'writer': '/app/shared/writer.log',
+    'scheduler': '/app/shared/scheduler.log',
+    'logger': '/app/logs/logger.log'
+}
+
+# 서비스 목록
+SERVICES = [
+    {"name": "news-crawler", "url": "http://news-crawler:5000/health"},
+    {"name": "news-cleaner", "url": "http://news-cleaner:5000/health"},
+    {"name": "news-writer", "url": "http://news-writer:5000/health"},
+    {"name": "scheduler", "url": "http://scheduler:5000/health"}
+]
+
+
+# 헬스 체크 엔드포인트
+@app.route('/health', methods=['GET'])
+def health_check():
+    """서비스 헬스 체크"""
+    return jsonify({"status": "ok", "service": "logger"})
+
+
+# 로그 파일 목록 조회
+@app.route('/api/logs', methods=['GET'])
+def get_log_files():
+    """로그 파일 목록 조회"""
+    return jsonify({
+        "status": "ok",
+        "log_files": list(LOG_FILES.keys())
+    })
+
+
+# 로그 조회
+@app.route('/api/logs/<service>', methods=['GET'])
+def get_logs(service):
+    """
+    특정 서비스의 로그 조회 (lines, level, since 파라미터 지원)
+    Args:
+        service (str): 서비스명
+    Query Params:
+        lines (int): 최근 몇 줄 (기본 500)
+        level (str): 로그 레벨 필터 (INFO, WARNING, ERROR 등)
+        since (str): ISO8601 타임스탬프 이후 로그만 (예: 2025-06-16T14:00:00)
+    Returns:
+        JSON: 로그 데이터
+    """
+    if service not in LOG_FILES:
+        return jsonify({"status": "error", "message": "서비스를 찾을 수 없습니다."}), 404
+    log_file = LOG_FILES[service]
+    lines = request.args.get('lines', default=500, type=int)
+    level = request.args.get('level', default=None, type=str)
+    since = request.args.get('since', default=None, type=str)
+    try:
+        if os.path.exists(log_file):
+            with open(log_file, 'r', encoding='utf-8') as f:
+                all_lines = f.readlines()
+            # 최근 lines개만 추출
+            log_data = all_lines[-lines:] if lines < len(all_lines) else all_lines
+            # level 필터링
+            if level:
+                level_upper = level.upper()
+                log_data = [l for l in log_data if f'- {level_upper} -' in l]
+            # since 필터링
+            if since:
+                try:
+                    since_dt = datetime.fromisoformat(since)
+                    def line_after(line):
+                        try:
+                            ts = line.split(' - ')[0]
+                            dt = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S,%f')
+                            return dt >= since_dt
+                        except Exception:
+                            return True
+                    log_data = [l for l in log_data if line_after(l)]
+                except Exception:
+                    pass
+            return jsonify({
+                "status": "ok", "service": service, "logs": log_data,
+                "total_lines": len(all_lines), "showing_lines": len(log_data)
+            })
+        else:
+            logger.warning(f"요청된 로그 파일 없음: {log_file}. 빈 목록을 반환합니다.")
+            return jsonify({
+                "status": "ok", "service": service, "logs": [],
+                "total_lines": 0, "showing_lines": 0, "message": "Log file not found."
+            })
+    except Exception as e:
+        logger.error(f"로그 조회 오류 ({service}): {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/pipeline_status', methods=['GET'])
+def get_pipeline_status():
+    """파이프라인 현재 상태 조회"""
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, 'r', encoding='utf-8') as f:
+                status_data = json.load(f)
+            return jsonify({"status": "ok", "data": status_data})
+        except Exception as e:
+            logger.error(f"상태 파일 읽기 오류: {e}")
+            return jsonify({"status": "error", "message": str(e)}), 500
+    else:
+        return jsonify({
+            "status": "ok", 
+            "data": { "status": "unknown", "timestamp": datetime.now(pytz.timezone('Asia/Seoul')).isoformat() }
+        })
+
+
+# 서비스 상태 조회
+@app.route('/api/status', methods=['GET'])
+def get_services_status():
+    """
+    모든 서비스의 상태 조회
+    
+    Returns:
+        JSON: 서비스 상태 데이터
+    """
+    status_data = []
+    
+    for service in SERVICES:
+        try:
+            response = requests.get(service["url"], timeout=3)
+            status = "ok" if response.status_code == 200 else "error"
+        except Exception:
+            status = "error"
+        
+        status_data.append({
+            "name": service["name"],
+            "status": status,
+            "checked_at": datetime.now(pytz.timezone('Asia/Seoul')).isoformat()
+        })
+    
+    return jsonify({
+        "status": "ok",
+        "services": status_data
+    })
+
+
+# 로그 메시지 추가
+@app.route('/api/log', methods=['POST'])
+def add_log():
+    """
+    로그 메시지 추가
+    
+    Request Body:
+        {
+            "service": "서비스 이름",
+            "level": "로그 레벨 (info, warning, error)",
+            "message": "로그 메시지"
+        }
+        
+    Returns:
+        JSON: 성공 여부
+    """
+    data = request.json
+    
+    service = data.get('service')
+    level = data.get('level', 'info')
+    message = data.get('message')
+    
+    if not service or not message:
+        return jsonify({"status": "error", "message": "필수 필드 누락"}), 400
+    
+    try:
+        # 로그 메시지 형식 생성
+        timestamp = datetime.now(pytz.timezone('Asia/Seoul')).strftime('%Y-%m-%d %H:%M:%S')
+        log_message = f"{timestamp} - {service} - {level.upper()} - {message}\n"
+        
+        # 서비스별 로그 파일에 기록
+        if service in LOG_FILES:
+            log_file = LOG_FILES[service]
+        else:
+            log_file = '/app/logs/other.log'
+        
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(log_message)
+        
+        return jsonify({"status": "ok"})
+    
+    except Exception as e:
+        logger.error(f"로그 추가 오류: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# 대시보드 메인 페이지
+@app.route('/')
+def index():
+    """
+    전문 데이터 분석가용 실시간 대시보드 (HTML+JS)
+    - 상단 KPI 카드, 트렌드 차트, 상세 테이블, 전문가용 레이아웃
+    """
+    html = """
+    <!DOCTYPE html>
+    <html lang='ko'>
+    <head>
+        <title>암호화폐 뉴스 데이터 파이프라인 대시보드</title>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+        <style>
+            body { font-family: 'Pretendard', 'Noto Sans KR', Arial, sans-serif; margin: 0; padding: 0; background: #181c23; color: #e6eaf3; }
+            h1 { color: #fff; margin: 0 0 16px 0; font-size: 2.2rem; }
+            h2 { color: #7ecfff; margin: 32px 0 12px 0; font-size: 1.3rem; }
+            .dashboard { max-width: 1400px; margin: 0 auto; padding: 32px 16px; }
+            .kpi-row { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 32px; }
+            .kpi-card { flex: 1; background: #232936; border-radius: 12px; box-shadow: 0 2px 8px #0003; padding: 24px 18px; display: flex; flex-direction: column; align-items: flex-start; min-width: 180px;}
+            .kpi-label { color: #b0b8c9; font-size: 1rem; margin-bottom: 6px; }
+            .kpi-value { font-size: 2.1rem; font-weight: bold; }
+            #kpi-pipeline-status.waiting { color: #28a745; }
+            #kpi-pipeline-status.running { color: #0099ff; }
+            #kpi-pipeline-status.unknown { color: #aaa; }
+            .kpi-sub { color: #b0b8c9; font-size: 0.95rem; margin-top: 4px; }
+            .chart-section { background: #232936; border-radius: 12px; box-shadow: 0 2px 8px #0003; padding: 24px; margin-bottom: 32px; height: 320px; }
+            .flex-row { display: flex; gap: 24px; }
+            .flex-col { flex: 1; }
+            .table-section { background: #232936; border-radius: 12px; box-shadow: 0 2px 8px #0003; padding: 24px; margin-bottom: 32px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 16px; background: #232936; color: #e6eaf3; }
+            th, td { padding: 8px 10px; border-bottom: 1px solid #2c3240; text-align: left; font-size: 15px; }
+            th { background: #232936; color: #7ecfff; font-weight: 600; position: sticky; top: 0; z-index: 2; }
+            tr:last-child td { border-bottom: none; }
+            .mono { font-family: 'Fira Mono', 'Menlo', 'Consolas', monospace; font-size: 13px; }
+            .center { text-align: center; }
+            .search-box { background: #232936; border: 1px solid #2c3240; color: #e6eaf3; border-radius: 6px; padding: 6px 12px; margin-bottom: 8px; width: 220px; }
+            .table-scroll { max-height: 340px; overflow-y: auto; }
+            .status { padding: 4px 10px; border-radius: 4px; font-size: 13px; display: inline-block; font-weight: 500; }
+            .status.error { background: #3a1e1e; color: #ff7e7e; }
+            .status.warning { background: #3a2e1e; color: #ffe07e; }
+            @media (max-width: 1200px) { .kpi-card { min-width: 150px; } }
+            @media (max-width: 900px) { .kpi-row, .flex-row { flex-direction: column; } }
+        </style>
+    </head>
+    <body>
+    <div class='dashboard'>
+        <h1>암호화폐 뉴스 데이터 파이프라인 대시보드</h1>
+        <!-- KPI 카드 -->
+        <div class='kpi-row' id='kpi-row'>
+            <div class='kpi-card'><div class='kpi-label'>파이프라인 상태</div><div class='kpi-value' id='kpi-pipeline-status'>-</div><div class='kpi-sub' id='kpi-pipeline-step'>&nbsp;</div></div>
+            <div class='kpi-card'><div class='kpi-label'>전체 크롤링</div><div class='kpi-value' id='kpi-crawl'>-</div><div class='kpi-sub'>건</div></div>
+            <div class='kpi-card'><div class='kpi-label'>Supabase 저장</div><div class='kpi-value' id='kpi-save'>-</div><div class='kpi-sub'>건</div></div>
+            <div class='kpi-card'><div class='kpi-label'>에러/경고</div><div class='kpi-value' id='kpi-err'>-</div><div class='kpi-sub'>건</div></div>
+            <div class='kpi-card'><div class='kpi-label'>성공률</div><div class='kpi-value' id='kpi-success'>-</div><div class='kpi-sub'>%</div></div>
+            <div class='kpi-card'><div class='kpi-label'>마지막 크롤링 시간</div><div class='kpi-value' id='kpi-last-crawl'>-</div><div class='kpi-sub' id='kpi-next-crawl'>&nbsp;</div></div>
+        </div>
+        <!-- 트렌드 차트 -->
+        <div class='chart-section'>
+            <h2>최근 24시간 크롤링/저장 트렌드</h2>
+            <canvas id='trendChart'></canvas>
+        </div>
+        <!-- 상세 테이블 -->
+        <div class='flex-row'>
+            <div class='flex-col table-section'>
+                <h2>최근 크롤링 뉴스</h2>
+                <input class='search-box' id='search-crawl' placeholder='제목 검색...'>
+                <div class='table-scroll'>
+                <table id='news-table'>
+                    <thead>
+                        <tr><th style='min-width:120px;'>시간</th><th>출처</th><th>제목</th></tr>
+                    </thead>
+                    <tbody><tr><td colspan='3'>로딩 중...</td></tr></tbody>
+                </table>
+                </div>
+            </div>
+            <div class='flex-col table-section'>
+                <h2>Supabase 저장 뉴스</h2>
+                <input class='search-box' id='search-save' placeholder='제목 검색...'>
+                <div class='table-scroll'>
+                <table id='save-table'>
+                    <thead>
+                        <tr><th style='min-width:120px;'>시간</th><th>제목</th></tr>
+                    </thead>
+                    <tbody><tr><td colspan='2'>로딩 중...</td></tr></tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        <!-- 전체 크롤러 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 크롤러 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-crawler' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-crawler-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-crawler-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+        <!-- 전체 writer 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 writer 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-writer' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-writer-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-writer-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+        <!-- 전체 cleaner 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 cleaner 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-cleaner' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-cleaner-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-cleaner-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+        <!-- 전체 scheduler 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 scheduler 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-scheduler' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-scheduler-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-scheduler-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+        <!-- 전체 logger 로그 테이블 추가 -->
+        <div class='table-section'>
+            <h2>전체 logger 로그 (최근 500줄)</h2>
+            <input class='search-box' id='search-raw-logger' placeholder='로그 검색...'>
+            <button onclick="downloadLog('raw-logger-log')">다운로드</button>
+            <div class='table-scroll'>
+            <table id='raw-logger-log'>
+                <thead><tr><th>로그 라인</th></tr></thead>
+                <tbody><tr><td>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+        <div class='table-section'>
+            <h2>에러/경고 내역</h2>
+            <div class='table-scroll'>
+            <table id='err-table'>
+                <thead>
+                    <tr><th style='min-width:120px;'>시간</th><th>서비스</th><th>레벨</th><th>메시지</th></tr>
+                </thead>
+                <tbody><tr><td colspan='4'>로딩 중...</td></tr></tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+    <script>
+    // KPI, 차트, 테이블용 데이터 변수
+    let crawlRows = [], saveRows = [], errRows = [], rawCrawlerLogs = [], rawWriterLogs = [], rawCleanerLogs = [], rawSchedulerLogs = [], rawLoggerLogs = [];
+    // 1. 크롤링/저장/에러 KPI 및 차트 데이터 집계
+    function updateKPI() {
+        document.getElementById('kpi-crawl').textContent = crawlRows.length;
+        document.getElementById('kpi-save').textContent = saveRows.length;
+        document.getElementById('kpi-err').textContent = errRows.length;
+        let success = crawlRows.length ? Math.round(saveRows.length / crawlRows.length * 100) : '-';
+        document.getElementById('kpi-success').textContent = success;
+        // 마지막/다음 크롤링
+        let last = crawlRows.length ? crawlRows[0].time : '-';
+        document.getElementById('kpi-last-crawl').textContent = last;
+        if (last !== '-') {
+            document.getElementById('kpi-next-crawl').textContent = '다음 크롤링 시간은 상태 카드를 확인하세요.';
+        } else {
+            document.getElementById('kpi-next-crawl').textContent = '&nbsp;';
+        }
+    }
+    // 2. 트렌드 차트(최근 24시간)
+    function updateChart() {
+        let now = new Date();
+        let hours = [];
+        let crawlCnt = [], saveCnt = [];
+        for (let i = 23; i >= 0; i--) {
+            let h = new Date(now.getTime() - i*3600*1000);
+            let label = h.getHours() + '시';
+            hours.push(label);
+            let hStr = h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0')+' '+String(h.getHours()).padStart(2,'0');
+            crawlCnt.push(crawlRows.filter(r => r.time.startsWith(hStr)).length);
+            saveCnt.push(saveRows.filter(r => r.time.startsWith(hStr)).length);
+        }
+        let ctx = document.getElementById('trendChart').getContext('2d');
+        if (window.trendChartObj) window.trendChartObj.destroy();
+        window.trendChartObj = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: hours,
+                datasets: [
+                    { label: '크롤링', data: crawlCnt, borderColor: '#7ecfff', backgroundColor: 'rgba(126,207,255,0.1)', tension:0.2, fill:true },
+                    { label: '저장', data: saveCnt, borderColor: '#ffe07e', backgroundColor: 'rgba(255,224,126,0.1)', tension:0.2, fill:true }
+                ]
+            },
+            options: {
+                plugins: { legend: { labels: { color: '#e6eaf3' } } },
+                scales: { x: { ticks: { color: '#b0b8c9', padding: 10 } }, y: { ticks: { color: '#b0b8c9' } } },
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { bottom: 32 } }
+            }
+        });
+    }
+    // 3. 테이블 렌더링(검색/정렬)
+    function renderTable(id, rows, cols, searchId) {
+        let q = document.getElementById(searchId).value.trim();
+        let filtered = q ? rows.filter(r => r.title.includes(q)) : rows;
+        let html = filtered.length ? filtered.map(r => `<tr>${cols.map(c => `<td class='mono'>${r[c]}</td>`).join('')}</tr>`).join('') : `<tr><td colspan='${cols.length}'>아직 데이터가 없습니다.</td></tr>`;
+        document.querySelector(`#${id} tbody`).innerHTML = html;
+    }
+    // 시간 문자열을 Date 객체로 변환(,밀리초 없는 경우도 지원)
+    function parseKST(t) {
+        if (!t) return '-';
+        let t2 = t.includes(',') ? t.replace(/-/g,'/') : t.replace(/-/g,'/').replace(' ', 'T');
+        let d = new Date(t2);
+        if (d.toString() === 'Invalid Date') return t;
+        return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    }
+    function parseCrawl(logs) {
+        // 'YYYY-MM-DD HH:MM:SS - crawler - INFO - [Playwright] blockmedia 수집 완료: TITLE'
+        return logs.filter(line => line.includes('수집 완료')).slice(-100).reverse().map(line => {
+            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?\[Playwright\]\s*([a-zA-Z0-9_-]+)\s*수집 완료:\s*(.+)$/);
+            if (!m) return null;
+            return { time: parseKST(m[1]), source: m[2], title: m[3] };
+        }).filter(Boolean);
+    }
+    function parseSave(logs) {
+        // 'YYYY-MM-DD HH:MM:SS - writer - INFO -   - 저장 성공: TITLE'
+        return logs.filter(line => line.includes('저장 성공:')).slice(-100).reverse().map(line => {
+            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?저장 성공:\s*(.+)$/);
+            if (!m) return null;
+            return { time: parseKST(m[1]), title: m[2] };
+        }).filter(Boolean);
+    }
+    function parseErr(allLogs) {
+        const lines = allLogs.filter(line => line.includes('ERROR') || line.includes('WARNING'));
+        let merged = [];
+        let last = null;
+        const tsPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
+        for (let i = 0; i < lines.length; i++) {
+            if (tsPattern.test(lines[i])) {
+                if (last) merged.push(last);
+                last = lines[i];
+            } else if (last) {
+                last += '\\n' + lines[i];
+            }
+        }
+        if (last) merged.push(last);
+        
+        return merged.slice(-100).reverse().map(line => {
+            const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*? - (crawler|writer|cleaner|scheduler|logger) - (ERROR|WARNING) - ([\s\S]+)$/);
+            if (m) {
+                return { time: parseKST(m[1]), svc: m[2], level: m[3], msg: m[4].replace(/\\n/g, '<br>') };
+            }
+            return { time: '-', svc: '-', level: '-', msg: line.replace(/\\n/g, '<br>') };
+        });
+    }
+    function renderRawLogTable(id, logs, searchId) {
+      let q = document.getElementById(searchId).value.trim();
+      let filtered = q ? logs.filter(line => line.includes(q)) : logs;
+      let html = filtered.length ? filtered.map(line => `<tr><td class='mono'>${line}</td></tr>`).join('') : "<tr><td>아직 데이터가 없습니다.</td></tr>";
+      document.querySelector(`#${id} tbody`).innerHTML = html;
+    }
+    function downloadLog(id) {
+      let rows = Array.from(document.querySelectorAll(`#${id} tbody tr td`)).map(td => td.textContent);
+      let blob = new Blob([rows.join('\n')], {type: 'text/plain'});
+      let a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = id + '.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    // 5. 데이터 로드 및 UI 갱신
+    function loadAll() {
+        Promise.all([
+            fetch('/api/logs/crawler?lines=500').then(r=>r.json()),
+            fetch('/api/logs/writer?lines=500').then(r=>r.json()),
+            fetch('/api/logs/cleaner?lines=500').then(r=>r.json()),
+            fetch('/api/logs/scheduler?lines=500').then(r=>r.json()),
+            fetch('/api/logs/logger?lines=500').then(r=>r.json())
+        ]).then(([c, w, cl, s, lg]) => {
+            if (c.status !== 'ok' || w.status !== 'ok' || cl.status !== 'ok' || s.status !== 'ok' || lg.status !== 'ok') {
+                console.error("하나 이상의 로그 API가 에러를 반환했습니다.", {c,w,cl,s,lg});
+            }
+            crawlRows = parseCrawl(c.logs || []);
+            saveRows = parseSave(w.logs || []);
+            errRows = parseErr((c.logs || []).concat(w.logs || []).concat(cl.logs || []).concat(s.logs || []).concat(lg.logs || []));
+            rawCrawlerLogs = c.logs || [];
+            rawWriterLogs = w.logs || [];
+            rawCleanerLogs = cl.logs || [];
+            rawSchedulerLogs = s.logs || [];
+            rawLoggerLogs = lg.logs || [];
+            updateKPI();
+            updateChart();
+            renderTable('news-table', crawlRows, ['time','source','title'], 'search-crawl');
+            renderTable('save-table', saveRows, ['time','title'], 'search-save');
+            renderRawLogTable('raw-crawler-log', rawCrawlerLogs, 'search-raw-crawler');
+            renderRawLogTable('raw-writer-log', rawWriterLogs, 'search-raw-writer');
+            renderRawLogTable('raw-cleaner-log', rawCleanerLogs, 'search-raw-cleaner');
+            renderRawLogTable('raw-scheduler-log', rawSchedulerLogs, 'search-raw-scheduler');
+            renderRawLogTable('raw-logger-log', rawLoggerLogs, 'search-raw-logger');
+            let errHtml = errRows.length ? errRows.map(r => `<tr><td class='mono'>${r.time}</td><td>${r.svc}</td><td><span class='status ${r.level.toLowerCase()}'>${r.level}</span></td><td class='mono'>${r.msg}</td></tr>`).join('') : `<tr><td colspan='4'>데이터가 없습니다.</td></tr>`;
+            document.querySelector('#err-table tbody').innerHTML = errHtml;
+        }).catch(err => {
+            console.error("데이터 로딩 중 오류 발생:", err);
+            document.querySelector('#news-table tbody').innerHTML = "<tr><td colspan='3'>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#save-table tbody').innerHTML = "<tr><td colspan='2'>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-crawler-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-writer-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-cleaner-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-scheduler-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#raw-logger-log tbody').innerHTML = "<tr><td>데이터 로딩 실패 (API 오류)</td></tr>";
+            document.querySelector('#err-table tbody').innerHTML = "<tr><td colspan='4'>데이터 로딩 실패 (API 오류)</td></tr>";
+        });
+    }
+    function updatePipelineStatus() {
+        fetch('/api/pipeline_status')
+            .then(r => r.json())
+            .then(res => {
+                if (res.status !== 'ok') return;
+                const data = res.data;
+                const statusElem = document.getElementById('kpi-pipeline-status');
+                const stepElem = document.getElementById('kpi-pipeline-step');
+                
+                statusElem.className = 'kpi-value'; // Reset classes
+                if (data.status === 'waiting') {
+                    statusElem.textContent = '대기 중';
+                    statusElem.classList.add('waiting');
+                    let nextRun = new Date(data.next_run).toLocaleString('ko-KR');
+                    stepElem.textContent = `다음 실행: ${nextRun}`;
+                } else if (data.status === 'running') {
+                    statusElem.textContent = '실행 중';
+                    statusElem.classList.add('running');
+                    stepElem.textContent = `단계: ${data.step || ''}`;
+                } else {
+                    statusElem.textContent = '상태 미확인';
+                    statusElem.classList.add('unknown');
+                    stepElem.textContent = '...';
+                }
+            }).catch(err => {
+                console.error('파이프라인 상태 로딩 오류:', err);
+                const statusElem = document.getElementById('kpi-pipeline-status');
+                statusElem.textContent = '오류';
+                statusElem.className = 'kpi-value';
+            });
+    }
+    document.getElementById('search-crawl').oninput = () => renderTable('news-table', crawlRows, ['time','source','title'], 'search-crawl');
+    document.getElementById('search-save').oninput = () => renderTable('save-table', saveRows, ['time','title'], 'search-save');
+    document.getElementById('search-raw-crawler').oninput = () => renderRawLogTable('raw-crawler-log', rawCrawlerLogs, 'search-raw-crawler');
+    document.getElementById('search-raw-writer').oninput = () => renderRawLogTable('raw-writer-log', rawWriterLogs, 'search-raw-writer');
+    document.getElementById('search-raw-cleaner').oninput = () => renderRawLogTable('raw-cleaner-log', rawCleanerLogs, 'search-raw-cleaner');
+    document.getElementById('search-raw-scheduler').oninput = () => renderRawLogTable('raw-scheduler-log', rawSchedulerLogs, 'search-raw-scheduler');
+    document.getElementById('search-raw-logger').oninput = () => renderRawLogTable('raw-logger-log', rawLoggerLogs, 'search-raw-logger');
+    loadAll();
+    updatePipelineStatus();
+    setInterval(() => {
+        loadAll();
+        updatePipelineStatus();
+    }, 5000); // 5초마다 실시간 갱신
+    </script>
+    </body>
+    </html>
+    """
+    return html
+
+
+# 정적 파일 서빙
+@app.route('/static/<path:path>')
+def serve_static(path):
+    """정적 파일 서빙"""
+    return send_from_directory('static', path)
+
+
+# 템플릿이 없을 경우를 대비한 간단한 HTML 생성
+@app.route('/fallback')
+def fallback_dashboard():
+    """
+    템플릿이 없을 경우 대체 대시보드 (전문가용)
+    - 크롤링 내역, Supabase 저장 내역, 에러/경고를 표로 시각화
+    - crawler.log, writer.log에서 최신 30건씩 파싱
+    - 한글 UI, 컬럼명, 색상 강조, 전문가용 정보 대시보드 스타일
+    """
+    html = """
+    <!DOCTYPE html>
+    <html lang='ko'>
+    <head>
+        <title>암호화폐 뉴스 크롤러 모니터링 대시보드</title>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <style>
+            body { font-family: 'Pretendard', 'Noto Sans KR', Arial, sans-serif; margin: 0; padding: 24px; background: #f7f9fa; }
+            h1 { color: #222; margin-bottom: 8px; }
+            h2 { color: #2a5d9f; margin-top: 32px; margin-bottom: 8px; }
+            .section { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px #0001; margin-bottom: 32px; padding: 24px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 16px; }
+            th, td { padding: 8px 10px; border-bottom: 1px solid #e3e6ea; text-align: left; font-size: 15px; }
+            th { background: #f0f4fa; color: #1a3a5e; font-weight: 600; }
+            tr:last-child td { border-bottom: none; }
+            .error { color: #c0392b; font-weight: bold; background: #fff0f0; }
+            .warn { color: #b9770e; font-weight: bold; background: #fffbe6; }
+            .ok { color: #27ae60; font-weight: bold; }
+            .status { padding: 4px 10px; border-radius: 4px; font-size: 13px; display: inline-block; }
+            .status.ok { background: #eafaf1; color: #27ae60; }
+            .status.error { background: #fff0f0; color: #c0392b; }
+            .status.warning { background: #fffbe6; color: #b9770e; }
+            .mono { font-family: 'Fira Mono', 'Menlo', 'Consolas', monospace; font-size: 13px; }
+            .highlight { background: #eaf6ff; }
+            .flex-row { display: flex; gap: 24px; }
+            .flex-col { flex: 1; }
+            @media (max-width: 900px) { .flex-row { flex-direction: column; } }
+        </style>
+    </head>
+    <body>
+        <h1>암호화폐 뉴스 크롤러 모니터링 대시보드</h1>
+        <div class='section' id='service-status'>
+            <h2>서비스 상태</h2>
+            <div id='services'>로딩 중...</div>
+        </div>
+        <div class='section'>
+            <div class='flex-row'>
+                <div class='flex-col'>
+                    <h2>최근 크롤링 내역 (최신 30건)</h2>
+                    <table id='crawl-table'>
+                        <thead>
+                            <tr><th>시간</th><th>뉴스 출처</th><th>제목</th></tr>
+                        </thead>
+                        <tbody><tr><td colspan='3'>로딩 중...</td></tr></tbody>
+                    </table>
+                </div>
+                <div class='flex-col'>
+                    <h2>Supabase 저장 내역 (최신 30건)</h2>
+                    <table id='save-table'>
+                        <thead>
+                            <tr><th>시간</th><th>제목</th><th>관련 코인</th><th>대표 이미지</th></tr>
+                        </thead>
+                        <tbody><tr><td colspan='4'>로딩 중...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class='section'>
+            <h2>에러/경고 내역 (최신 30건)</h2>
+            <table id='err-table'>
+                <thead>
+                    <tr><th>시간</th><th>서비스</th><th>레벨</th><th>메시지</th></tr>
+                </thead>
+                <tbody><tr><td colspan='4'>로딩 중...</td></tr></tbody>
+            </table>
+        </div>
+        <script>
+        // 서비스 상태 로드
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(data => {
+                const s = data.services.map(svc => `<span class='status ${svc.status}'>${svc.name}: ${svc.status.toUpperCase()}<br><span style='font-size:12px;color:#888'>${new Date(svc.checked_at).toLocaleString('ko-KR')}</span></span>`).join(' ');
+                document.getElementById('services').innerHTML = s;
+            })
+            .catch(() => { document.getElementById('services').innerHTML = '오류: 상태 정보를 불러올 수 없습니다.'; });
+
+        // 크롤링 내역(crawler.log) 파싱 및 표 렌더링
+        fetch('/api/logs/crawler?lines=200')
+            .then(r => r.json())
+            .then(data => {
+                // "수집 완료: ..." 라인만 추출
+                const rows = data.logs.filter(line => line.includes('수집 완료')).slice(-30).reverse();
+                const parsed = rows.map(line => {
+                    const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - [^ ]+ - [^ ]+ - [^\[]*\[Playwright\] ([^ ]+) 수집 완료: (.+)$/);
+                    if (!m) return null;
+                    let title = m[3];
+                    let source = '-';
+                    if (title.includes('디지털투데이')) source = 'digitaltoday';
+                    else if (title.includes('코인리더스') || title.includes('XRP') || title.includes('비트코인') || title.includes('이더리움') || title.includes('솔라나')) source = 'coinreaders';
+                    else if (title.includes('블록미디어') || title.includes('blockmedia')) source = 'blockmedia';
+                    return { time: m[1], source, title };
+                }).filter(Boolean);
+                const html = parsed.length ? parsed.map(r => `<tr><td>${r.time}</td><td>${r.source}</td><td class='mono'>${r.title}</td></tr>`).join('') : `<tr><td colspan='3'>데이터 없음</td></tr>`;
+                document.querySelector('#crawl-table tbody').innerHTML = html;
+            })
+            .catch(() => { document.querySelector('#crawl-table tbody').innerHTML = `<tr><td colspan='3'>오류</td></tr>`; });
+
+        // Supabase 저장 내역(writer.log) 파싱 및 표 렌더링
+        fetch('/api/logs/writer?lines=200')
+            .then(r => r.json())
+            .then(data => {
+                // "뉴스 저장 성공: ..." 라인만 추출
+                const rows = data.logs.filter(line => line.includes('뉴스 저장 성공')).slice(-30).reverse();
+                // 관련 코인, 이미지 등은 직전 "뉴스 저장 요청 데이터" 라인에서 추출
+                let result = [];
+                for (let i = 0; i < data.logs.length; i++) {
+                    if (data.logs[i].includes('뉴스 저장 성공')) {
+                        // 시간, 제목
+                        const m = data.logs[i].match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - [^ ]+ - [^ ]+ - 뉴스 저장 성공: (.+)$/);
+                        let time = m ? m[1] : '-';
+                        let title = m ? m[2] : data.logs[i];
+                        // 직전 5줄 내에서 "뉴스 저장 요청 데이터" 라인 찾기
+                        let rel = '-', img = '-';
+                        for (let j = i-1; j>=0 && j>=i-5; j--) {
+                            if (data.logs[j].includes('뉴스 저장 요청 데이터')) {
+                                try {
+                                    const obj = JSON.parse(data.logs[j].split('뉴스 저장 요청 데이터:')[1].replace(/'/g,'"'));
+                                    rel = obj.related_coins || '-';
+                                    img = obj.image_url || '-';
+                                } catch(e) {}
+                                break;
+                            }
+                        }
+                        result.push({time, title, rel, img});
+                    }
+                }
+                result = result.slice(-30).reverse();
+                const html = result.length ? result.map(r => `<tr><td>${r.time}</td><td>${r.title}</td><td>${r.rel}</td><td>${r.img}</td></tr>`).join('') : `<tr><td colspan='4'>데이터 없음</td></tr>`;
+                document.querySelector('#save-table tbody').innerHTML = html;
+            })
+            .catch(() => { document.querySelector('#save-table tbody').innerHTML = `<tr><td colspan='4'>오류</td></tr>`; });
+
+        // 에러/경고 내역(crawler+writer) 파싱 및 표 렌더링
+        Promise.all([
+            fetch('/api/logs/crawler?lines=200').then(r=>r.json()),
+            fetch('/api/logs/writer?lines=200').then(r=>r.json())
+        ]).then(([c, w]) => {
+            // 에러/경고 라인만 추출
+            const errLines = c.logs.concat(w.logs).filter(line => line.includes('ERROR') || line.includes('WARNING')).slice(-30).reverse();
+            const html = errLines.length ? errLines.map(line => {
+                // 예시: 2025-06-11 03:05:18,144 - __main__ - ERROR - blockmedia 크롤링 오류: ...
+                const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)? - ([^ ]+) - (ERROR|WARNING) - (.+)$/);
+                if (!m) return `<tr><td colspan='4' class='warn'>${line}</td></tr>`;
+                const level = m[3] === 'ERROR' ? 'error' : 'warn';
+                return `<tr><td>${m[1]}</td><td>${m[2]}</td><td class='${level}'>${m[3]}</td><td class='${level}'>${m[4]}</td></tr>`;
+            }).join('') : `<tr><td colspan='4'>데이터 없음</td></tr>`;
+            document.querySelector('#err-table tbody').innerHTML = html;
+        }).catch(() => { document.querySelector('#err-table tbody').innerHTML = `<tr><td colspan='4'>오류</td></tr>`; });
+        </script>
+    </body>
+    </html>
+    """
+    return html
+
+
+if __name__ == '__main__':
+    # 필요한 디렉토리 생성
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    
+    # 로그 파일이 없으면 생성
+    for log_file in LOG_FILES.values():
+        if not os.path.exists(log_file):
+            with open(log_file, 'w', encoding='utf-8') as f:
+                f.write(f"Log file created at {datetime.now(pytz.timezone('Asia/Seoul')).isoformat()}\n")
+    
+    logger.info("로깅 서비스 시작")
+    app.run(host='0.0.0.0', port=5000) 

@@ -1,0 +1,86 @@
+version: "3"
+
+services:
+  # 뉴스 크롤링 서비스
+  news-crawler:
+    image: maccrey/coin-alarm-news-crawler:latest
+    container_name: news-crawler
+    volumes:
+      - ./shared:/app/shared
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - crawler-network
+    restart: unless-stopped
+
+  # 뉴스 정제 서비스
+  news-cleaner:
+    image: maccrey/coin-alarm-news-cleaner:latest
+    container_name: news-cleaner
+    volumes:
+      - ./shared:/app/shared
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - news-crawler
+    networks:
+      - crawler-network
+    restart: unless-stopped
+
+  # 뉴스 저장 서비스
+  news-writer:
+    image: maccrey/coin-alarm-news-writer:latest
+    container_name: news-writer
+    volumes:
+      - ./shared:/app/shared
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_API_KEY=${SUPABASE_API_KEY}
+    env_file:
+      - ./.env
+    depends_on:
+      - news-cleaner
+    networks:
+      - crawler-network
+    restart: unless-stopped
+
+  # 스케줄러 서비스
+  scheduler:
+    image: maccrey/coin-alarm-scheduler:latest
+    container_name: scheduler
+    volumes:
+      - ./shared:/app/shared
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - news-crawler
+      - news-cleaner
+      - news-writer
+    networks:
+      - crawler-network
+    restart: unless-stopped
+
+  # 로깅 서비스
+  logger:
+    image: maccrey/coin-alarm-logger:latest
+    container_name: logger
+    volumes:
+      - ./shared:/app/shared
+      - ./logs:/app/logs
+    ports:
+      - "5001:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - crawler-network
+    restart: unless-stopped
+
+networks:
+  crawler-network:
+    driver: bridge
+
+volumes:
+  shared:

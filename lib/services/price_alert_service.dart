@@ -177,9 +177,20 @@ class PriceAlertService {
 
       if (coin.id.isEmpty) continue;
 
-      final isTriggered = alert.isAbove
+      // 비교 로그 (트리거 여부와 무관하게 항상 남김)
+      final compareOp = alert.isAbove ? '>=' : '<=';
+      final compareResult = alert.isAbove
           ? coin.currentPrice >= alert.priceTarget
           : coin.currentPrice <= alert.priceTarget;
+      debugPrint(
+        '[알림비교] 코인: ${alert.coinSymbol}, 현재가: ${coin.currentPrice}, 목표가: ${alert.priceTarget}, isAbove: ${alert.isAbove ? '이상(>=)' : '이하(<=)'}, 비교: ${coin.currentPrice} $compareOp ${alert.priceTarget} => ${compareResult ? '참' : '거짓'}',
+      );
+
+      final isTriggered = compareResult;
+
+      debugPrint(
+        '[알림체크] 조건 결과: ${isTriggered ? '트리거됨' : '조건 불충족'} (현재가: ${coin.currentPrice} $compareOp 목표가: ${alert.priceTarget})',
+      );
 
       if (isTriggered) {
         final updatedAlert = alert.copyWith(

@@ -4,6 +4,7 @@ import 'package:internet_connection_checker/internet_connection_checker.dart';
 import '../services/supabase_service.dart';
 import '../model/news_model.dart';
 import '../core/constants.dart';
+import 'package:hive/hive.dart';
 
 // 뉴스 데이터 관련 ViewModel 클래스
 class NewsViewModel extends ChangeNotifier {
@@ -28,14 +29,30 @@ class NewsViewModel extends ChangeNotifier {
   bool _isConnected = true;
   late StreamSubscription _connectivitySubscription;
 
+  // 원본 값과 정규화된 값 모두 저장
+  String? _rawCoinFilter;
+  String? _normalizedCoinFilter;
+
   // 생성자
   NewsViewModel(this._supabaseService) {
-    // 초기 뉴스 데이터 로드
+    // Hive 박스가 열려 있으면 즉시 캐시 데이터를 동기 로드
+    if (Hive.isBoxOpen('news_cache')) {
+      final box = Hive.box('news_cache');
+      final cachedData = box.get('cached_news');
+      if (cachedData != null) {
+        final List<dynamic> newsJsonList = cachedData;
+        _newsList = newsJsonList
+            .map(
+              (json) => News.fromJson(Map<String, dynamic>.from(json as Map)),
+            )
+            .toList();
+        notifyListeners();
+      }
+    }
+    // 네트워크, 타이머 등 기존 초기화는 그대로 비동기 처리
     _initConnectivity();
     _setupConnectivityMonitoring();
     refreshNews();
-
-    // 자동 갱신 타이머 설정
     _setupAutoRefresh();
   }
 
@@ -49,6 +66,71 @@ class NewsViewModel extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   bool get isOfflineMode => _isOfflineMode;
   bool get isConnected => _isConnected;
+
+  // 검색어를 무시하고 코인 필터만 적용한 뉴스 리스트 반환
+  List<News> get newsListWithoutSearch {
+    var filtered = _newsList;
+    if (_coinFilter != null && _coinFilter!.isNotEmpty) {
+      final normalizedFilter =
+          _normalizedCoinFilter ?? _normalizeCoinId(_coinFilter!);
+      final rawFilter = _rawCoinFilter ?? _coinFilter!;
+
+      final symbolToId = {
+        'btc': 'bitcoin',
+        'eth': 'ethereum',
+        'bnb': 'binancecoin',
+        'sol': 'solana',
+        'xrp': 'ripple',
+        'doge': 'dogecoin',
+        'ada': 'cardano',
+      };
+      final idToSymbol = {
+        'bitcoin': 'btc',
+        'ethereum': 'eth',
+        'binancecoin': 'bnb',
+        'solana': 'sol',
+        'ripple': 'xrp',
+        'dogecoin': 'doge',
+        'cardano': 'ada',
+      };
+
+      final filterVariants = <String>{
+        normalizedFilter.toLowerCase(),
+        normalizedFilter.toUpperCase(),
+        rawFilter.toLowerCase(),
+        rawFilter.toUpperCase(),
+      };
+      if (symbolToId.containsKey(rawFilter.toLowerCase())) {
+        filterVariants.add(symbolToId[rawFilter.toLowerCase()]!);
+        filterVariants.add(symbolToId[rawFilter.toLowerCase()]!.toUpperCase());
+      }
+      if (idToSymbol.containsKey(normalizedFilter.toLowerCase())) {
+        filterVariants.add(idToSymbol[normalizedFilter.toLowerCase()]!);
+        filterVariants.add(
+          idToSymbol[normalizedFilter.toLowerCase()]!.toUpperCase(),
+        );
+      }
+
+      filtered = filtered.where((news) {
+        for (final coin in news.relatedCoins) {
+          final coinLower = coin.toLowerCase();
+          final coinUpper = coin.toUpperCase();
+          // 심볼/ID 매핑까지 모두 비교
+          if (filterVariants.contains(coin) ||
+              filterVariants.contains(coinLower) ||
+              filterVariants.contains(coinUpper) ||
+              (symbolToId.containsKey(coinLower) &&
+                  filterVariants.contains(symbolToId[coinLower]!)) ||
+              (idToSymbol.containsKey(coinLower) &&
+                  filterVariants.contains(idToSymbol[coinLower]!))) {
+            return true;
+          }
+        }
+        return false;
+      }).toList();
+    }
+    return filtered;
+  }
 
   // 네트워크 연결 상태 초기화
   Future<void> _initConnectivity() async {
@@ -105,12 +187,62 @@ class NewsViewModel extends ChangeNotifier {
 
     // 코인 필터 적용
     if (_coinFilter != null && _coinFilter!.isNotEmpty) {
-      final normalizedFilter = _normalizeCoinId(_coinFilter!);
+      final normalizedFilter =
+          _normalizedCoinFilter ?? _normalizeCoinId(_coinFilter!);
+      final rawFilter = _rawCoinFilter ?? _coinFilter!;
 
-      // 필터 ID와 동일하거나 매핑 가능한 심볼이 있는 뉴스만 필터링
-      filtered = filtered
-          .where((news) => _newsContainsRelatedCoin(news, normalizedFilter))
-          .toList();
+      final symbolToId = {
+        'btc': 'bitcoin',
+        'eth': 'ethereum',
+        'bnb': 'binancecoin',
+        'sol': 'solana',
+        'xrp': 'ripple',
+        'doge': 'dogecoin',
+        'ada': 'cardano',
+      };
+      final idToSymbol = {
+        'bitcoin': 'btc',
+        'ethereum': 'eth',
+        'binancecoin': 'bnb',
+        'solana': 'sol',
+        'ripple': 'xrp',
+        'dogecoin': 'doge',
+        'cardano': 'ada',
+      };
+
+      final filterVariants = <String>{
+        normalizedFilter.toLowerCase(),
+        normalizedFilter.toUpperCase(),
+        rawFilter.toLowerCase(),
+        rawFilter.toUpperCase(),
+      };
+      if (symbolToId.containsKey(rawFilter.toLowerCase())) {
+        filterVariants.add(symbolToId[rawFilter.toLowerCase()]!);
+        filterVariants.add(symbolToId[rawFilter.toLowerCase()]!.toUpperCase());
+      }
+      if (idToSymbol.containsKey(normalizedFilter.toLowerCase())) {
+        filterVariants.add(idToSymbol[normalizedFilter.toLowerCase()]!);
+        filterVariants.add(
+          idToSymbol[normalizedFilter.toLowerCase()]!.toUpperCase(),
+        );
+      }
+
+      filtered = filtered.where((news) {
+        for (final coin in news.relatedCoins) {
+          final coinLower = coin.toLowerCase();
+          final coinUpper = coin.toUpperCase();
+          if (filterVariants.contains(coin) ||
+              filterVariants.contains(coinLower) ||
+              filterVariants.contains(coinUpper) ||
+              (symbolToId.containsKey(coinLower) &&
+                  filterVariants.contains(symbolToId[coinLower]!)) ||
+              (idToSymbol.containsKey(coinLower) &&
+                  filterVariants.contains(idToSymbol[coinLower]!))) {
+            return true;
+          }
+        }
+        return false;
+      }).toList();
     }
 
     // 검색어 필터 적용
@@ -126,61 +258,6 @@ class NewsViewModel extends ChangeNotifier {
     }
 
     return filtered;
-  }
-
-  // 뉴스에 관련 코인이 포함되어 있는지 확인하는 함수
-  bool _newsContainsRelatedCoin(News news, String coinFilter) {
-    // 심볼과 ID 매핑 (양방향)
-    final symbolToId = {
-      'btc': 'bitcoin',
-      'eth': 'ethereum',
-      'bnb': 'binancecoin',
-      'sol': 'solana',
-      'xrp': 'ripple',
-      'doge': 'dogecoin',
-      'ada': 'cardano',
-    };
-
-    final idToSymbol = {
-      'bitcoin': 'btc',
-      'ethereum': 'eth',
-      'binancecoin': 'bnb',
-      'solana': 'sol',
-      'ripple': 'xrp',
-      'dogecoin': 'doge',
-      'cardano': 'ada',
-    };
-
-    final filterLower = coinFilter.toLowerCase();
-
-    // 관련 코인 배열이 비어있는 경우
-    if (news.relatedCoins.isEmpty) {
-      return false;
-    }
-
-    // 관련 코인 순회하며 확인
-    for (final coin in news.relatedCoins) {
-      final coinLower = coin.toLowerCase();
-
-      // 직접 일치하는 경우
-      if (coinLower == filterLower) {
-        return true;
-      }
-
-      // 필터가 ID이고 코인이 심볼인 경우 (예: filter='bitcoin', coin='btc')
-      if (idToSymbol.containsKey(filterLower) &&
-          coinLower == idToSymbol[filterLower]) {
-        return true;
-      }
-
-      // 필터가 심볼이고 코인이 ID인 경우 (예: filter='btc', coin='bitcoin')
-      if (symbolToId.containsKey(filterLower) &&
-          coinLower == symbolToId[filterLower]) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   // 자동 갱신 타이머 설정
@@ -203,7 +280,7 @@ class NewsViewModel extends ChangeNotifier {
     super.dispose();
   }
 
-  // 뉴스 목록 갱신
+  // 뉴스 목록 갱신 (캐시 우선, 네트워크 백그라운드)
   Future<void> refreshNews() async {
     // 현재 필터 상태 저장
     final currentFilter = _coinFilter;
@@ -213,11 +290,25 @@ class NewsViewModel extends ChangeNotifier {
     _coinFilter = null;
     _searchQuery = '';
 
-    // 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시된 데이터 사용
+    // 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시만 사용
     if (_isOfflineMode || !_isConnected) {
-      return _loadCachedNews();
+      final cachedNews = await _supabaseService.getCachedNews();
+      if (cachedNews.isNotEmpty) {
+        _newsList = cachedNews;
+        // 인기 뉴스는 캐시된 뉴스 중 상위 3개만 사용
+        _popularNews = List.of(cachedNews)
+          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+        _popularNews = _popularNews.take(3).toList();
+        debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
+      } else {
+        debugPrint('캐시된 뉴스 데이터가 없습니다');
+      }
+      _isLoading = false;
+      notifyListeners();
+      return;
     }
 
+    // 2. 네트워크로 최신 데이터 요청 (백그라운드)
     _isLoading = true;
     notifyListeners();
 
@@ -225,6 +316,13 @@ class NewsViewModel extends ChangeNotifier {
       // Supabase에서 뉴스 데이터 가져오기
       _newsList = await _supabaseService.getNews();
       debugPrint('refreshNews: 뉴스 ${_newsList.length}개 로드됨');
+      final now = DateTime.now();
+      for (final news in _newsList) {
+        final diff = now.difference(news.publishedAt).inSeconds;
+        debugPrint(
+          '뉴스 publishedAt: ${news.publishedAt.toIso8601String()}, now와의 차이(초): $diff, title: ${news.title}',
+        );
+      }
 
       try {
         // 인기 뉴스 로드 (별도 try-catch로 분리하여 인기 뉴스 로드 실패가 전체 로드에 영향 없게 함)
@@ -242,52 +340,15 @@ class NewsViewModel extends ChangeNotifier {
     } catch (e) {
       _errorMessage = '뉴스 데이터 로드 실패: $e';
       debugPrint(_errorMessage);
-
-      // 오류 발생 시 캐시된 데이터로 폴백
-      await _loadCachedNews();
+      // 오류 발생 시 캐시 데이터만 유지
     } finally {
       // 필터 복원 (만약 필터가 적용된 상태였다면)
       if (currentFilter != null && currentFilter.isNotEmpty) {
         _coinFilter = currentFilter;
       }
-
       if (currentQuery.isNotEmpty) {
         _searchQuery = currentQuery;
       }
-
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // 캐시된 뉴스 데이터 로드
-  Future<void> _loadCachedNews() async {
-    if (!_isLoading) {
-      _isLoading = true;
-      notifyListeners();
-    }
-
-    try {
-      final cachedNews = await _supabaseService.getCachedNews();
-      if (cachedNews.isNotEmpty) {
-        _newsList = cachedNews;
-        // 인기 뉴스는 캐시된 뉴스 중 상위 3개만 사용
-        _popularNews = List.of(cachedNews)
-          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-        _popularNews = _popularNews.take(3).toList();
-
-        debugPrint('캐시된 뉴스 데이터 로드 완료: ${cachedNews.length}개');
-      } else {
-        debugPrint('캐시된 뉴스 데이터가 없습니다');
-      }
-    } catch (e) {
-      debugPrint('캐시된 뉴스 데이터 로드 실패: $e');
-
-      // 오류 메시지 업데이트 (기존 오류 메시지가 없는 경우에만)
-      if (_errorMessage == null) {
-        _errorMessage = '뉴스 데이터 로드 실패: $e';
-      }
-    } finally {
       _isLoading = false;
       notifyListeners();
     }
@@ -306,25 +367,43 @@ class NewsViewModel extends ChangeNotifier {
       } else {
         // 코인 ID 또는 심볼 정규화
         final normalizedCoinId = _normalizeCoinId(coinId);
-        _coinFilter = normalizedCoinId;
+        // 원본 값과 정규화된 값 모두 저장
+        _coinFilter = coinId;
+        _rawCoinFilter = coinId;
+        _normalizedCoinFilter = normalizedCoinId;
 
         if (_isOfflineMode || !_isConnected) {
           // 오프라인 모드에서는 캐시된 데이터를 필터링
-          await _loadCachedNews();
+          final cachedNews = await _supabaseService.getCachedNews();
+          if (cachedNews.isNotEmpty) {
+            _newsList = cachedNews;
+            _popularNews = List.of(cachedNews)
+              ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+            _popularNews = _popularNews.take(3).toList();
+            debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
+          } else {
+            debugPrint('캐시된 뉴스 데이터가 없습니다');
+          }
         } else {
-          // 특정 코인의 뉴스만 로드
-          _newsList = await _supabaseService.getNewsByCoin(
-            coinId: normalizedCoinId,
-          );
+          // 전체 뉴스만 받아오고, 필터는 클라이언트에서 적용
+          _newsList = await _supabaseService.getNews();
         }
         _errorMessage = null;
       }
     } catch (e) {
       _errorMessage = '코인 관련 뉴스 로드 실패: $e';
       debugPrint(_errorMessage);
-
-      // 오류 발생 시 캐시된 데이터로 폴백
-      await _loadCachedNews();
+      // 오류 발생 시 캐시 데이터만 유지
+      final cachedNews = await _supabaseService.getCachedNews();
+      if (cachedNews.isNotEmpty) {
+        _newsList = cachedNews;
+        _popularNews = List.of(cachedNews)
+          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+        _popularNews = _popularNews.take(3).toList();
+        debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
+      } else {
+        debugPrint('캐시된 뉴스 데이터가 없습니다');
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -363,7 +442,16 @@ class NewsViewModel extends ChangeNotifier {
     try {
       if (_isOfflineMode || !_isConnected) {
         // 오프라인 모드에서는 캐시된 데이터를 검색어로 필터링
-        await _loadCachedNews();
+        final cachedNews = await _supabaseService.getCachedNews();
+        if (cachedNews.isNotEmpty) {
+          _newsList = cachedNews;
+          _popularNews = List.of(cachedNews)
+            ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+          _popularNews = _popularNews.take(3).toList();
+          debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
+        } else {
+          debugPrint('캐시된 뉴스 데이터가 없습니다');
+        }
       } else {
         // 서버에서 검색 수행
         _newsList = await _supabaseService.searchNews(query: query);
@@ -372,9 +460,17 @@ class NewsViewModel extends ChangeNotifier {
     } catch (e) {
       _errorMessage = '뉴스 검색 실패: $e';
       debugPrint(_errorMessage);
-
-      // 오류 발생 시 캐시된 데이터로 폴백
-      await _loadCachedNews();
+      // 오류 발생 시 캐시 데이터만 유지
+      final cachedNews = await _supabaseService.getCachedNews();
+      if (cachedNews.isNotEmpty) {
+        _newsList = cachedNews;
+        _popularNews = List.of(cachedNews)
+          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+        _popularNews = _popularNews.take(3).toList();
+        debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
+      } else {
+        debugPrint('캐시된 뉴스 데이터가 없습니다');
+      }
     } finally {
       _isLoading = false;
       notifyListeners();

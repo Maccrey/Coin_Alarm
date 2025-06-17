@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'dev.flutter.flutter-gradle-plugin'
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterRoot = localProperties.getProperty('flutter.sdk')
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+
+android {
+    compileSdkVersion 33
+
+    defaultConfig {
+        applicationId "com.example.coin_alarm"
+        minSdkVersion 21
+        targetSdkVersion 33
+        versionCode flutterVersionCode != null ? flutterVersionCode.toInteger() : 1
+        versionName flutterVersionName != null ? flutterVersionName : "1.0"
+    }
+
+    buildTypes {
+        release {
+            shrinkResources false
+            minifyEnabled false
+            // proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+} 

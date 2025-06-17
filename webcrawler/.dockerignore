@@ -1,0 +1,22 @@
+.dockerignore
+.DS_Store
+*.pyc
+__pycache__/
+.git
+.gitignore
+logs/
+shared/
+*.db
+
+# Obsolete files
+Dockerfile
+supervisord.conf
+entrypoint.sh
+install_chromedriver.sh
+writer_container.py
+container_cleaner.py
+temp_cleaner.py
+README.md
+SYNOLOGY_INSTALL_GUIDE.md
+build_push_images.sh
+docker-compose.synology.yml 

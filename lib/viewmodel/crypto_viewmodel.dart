@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../model/coin_model.dart';
 import '../services/crypto_api_service.dart';
 import '../services/settings_service.dart';
+import '../viewmodel/price_alert_viewmodel.dart';
 
 // 암호화폐 데이터 관리 ViewModel
 class CryptoViewModel extends ChangeNotifier {
@@ -92,8 +93,8 @@ class CryptoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 데이터 새로고침 (전체 UI 새로고침)
-  Future<void> refresh() async {
+  // 코인 데이터 새로고침 (알림 트리거 체크 포함)
+  Future<void> refresh({PriceAlertViewModel? priceAlertVM}) async {
     if (_isLoading) {
       debugPrint('CryptoViewModel: 이미 로딩 중이므로 새로고침 무시');
       return;
@@ -141,6 +142,12 @@ class CryptoViewModel extends ChangeNotifier {
             'CryptoViewModel: 첫 번째 코인 - ${sample.symbol}, 가격: ${sample.currentPrice}, 변화율: ${sample.priceChangePercentage24h}%',
           );
         }
+
+        // --- 가격 알림 트리거 체크 추가 ---
+        if (priceAlertVM != null) {
+          await priceAlertVM.checkAlertsTriggered(_topCoins);
+        }
+        // --- // 가격 알림 트리거 체크 ---
       } else {
         _error = '데이터를 가져올 수 없습니다.';
         debugPrint('CryptoViewModel: 빈 데이터 수신');
@@ -160,8 +167,8 @@ class CryptoViewModel extends ChangeNotifier {
   }
 
   // CoinViewModel과의 호환성을 위한 메서드
-  Future<void> refreshCoins() async {
-    return refresh();
+  Future<void> refreshCoins({PriceAlertViewModel? priceAlertVM}) async {
+    return refresh(priceAlertVM: priceAlertVM);
   }
 
   // 백그라운드 데이터 새로고침 (UI 업데이트 최소화)

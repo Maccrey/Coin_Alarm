@@ -32,6 +32,7 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+webcrawler/shared
 
 # Symbolication related
 app.*.symbols
@@ -46,3 +47,10 @@ app.*.map.json
 
 # 환경 변수 파일
 .env
+webcrawler/shared/crawled_news_20250608124644.json
+webcrawler/coin-alarm-scheduler.tar
+
+# 디버그용 HTML 파일
+*.html
+webcrawler/shared/*.html
+webcrawler/news-crawler/webcrawler/shared/*.html

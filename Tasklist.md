@@ -33,17 +33,42 @@
 - [x] Supabase Database(PostgreSQL) 테이블 구조 설계 및 샘플 데이터 입력 - 2024-06-17
 - [x] RLS(Row Level Security) 정책 설정 및 테스트 - 2024-06-17
 
-### 3-1. 로그인(Supabase 연동, MAS & TDD)
+### 3-1. 로그인(Supabase 연동, MSA & TDD)
 
-- [ ] 기존 더미데이터 기반 로그인 코드/로직 정리 및 주석처리
-- [ ] Supabase Auth 연동을 위한 환경변수(.env) 적용 확인
-- [ ] Supabase Auth(이메일/비밀번호) 로그인 ViewModel/Repository 구현 (TDD)
-- [ ] 로그인 단위 테스트 코드 작성 및 통과 (TDD)
-- [ ] 로그인 UI에서 Supabase 연동 적용 및 기존 더미데이터 제거
-- [ ] 로그인 성공/실패/에러 처리 및 UI 반영
-- [ ] 로그인 상태 유지(세션) 기능 구현 및 테스트
-- [ ] 로그아웃 기능 Supabase 연동으로 전환 및 테스트
-- [ ] 관련 주석 및 문서(README, development.md, work.md) 업데이트
+- [x] 기존 더미데이터 기반 로그인 코드/로직 정리 및 주석처리
+- [x] Supabase Auth 연동을 위한 환경변수(.env) 적용 확인
+- [x] Supabase Auth(이메일/비밀번호) 로그인 ViewModel/Repository 구현 (TDD)
+- [x] 로그인 단위 테스트 코드 작성 및 통과 (TDD)
+- [x] 로그인 UI에서 Supabase 연동 적용 및 기존 더미데이터 제거
+- [x] 로그인 성공/실패/에러 처리 및 UI 반영
+- [x] 로그인 상태 유지(세션) 기능 구현 및 테스트
+- [x] 로그아웃 기능 Supabase 연동으로 전환 및 테스트
+- [x] 관련 주석 및 문서(README, development.md, work.md) 업데이트
+
+### 3-2. 로그인 정보 Hive 기반 저장/불러오기/삭제 (MSA & TDD)
+
+- [x] SettingsService에서 SharedPreferences → Hive로 전환 [설계/구현]
+- [x] Hive Box(`settings`) 기반 로그인 정보 저장/불러오기/삭제 메서드 구현
+- [x] SettingsViewModel에서 Hive 기반 메서드 연동 및 상태 관리
+- [x] 로그인 화면에서 Hive 기반 자동 입력/자동 로그인 로직 구현
+- [x] 설정 화면에서 Hive 기반 로그인 정보 저장 스위치 연동
+- [x] 기존 SharedPreferences 코드 완전 제거
+- [x] 단위 테스트 코드 작성 및 통과 (TDD)
+- [x] README.md, development.md, work.md, Tasklist.md 문서화 및 진행상황 업데이트
+- [x] Hive 초기화 및 어댑터 등록 순서 오류로 인한 LateInitializationError 수정 (main.dart)
+
+### 3-3. 생체 인증(지문/Face ID) 기능 구현 (MSA & TDD)
+
+- [x] 생체 인증 도입 필요성/UX 설계 및 기술 조사 (local_auth 패키지 등)
+- [x] 생체 인증 관련 의존성 추가 및 pubspec.yaml 반영
+- [x] SettingsService에 생체 인증 사용 여부 저장/불러오기(Hive) 메서드 설계/구현
+- [x] SettingsViewModel에 생체 인증 상태/토글 메서드 구현 및 상태 관리
+- [x] 설정 화면 UI에 "생체 인증 사용" 스위치 추가 및 ViewModel 연동
+- [x] 생체 인증 등록/해제/실패/성공 UX 설계 및 안내 메시지 구현
+- [x] 실제 생체 인증 로직(지문/Face ID) 연동 및 예외 처리
+- [x] 앱 실행/로그인/설정 변경 시 생체 인증 동작 플로우 설계 및 적용
+- [x] 단위 테스트/통합 테스트 코드 작성 및 통과 (TDD)
+- [x] README.md, development.md, work.md, Tasklist.md 문서화 및 진행상황 업데이트
 
 ### 4. API 연동 및 데이터 수집
 
@@ -70,11 +95,11 @@
 - [x] main.dart에서 Hive 초기화 및 어댑터 등록, PriceAlertService/ChartCacheService 초기화 코드 추가 - 2024-06-20
 - [x] 알림 페이지에서 Supabase 관련 로직/의존성 제거 및 Hive 기반 로컬 저장소 연동으로 UI/로직 전환 - 2024-06-20
 
-### 7. 뉴스 시스템
+### 7. 뉴스 시스템 (MSA & TDD 방식)
 
-- [ ] 뉴스 크롤러(한국어) 구현
-- [ ] 뉴스 데이터 Supabase DB 저장 및 캐싱
-- [ ] 뉴스 필터링/중복제거 로직 구현
+- [x] 뉴스 크롤러(한국어) 구현
+- [x] 뉴스 데이터 Supabase DB 저장 및 캐싱
+- [x] 뉴스 필터링/중복제거 로직 구현
 - [x] 더미 뉴스 데이터 기반 코드 분석 및 현재 구조 파악 - 2024-06-21
 - [x] Supabase 뉴스 테이블 설계 및 구조화 - 2024-06-21
 - [x] 뉴스 모델에 Supabase 연동 확인 - 2024-06-21
@@ -84,7 +109,71 @@
 - [x] 코인별 필터링 및 검색 기능 보완 - 2024-06-21
 - [x] 오프라인 모드 지원 (캐시된 뉴스 표시) - 2024-06-21
 - [x] 인기 뉴스 기능 구현 (조회수 기반) - 2024-06-21
-- [x] 웹뷰를 통한 원문 기사 보기 기능 구현 - 2024-06-21
+- [x] # 웹뷰를 통한 원문 기사 보기 기능 구현 - 2024-06-21
+- [x] 뉴스 관련 Supabase 테이블 스키마 설계 (news, news_coins)
+  - [x] news 테이블에 image_url(text), related_coins(text[]) 컬럼 추가 (대표 이미지, 관련 코인 배열 저장)
+- [x] 뉴스 크롤링 서버 개발 (MSA 아키텍처, 도커 기반)
+  - [x] webcrawler 디렉토리 생성 및 초기 구조 설정
+  - [x] Docker 및 docker-compose 설정
+  - [x] 단위 테스트 코드 작성 (TDD)
+
+#### 7-1. 뉴스 크롤링 서버 MSA 구조 구현
+
+- [x] 뉴스 크롤링 서비스 (news-crawler-service)
+
+  - [x] Blockmedia 크롤러 구현 및 테스트 (본문, 대표 이미지, 관련 코인 추출)
+  - [x] CoinReaders 크롤러 구현 및 테스트
+  - [x] Bloomingbit 크롤러 구현 및 테스트
+  - [x] 관련 코인 자동 태깅 기능 구현 (DummyCoins 데이터 활용)
+  - [x] crawled*news*\*.json에 imageUrl 필드 포함
+
+- [x] 뉴스 정제 서비스 (news-cleaner-service)
+
+  - [x] 중복 뉴스 필터링 로직 구현 및 테스트
+  - [x] 제목/본문 정제 기능 구현 및 테스트
+  - [x] 광고성 뉴스 필터링 로직 구현 및 테스트
+  - [x] cleaned*news*\*.json에 imageUrl 필드 항상 유지하도록 개선
+
+- [x] 뉴스 저장 서비스 (news-writer-service)
+
+  - [x] Supabase DB 연동 코드 구현 및 테스트
+  - [x] 뉴스 저장 및 업데이트 로직 구현
+  - [x] imageUrl → image_url로 변환하여 Supabase news 테이블에 저장
+  - [x] related_coins 배열 컬럼 저장
+  - [x] 중복 저장 방지 및 자동 파일 정리 기능 구현 - 2024-06-09
+  - [x] SQLite DB를 활용한 처리된 파일/뉴스 추적 시스템 구현 - 2024-06-09
+
+- [x] 스케줄러 서비스 (scheduler-service)
+
+  - [x] cron 기반 2시간 주기 실행 구현
+  - [x] 오류 복구 및 재시도 로직 구현
+
+- [x] 로깅 서비스 (logger-service, 선택)
+  - [x] 중앙 집중식 로깅 구현
+  - [x] 오류 발생 시 알림 기능 구현 (이메일 또는 메시지)
+
+#### 7-2. ARM64 지원을 위한 Playwright 기반 뉴스 크롤러 마이그레이션 (MSA & TDD)
+
+- [ ] Playwright 기반 크롤러 도입 필요성 및 기술 조사
+- [ ] Dockerfile 및 requirements.txt에 Playwright 환경 구축 (ARM64/x86_64 자동 지원)
+- [ ] 기존 Selenium 크롤러 코드 Playwright로 마이그레이션 (blockmedia)
+- [ ] 기존 Selenium 크롤러 코드 Playwright로 마이그레이션 (coinreaders)
+- [ ] 기존 Selenium 크롤러 코드 Playwright로 마이그레이션 (digitaltoday)
+- [ ] Playwright 기반 크롤러 단위 테스트 코드 작성 (TDD)
+- [ ] Supabase 연동, 자동 태깅, 이미지 URL 처리 등 기존 부가 기능 이식
+- [ ] ARM64 환경에서 정상 동작 확인 및 통합 테스트
+- [ ] README.md, development.md, Tasklist.md에 기술 전환 및 진행상황 업데이트
+
+#### 7-3. 뉴스 시스템 앱 연동
+
+- [x] 뉴스 모델 클래스 구현 (News, NewsCoin)
+- [x] 뉴스 서비스 및 Repository 구현
+- [x] 뉴스 화면 UI 설계 및 구현
+- [x] 뉴스 필터링 및 정렬 기능 구현
+- [x] 뉴스 상세 보기 화면 구현
+- [x] 관련 코인으로 필터링 기능 구현
+- [x] 오프라인 모드 지원 (캐시된 뉴스 데이터 사용)
+  > > > > > > > feature/webcrawler
 
 ### 8. 사용자 인터페이스
 
@@ -121,6 +210,7 @@
 - [x] 차트 기간 선택에 따른 데이터 요청 최적화 - 2024-06-18
 - [x] 차트 화면 레이아웃 버그 수정 (무한 너비 제약 조건 오류) - 2024-06-18
 - [x] 차트 데이터 1분마다 자동 새로고침 구현 - 2024-06-19
+- [x] 차트 페이지 캐시/로딩 UX 개선 (캐시 hit 시 즉시 차트 표시, 네트워크는 백그라운드, 안내 메시지 등) - 2024-06-22
 - [ ] 단위 테스트 작성 (TDD)
 
 ---
@@ -174,6 +264,10 @@
 - [x] 차트 기간 선택에 따른 데이터 요청 최적화 - 2024-06-18
 - [x] 차트 화면 레이아웃 버그 수정 (무한 너비 제약 조건 오류) - 2024-06-18
 - [x] 차트 데이터 1분마다 자동 새로고침 구현 - 2024-06-19
+- [x] 뉴스 크롤링 서비스 MSA 아키텍처 구현 및 도커 컨테이너화 - 2024-06-08
+- [x] 뉴스 저장 서비스 image_url 및 related_coins 필드 저장 기능 구현 - 2024-06-09
+- [x] 뉴스 저장 서비스 중복 처리 방지 및 자동 파일 정리 기능 구현 - 2024-06-09
+- [x] 뉴스 데이터 저장 최적화 (SQLite DB 기반 처리 이력 추적) - 2024-06-09
 
 ---
 
@@ -183,5 +277,10 @@
 - 인프라 관리 최소화, 실시간 기능 강화, 배포 자동화 등 목표 명확히 설정
 - 알림 시스템은 Supabase 대신 Hive 로컬 저장소를 사용하여 오프라인 환경에서도 작동하도록 변경 (2024-06-20)
   - Supabase 기반 알림 관련 모든 의존성/로직 제거 및 Hive 기반 PriceAlertService, ViewModel, 모델, 화면 리팩토링 완료 (2024-06-20)
+- 뉴스 시스템은 외부 크롤링 서버를 MSA 아키텍처로 구현하여 Supabase DB에 데이터 저장 (webcrawler 폴더에 구현)
+  - 2시간 주기로 업데이트되는 자동화된 크롤링 시스템 구축 완료
+  - 도커 기반으로 각 서비스를 컨테이너화하여 배포 완료
+  - 뉴스 중복 저장 방지 및 자동 파일 정리 기능 구현 (2024-06-09)
+  - SQLite DB 기반 처리된 파일/뉴스 추적 시스템 구현 (2024-06-09)
 
 ---

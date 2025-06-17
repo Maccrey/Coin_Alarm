@@ -197,7 +197,7 @@ class ChartViewModel extends ChangeNotifier {
     loadChartData();
   }
 
-  // 차트 데이터 로드
+  // 차트 데이터 로드 (캐시 우선, 네트워크 백그라운드)
   Future<void> loadChartData() async {
     if (_apiService == null) {
       _error = 'API 서비스가 설정되지 않았습니다.';
@@ -205,36 +205,49 @@ class ChartViewModel extends ChangeNotifier {
       return;
     }
 
+    // 1. 캐시 데이터 우선 표시
+    bool hasCache = false;
+    if (_selectedChartType == ChartType.candlestick) {
+      final cached = _cacheService.getCandleChartData(
+        _selectedSymbol,
+        _selectedTimeframe,
+      );
+      if (cached != null && !cached.isExpired()) {
+        _candleChartData = cached;
+        _isLoading = false;
+        hasCache = true;
+        notifyListeners();
+      }
+    } else {
+      final cached = _cacheService.getLineChartData(
+        _selectedSymbol,
+        _selectedTimeframe,
+      );
+      if (cached != null && !cached.isExpired()) {
+        _lineChartData = cached;
+        _isLoading = false;
+        hasCache = true;
+        notifyListeners();
+      }
+    }
+
+    // 2. 네트워크로 최신 데이터 요청 (백그라운드)
     _isLoading = true;
-    _error = null;
     notifyListeners();
 
     try {
       debugPrint(
-        'ChartViewModel: 차트 데이터 로드 시작 - $_selectedSymbol (${_selectedTimeframe.name})',
+        'ChartViewModel: 차트 데이터 네트워크 로드 시작 - $_selectedSymbol (${_selectedTimeframe.name})',
       );
-
-      // 이전 데이터 유지 (새로고침 중에도 화면에 표시하기 위해)
       CandleChartData? newCandleData;
       ChartData? newLineData;
-
       if (_selectedChartType == ChartType.candlestick) {
         newCandleData = await _apiService!.getCandleData(
           _selectedSymbol,
           _selectedTimeframe,
         );
-
-        if (newCandleData == null) {
-          _error = '캔들스틱 차트 데이터를 가져올 수 없습니다.';
-        } else {
-          debugPrint(
-            'ChartViewModel: 캔들스틱 데이터 로드 완료 - ${newCandleData.candles.length}개',
-          );
-
-          // 데이터가 성공적으로 로드된 경우에만 업데이트
+        if (newCandleData != null) {
           _candleChartData = newCandleData;
-
-          // 가격 정보 업데이트
           _updateCandleChartPriceInfo(newCandleData);
         }
       } else {
@@ -242,24 +255,11 @@ class ChartViewModel extends ChangeNotifier {
           _selectedSymbol,
           _selectedTimeframe,
         );
-
-        if (newLineData == null) {
-          _error = '라인 차트 데이터를 가져올 수 없습니다.';
-        } else {
-          debugPrint(
-            'ChartViewModel: 라인 차트 데이터 로드 완료 - ${newLineData.points.length}개',
-          );
-
-          // 데이터가 성공적으로 로드된 경우에만 업데이트
+        if (newLineData != null) {
           _lineChartData = newLineData;
-
-          // 가격 정보 업데이트
           _updateLineChartPriceInfo(newLineData);
         }
       }
-
-      // 자동 갱신 타이머 설정
-      _setupRefreshTimer();
     } catch (e) {
       _error = '데이터 로드 오류: $e';
       debugPrint('ChartViewModel: 데이터 로드 오류 - $e');

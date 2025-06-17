@@ -4,6 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:workmanager/workmanager.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 import 'core/theme.dart';
 import 'services/supabase_service.dart';
@@ -15,13 +18,70 @@ import 'viewmodel/price_alert_viewmodel.dart';
 import 'viewmodel/settings_viewmodel.dart';
 import 'viewmodel/crypto_viewmodel.dart';
 import 'view/screens/splash_screen.dart';
-import 'services/supabase_client.dart';
 import 'view/screens/settings_screen.dart';
 import 'viewmodel/chart_viewmodel.dart';
 import 'services/chart_cache_service.dart';
 import 'model/chart_data_model.dart';
 import 'model/price_alert_model.dart';
 import 'services/price_alert_service.dart';
+import 'model/coin_model.dart';
+
+// 백그라운드에서 사용할 코인 가격 fetch 함수 (Upbit API 연동)
+Future<List<Coin>> fetchCoinPricesForBackground() async {
+  try {
+    // Upbit에서 BTC, ETH 시세 조회 (필요시 코인 추가)
+    final response = await http.get(
+      Uri.parse('https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH'),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data.map((item) {
+        final market = item['market'] as String;
+        final symbol = market.split('-').last;
+        return Coin(
+          id: symbol.toLowerCase(),
+          name: symbol,
+          symbol: symbol,
+          currentPrice: (item['trade_price'] as num).toDouble(),
+          priceChange24h: null,
+          priceChangePercentage24h: ((item['signed_change_rate'] as num) * 100)
+              .toDouble(),
+          marketCap: null,
+          volume24h: null,
+          high24h: null,
+          low24h: null,
+          lastUpdated: DateTime.now(),
+          imageUrl: null,
+        );
+      }).toList();
+    } else {
+      debugPrint('Upbit API 오류: ${response.statusCode}');
+      return [];
+    }
+  } catch (e) {
+    debugPrint('코인 시세 fetch 실패: ${e}');
+    return [];
+  }
+}
+
+// Workmanager 백그라운드 태스크 콜백
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    debugPrint('[백그라운드] Workmanager 태스크 실행됨: $task');
+    await Hive.initFlutter();
+    await PriceAlertService().initialize();
+    debugPrint('[백그라운드] PriceAlertService 초기화 완료');
+    // 코인 가격 fetch 및 알림 체크
+    final coinList = await fetchCoinPricesForBackground();
+    final triggeredAlerts = await PriceAlertService().checkAndUpdateAlerts(
+      coinList,
+      'local-user', // 실제 사용자 ID로 대체
+    );
+    debugPrint('[백그라운드] 알림 체크 완료. 트리거된 알림 개수: ${triggeredAlerts.length}');
+    return Future.value(true);
+  });
+}
 
 // 앱 진입점
 void main() async {
@@ -45,14 +105,8 @@ void main() async {
   // .env 파일 로드
   await dotenv.load();
 
-  // 설정 서비스 초기화
-  final settingsService = SettingsService();
-  await settingsService.initialize();
-
-  // Hive 초기화
+  // Hive 초기화 및 어댑터 등록 먼저 실행
   await Hive.initFlutter();
-
-  // Hive 어댑터 등록
   Hive.registerAdapter(ChartDataAdapter());
   Hive.registerAdapter(ChartPointAdapter());
   Hive.registerAdapter(CandleDataAdapter());
@@ -60,6 +114,13 @@ void main() async {
   Hive.registerAdapter(ChartTypeAdapter());
   Hive.registerAdapter(ChartTimeframeAdapter());
   Hive.registerAdapter(PriceAlertAdapter());
+
+  // 뉴스 캐시 박스 미리 오픈 (속도 개선)
+  await Hive.openBox('news_cache');
+
+  // SettingsService 초기화
+  final settingsService = SettingsService();
+  await settingsService.initialize();
 
   // 캐시 서비스 초기화
   await ChartCacheService().initialize();
@@ -92,6 +153,17 @@ void main() async {
     await supabaseService.initialize(useRealSupabase: false);
     debugPrint('더미 데이터로 초기화됨');
   }
+
+  // Workmanager 초기화 (백그라운드 태스크 등록)
+  Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
+  // 15분마다 반복 태스크 등록
+  Workmanager().registerPeriodicTask(
+    'checkPriceAlertsTaskId',
+    'checkPriceAlertsTask',
+    frequency: const Duration(minutes: 15),
+    initialDelay: const Duration(seconds: 10),
+    constraints: Constraints(networkType: NetworkType.connected),
+  );
 
   runApp(
     MyApp(supabaseService: supabaseService, settingsService: settingsService),

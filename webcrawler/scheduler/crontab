@@ -1,0 +1,6 @@
+# 뉴스 크롤링 작업 - 2시간마다 실행
+0 */2 * * * /app/run_crawler.sh >> /app/shared/scheduler.log 2>&1
+
+# 서버 상태 체크 작업 - 30분마다 실행
+*/30 * * * * /usr/local/bin/python /app/check_services.py >> /app/shared/scheduler.log 2>&1 
+

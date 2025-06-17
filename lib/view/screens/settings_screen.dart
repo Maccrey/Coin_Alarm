@@ -573,15 +573,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            OutlinedButton(
+            // TODO: 추후 프로필 편집 기능 구현 예정
+            // 아래 '프로필 편집' 버튼은 임시로 주석처리
+            /*
+            // 예시: 프로필 편집 버튼
+            ElevatedButton(
               onPressed: () {
-                // TODO: 프로필 편집 화면으로 이동
+                // TODO: 프로필 편집 기능 구현 예정
               },
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 40),
-              ),
-              child: const Text('프로필 편집'),
+              child: Text('프로필 편집'),
             ),
+            */
           ],
         ),
       ),
@@ -947,20 +949,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // 보안 설정 위젯
   Widget _buildSecuritySettings(SettingsViewModel viewModel) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: SwitchListTile(
-          title: const Text('생체 인증 사용'),
-          subtitle: const Text('지문 또는 얼굴 인식으로 로그인'),
-          secondary: const Icon(Icons.fingerprint),
-          value: viewModel.useBiometricAuth,
-          onChanged: viewModel.isLoading
-              ? null
-              : (value) => viewModel.setUseBiometricAuth(value),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Consumer<SettingsViewModel>(
+          builder: (context, vm, _) => SwitchListTile(
+            title: const Text('생체 인증 사용'),
+            value: vm.useBiometrics,
+            onChanged: (value) async {
+              await vm.toggleBiometrics(value);
+            },
+          ),
         ),
-      ),
+        if (viewModel.biometricErrorMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+            child: Text(
+              viewModel.biometricErrorMessage!,
+              style: const TextStyle(color: Colors.red, fontSize: 13),
+            ),
+          ),
+      ],
     );
   }
 

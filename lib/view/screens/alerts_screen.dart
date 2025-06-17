@@ -39,7 +39,8 @@ class _AlertsScreenState extends State<AlertsScreen>
       // 임시 사용자 ID 사용 (실제로는 인증된 사용자 ID 사용)
       const userId = 'local-user';
       priceAlertVM.loadUserAlerts(userId);
-      cryptoVM.refreshCoins();
+      // 코인 데이터 새로고침 시 알림 트리거 체크도 함께 실행
+      cryptoVM.refreshCoins(priceAlertVM: priceAlertVM);
     });
   }
 
@@ -293,6 +294,7 @@ class _AlertsScreenState extends State<AlertsScreen>
     } catch (e) {
       coin = null;
     }
+    final isTriggered = alert.isTriggered;
     return Dismissible(
       key: Key(alert.id),
       background: Container(
@@ -303,15 +305,34 @@ class _AlertsScreenState extends State<AlertsScreen>
       ),
       direction: DismissDirection.endToStart,
       onDismissed: (direction) async {
-        await priceAlertVM.deleteAlert(alert.id);
-        // 삭제 후 새로고침 필요시 추가
+        try {
+          await priceAlertVM.deleteAlert(alert.id);
+        } catch (e) {
+          // 삭제 중 에러 발생 시 사용자에게 안내
+          if (context.mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('알림 삭제 중 오류가 발생했습니다: \n$e')));
+          }
+        }
       },
       child: Card(
         margin: const EdgeInsets.only(bottom: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => _showAlertDetailDialog(alert, coin),
+          onTap: () {
+            try {
+              _showAlertDetailDialog(alert, coin);
+            } catch (e) {
+              // 상세 다이얼로그 표시 중 에러 발생 시 안내
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('상세 정보 표시 중 오류가 발생했습니다: \n$e')),
+                );
+              }
+            }
+          },
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -378,6 +399,147 @@ class _AlertsScreenState extends State<AlertsScreen>
                               ),
                             ],
                           ),
+                          // --- 발생됨(Triggered) 카드에서만 현재가/설정가/발생시각 표시 ---
+                          if (isTriggered) ...[
+                            const SizedBox(height: 4),
+                            // 오버플로우 방지를 위해 Wrap 사용
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 4,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      '설정가격: ',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Text(
+                                      '₩${_formatPrice(alert.priceTarget)}',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      '발생시 현재가: ',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    if (coin != null)
+                                      Text(
+                                        '₩${_formatPrice(coin.currentPrice)}',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      )
+                                    else
+                                      const Text(
+                                        '데이터 없음',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      '현재가: ',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    if (coin != null)
+                                      Text(
+                                        '₩${_formatPrice(coin.currentPrice)}',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue,
+                                        ),
+                                      )
+                                    else
+                                      const Text(
+                                        '데이터 없음',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.notifications_active,
+                                  size: 14,
+                                  color: Colors.orange,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  alert.triggeredAt != null
+                                      ? '발생: ${_formatDateTime(alert.triggeredAt!, detailed: true)}'
+                                      : '발생 시각 정보 없음',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          // --- // 발생됨 카드 표시 끝 ---
+                          // --- 대기중(미발생) 카드에서 현재가 표시 ---
+                          if (!isTriggered) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Text(
+                                  '현재가: ',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                if (coin != null)
+                                  Text(
+                                    '₩${_formatPrice(coin.currentPrice)}',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue,
+                                    ),
+                                  )
+                                else
+                                  const Text(
+                                    '데이터 없음',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                          // --- // 대기중 현재가 표시 끝 ---
                         ],
                       ),
                     ),
@@ -450,22 +612,6 @@ class _AlertsScreenState extends State<AlertsScreen>
                         color: Theme.of(context).hintColor,
                       ),
                     ),
-                    if (alert.isTriggered && alert.triggeredAt != null) ...[
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.notifications_active,
-                        size: 12,
-                        color: Theme.of(context).hintColor,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '발생: ${_formatDateTime(alert.triggeredAt!)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).hintColor,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ],
