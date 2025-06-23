@@ -1,0 +1,1163 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+코인알림 앱 백그라운드 처리 개발 태스크리스트
+
+🎯 프로젝트 개요
+업비트 API를 활용한 코인 가격 알림 앱의 백그라운드 처리 기능 구현
+* iOS: Background App Refresh 활용
+* Android: Foreground Service 활용
+* 플랫폼별 최적화된 백그라운드 처리
+
+
+📋 전체 태스크 구조
+Phase 1: 기본 인프라 구축
+* [ ] 1.1 의존성 패키지 설정
+* [ ] 1.2 플랫폼별 권한 설정
+* [ ] 1.3 백그라운드 상태 감지 서비스 구현
+Phase 2: 알림 관리 시스템
+* [ ] 2.1 알림 설정 모델 및 저장소 구현
+* [ ] 2.2 로컬 알림 서비스 구현
+* [ ] 2.3 알림 설정 CRUD 기능
+Phase 3: 가격 모니터링 엔진
+* [ ] 3.1 업비트 API 서비스 구현
+* [ ] 3.2 가격 비교 로직 구현
+* [ ] 3.3 알림 트리거 시스템
+Phase 4: 플랫폼별 백그라운드 처리
+* [ ] 4.1 iOS 백그라운드 처리 구현
+* [ ] 4.2 Android 포그라운드 서비스 구현
+* [ ] 4.3 플랫폼 감지 및 분기 처리
+Phase 5: 통합 및 최적화
+* [ ] 5.1 서비스 통합 및 생명주기 관리
+* [ ] 5.2 에러 핸들링 및 복구 메커니즘
+* [ ] 5.3 성능 최적화 및 배터리 효율성
+
+🔧 상세 태스크 명세
+Phase 1: 기본 인프라 구축
+1.1 의존성 패키지 설정
+담당자: 백엔드 개발자 예상 소요시간: 2시간 우선순위: 높음
+작업 내용:
+dependencies:
+  flutter_local_notifications: ^17.0.0
+  workmanager: ^0.5.2
+  flutter_background_service: ^5.0.5
+  shared_preferences: ^2.2.2
+  http: ^1.1.0
+  permission_handler: ^11.0.1
+  app_settings: ^5.1.1
+상세 작업:
+1. pubspec.yaml에 필요한 패키지 추가
+2. Flutter pub get 실행하여 의존성 설치
+3. 각 패키지의 플랫폼별 설정 확인
+4. 버전 호환성 검증
+완료 조건:
+* 모든 패키지가 정상적으로 설치됨
+* 빌드 에러 없이 앱 실행 가능
+* 각 패키지의 기본 초기화 코드 작성
+1.2 플랫폼별 권한 설정
+담당자: 네이티브 개발자 예상 소요시간: 3시간 우선순위: 높음
+iOS 설정 (ios/Runner/Info.plist):
+<key>UIBackgroundModes</key>
+<array>
+    <string>background-fetch</string>
+    <string>background-processing</string>
+</array>
+<key>NSUserNotificationUsageDescription</key>
+<string>코인 가격 알림을 받기 위해 알림 권한이 필요합니다.</string>
+Android 설정 (android/app/src/main/AndroidManifest.xml):
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+<service
+    android:name="id.flutter.flutter_background_service.BackgroundService"
+    android:exported="false"
+    android:foregroundServiceType="dataSync" />
+완료 조건:
+* 플랫폼별 권한 설정 완료
+* 권한 요청 다이얼로그 정상 동작
+* 앱 스토어 정책 준수 확인
+1.3 백그라운드 상태 감지 서비스 구현
+담당자: 플러터 개발자 예상 소요시간: 4시간 우선순위: 높음
+파일: lib/services/app_lifecycle_service.dart
+import 'package:flutter/widgets.dart';
+
+class AppLifecycleService with WidgetsBindingObserver {
+  static final AppLifecycleService _instance = AppLifecycleService._internal();
+  factory AppLifecycleService() => _instance;
+  AppLifecycleService._internal();
+
+  bool _isBackground = false;
+  Function? _onBackground;
+  Function? _onForeground;
+
+  bool get isBackground => _isBackground;
+
+  void initialize({
+    Function? onBackground,
+    Function? onForeground,
+  }) {
+    _onBackground = onBackground;
+    _onForeground = onForeground;
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        if (!_isBackground) {
+          _isBackground = true;
+          _onBackground?.call();
+        }
+        break;
+      case AppLifecycleState.resumed:
+        if (_isBackground) {
+          _isBackground = false;
+          _onForeground?.call();
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+  }
+}
+완료 조건:
+* 앱 상태 변화 정확히 감지
+* 백그라운드/포그라운드 전환 시 콜백 실행
+* 메모리 누수 없이 정상 동작
+Phase 2: 알림 관리 시스템
+2.1 알림 설정 모델 및 저장소 구현
+담당자: 백엔드 개발자 예상 소요시간: 3시간 우선순위: 높음
+파일: lib/models/alarm_setting.dart
+class AlarmSetting {
+  final String id;
+  final String coinSymbol;
+  final String coinName;
+  final double targetPrice;
+  final AlarmType alarmType; // above, below
+  final bool isEnabled;
+  final DateTime createdAt;
+
+  AlarmSetting({
+    required this.id,
+    required this.coinSymbol,
+    required this.coinName,
+    required this.targetPrice,
+    required this.alarmType,
+    this.isEnabled = true,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'coinSymbol': coinSymbol,
+    'coinName': coinName,
+    'targetPrice': targetPrice,
+    'alarmType': alarmType.toString(),
+    'isEnabled': isEnabled,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory AlarmSetting.fromJson(Map<String, dynamic> json) => AlarmSetting(
+    id: json['id'],
+    coinSymbol: json['coinSymbol'],
+    coinName: json['coinName'],
+    targetPrice: json['targetPrice'].toDouble(),
+    alarmType: AlarmType.values.firstWhere(
+      (e) => e.toString() == json['alarmType']
+    ),
+    isEnabled: json['isEnabled'],
+    createdAt: DateTime.parse(json['createdAt']),
+  );
+}
+
+enum AlarmType { above, below }
+파일: lib/repositories/alarm_repository.dart
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/alarm_setting.dart';
+
+class AlarmRepository {
+  static const String _alarmsKey = 'alarm_settings';
+  
+  Future<List<AlarmSetting>> getAlarms() async {
+    final prefs = await SharedPreferences.getInstance();
+    final alarmsJson = prefs.getStringList(_alarmsKey) ?? [];
+    
+    return alarmsJson
+        .map((json) => AlarmSetting.fromJson(jsonDecode(json)))
+        .toList();
+  }
+
+  Future<void> saveAlarm(AlarmSetting alarm) async {
+    final alarms = await getAlarms();
+    alarms.add(alarm);
+    await _saveAlarms(alarms);
+  }
+
+  Future<void> updateAlarm(AlarmSetting alarm) async {
+    final alarms = await getAlarms();
+    final index = alarms.indexWhere((a) => a.id == alarm.id);
+    if (index != -1) {
+      alarms[index] = alarm;
+      await _saveAlarms(alarms);
+    }
+  }
+
+  Future<void> deleteAlarm(String id) async {
+    final alarms = await getAlarms();
+    alarms.removeWhere((alarm) => alarm.id == id);
+    await _saveAlarms(alarms);
+  }
+
+  Future<void> _saveAlarms(List<AlarmSetting> alarms) async {
+    final prefs = await SharedPreferences.getInstance();
+    final alarmsJson = alarms
+        .map((alarm) => jsonEncode(alarm.toJson()))
+        .toList();
+    await prefs.setStringList(_alarmsKey, alarmsJson);
+  }
+}
+완료 조건:
+* 알림 설정 CRUD 기능 완성
+* SharedPreferences를 통한 영구 저장
+* 데이터 무결성 검증
+2.2 로컬 알림 서비스 구현
+담당자: 플러터 개발자 예상 소요시간: 4시간 우선순위: 높음
+파일: lib/services/notification_service.dart
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  final FlutterLocalNotificationsPlugin _notifications = 
+      FlutterLocalNotificationsPlugin();
+
+  Future<void> initialize() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+
+    const settings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _notifications.initialize(settings);
+    await _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
+  }
+
+  Future<void> showPriceAlert({
+    required String coinSymbol,
+    required double currentPrice,
+    required double targetPrice,
+    required String alarmType,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'coin_price_alerts',
+      '코인 가격 알림',
+      channelDescription: '설정한 가격에 도달했을 때 알림을 받습니다',
+      importance: Importance.high,
+      priority: Priority.high,
+      ticker: 'ticker',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    final title = '$coinSymbol 가격 알림';
+    final body = '현재가: ${currentPrice.toStringAsFixed(0)}원\n'
+                '목표가: ${targetPrice.toStringAsFixed(0)}원';
+
+    await _notifications.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
+      details,
+    );
+  }
+}
+완료 조건:
+* 로컬 알림 정상 동작
+* 플랫폼별 알림 스타일 적용
+* 알림 권한 요청 및 처리
+Phase 3: 가격 모니터링 엔진
+3.1 업비트 API 서비스 구현
+담당자: API 개발자 예상 소요시간: 3시간 우선순위: 높음
+파일: lib/services/upbit_api_service.dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class UpbitApiService {
+  static const String _baseUrl = 'https://api.upbit.com/v1';
+  
+  Future<double?> getCurrentPrice(String market) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/ticker?markets=$market'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        if (data.isNotEmpty) {
+          return data[0]['trade_price'].toDouble();
+        }
+      }
+      return null;
+    } catch (e) {
+      print('API 호출 에러: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, double>> getMultiplePrices(List<String> markets) async {
+    final Map<String, double> prices = {};
+    
+    try {
+      final marketString = markets.join(',');
+      final response = await http.get(
+        Uri.parse('$_baseUrl/ticker?markets=$marketString'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        for (var item in data) {
+          prices[item['market']] = item['trade_price'].toDouble();
+        }
+      }
+    } catch (e) {
+      print('다중 가격 조회 에러: $e');
+    }
+    
+    return prices;
+  }
+}
+완료 조건:
+* 업비트 API 연동 완료
+* 단일/다중 코인 가격 조회 기능
+* 에러 처리 및 재시도 로직
+3.2 가격 비교 로직 구현
+담당자: 백엔드 개발자 예상 소요시간: 2시간 우선순위: 높음
+파일: lib/services/price_monitor_service.dart
+import '../models/alarm_setting.dart';
+import '../repositories/alarm_repository.dart';
+import 'upbit_api_service.dart';
+import 'notification_service.dart';
+
+class PriceMonitorService {
+  final AlarmRepository _alarmRepository = AlarmRepository();
+  final UpbitApiService _apiService = UpbitApiService();
+  final NotificationService _notificationService = NotificationService();
+
+  Future<void> checkPriceAlerts() async {
+    try {
+      final alarms = await _alarmRepository.getAlarms();
+      final enabledAlarms = alarms.where((alarm) => alarm.isEnabled).toList();
+      
+      if (enabledAlarms.isEmpty) return;
+
+      final markets = enabledAlarms
+          .map((alarm) => 'KRW-${alarm.coinSymbol}')
+          .toSet()
+          .toList();
+
+      final currentPrices = await _apiService.getMultiplePrices(markets);
+
+      for (final alarm in enabledAlarms) {
+        final market = 'KRW-${alarm.coinSymbol}';
+        final currentPrice = currentPrices[market];
+        
+        if (currentPrice != null && _shouldTriggerAlarm(alarm, currentPrice)) {
+          await _triggerAlarm(alarm, currentPrice);
+        }
+      }
+    } catch (e) {
+      print('가격 모니터링 에러: $e');
+    }
+  }
+
+  bool _shouldTriggerAlarm(AlarmSetting alarm, double currentPrice) {
+    switch (alarm.alarmType) {
+      case AlarmType.above:
+        return currentPrice >= alarm.targetPrice;
+      case AlarmType.below:
+        return currentPrice <= alarm.targetPrice;
+    }
+  }
+
+  Future<void> _triggerAlarm(AlarmSetting alarm, double currentPrice) async {
+    await _notificationService.showPriceAlert(
+      coinSymbol: alarm.coinSymbol,
+      currentPrice: currentPrice,
+      targetPrice: alarm.targetPrice,
+      alarmType: alarm.alarmType.toString(),
+    );
+
+    // 알림 후 해당 알람 비활성화 (중복 알림 방지)
+    final updatedAlarm = AlarmSetting(
+      id: alarm.id,
+      coinSymbol: alarm.coinSymbol,
+      coinName: alarm.coinName,
+      targetPrice: alarm.targetPrice,
+      alarmType: alarm.alarmType,
+      isEnabled: false,
+      createdAt: alarm.createdAt,
+    );
+    
+    await _alarmRepository.updateAlarm(updatedAlarm);
+  }
+}
+완료 조건:
+* 가격 비교 로직 정확성 검증
+* 알림 중복 방지 메커니즘
+* 대량 처리 시 성능 최적화
+Phase 4: 플랫폼별 백그라운드 처리
+4.1 iOS 백그라운드 처리 구현
+담당자: iOS 개발자 예상 소요시간: 6시간 우선순위: 높음
+파일: lib/services/ios_background_service.dart
+import 'dart:io';
+import 'package:workmanager/workmanager.dart';
+import 'price_monitor_service.dart';
+
+class IosBackgroundService {
+  static const String _taskName = 'priceMonitorTask';
+  
+  static Future<void> initialize() async {
+    if (Platform.isIOS) {
+      await Workmanager().initialize(
+        callbackDispatcher,
+        isInDebugMode: false,
+      );
+    }
+  }
+
+  static Future<void> startMonitoring() async {
+    if (Platform.isIOS) {
+      await Workmanager().registerPeriodicTask(
+        _taskName,
+        _taskName,
+        frequency: const Duration(minutes: 15), // iOS 최소 간격
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+        ),
+      );
+    }
+  }
+
+  static Future<void> stopMonitoring() async {
+    if (Platform.isIOS) {
+      await Workmanager().cancelByUniqueName(_taskName);
+    }
+  }
+}
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    try {
+      final priceMonitor = PriceMonitorService();
+      await priceMonitor.checkPriceAlerts();
+      return Future.value(true);
+    } catch (e) {
+      print('iOS 백그라운드 작업 에러: $e');
+      return Future.value(false);
+    }
+  });
+}
+완료 조건:
+* iOS Background App Refresh 설정
+* 15분 간격 백그라운드 작업 실행
+* 배터리 효율성 고려한 최적화
+4.2 Android 포그라운드 서비스 구현
+담당자: Android 개발자 예상 소요시간: 6시간 우선순위: 높음
+파일: lib/services/android_foreground_service.dart
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'price_monitor_service.dart';
+import 'notification_service.dart';
+
+class AndroidForegroundService {
+  static Future<void> initialize() async {
+    if (Platform.isAndroid) {
+      final service = FlutterBackgroundService();
+      
+      await service.configure(
+        iosConfiguration: IosConfiguration(),
+        androidConfiguration: AndroidConfiguration(
+          onStart: onStart,
+          autoStart: false,
+          isForegroundMode: true,
+          notificationChannelId: 'coin_monitoring_service',
+          initialNotificationTitle: '코인 가격 모니터링',
+          initialNotificationContent: '가격 변동을 실시간으로 확인하고 있습니다.',
+          foregroundServiceNotificationId: 888,
+        ),
+      );
+    }
+  }
+
+  static Future<void> startService() async {
+    if (Platform.isAndroid) {
+      final service = FlutterBackgroundService();
+      await service.startService();
+    }
+  }
+
+  static Future<void> stopService() async {
+    if (Platform.isAndroid) {
+      final service = FlutterBackgroundService();
+      await service.invoke('stop');
+    }
+  }
+
+  @pragma('vm:entry-point')
+  static void onStart(ServiceInstance service) async {
+    Timer.periodic(const Duration(minutes: 1), (timer) async {
+      try {
+        final priceMonitor = PriceMonitorService();
+        await priceMonitor.checkPriceAlerts();
+        
+        // 서비스 중지 신호 확인
+        service.on('stop').listen((event) {
+          timer.cancel();
+          service.stopSelf();
+        });
+      } catch (e) {
+        print('Android 포그라운드 서비스 에러: $e');
+      }
+    });
+  }
+}
+완료 조건:
+* 포그라운드 서비스 정상 동작
+* 1분 간격 가격 모니터링
+* 서비스 시작/중지 제어 가능
+4.3 플랫폼 감지 및 분기 처리
+담당자: 플러터 개발자 예상 소요시간: 3시간 우선순위: 중간
+파일: lib/services/background_manager.dart
+import 'dart:io';
+import 'ios_background_service.dart';
+import 'android_foreground_service.dart';
+
+class BackgroundManager {
+  static Future<void> initialize() async {
+    if (Platform.isIOS) {
+      await IosBackgroundService.initialize();
+    } else if (Platform.isAndroid) {
+      await AndroidForegroundService.initialize();
+    }
+  }
+
+  static Future<void> startBackgroundMonitoring() async {
+    if (Platform.isIOS) {
+      await IosBackgroundService.startMonitoring();
+    } else if (Platform.isAndroid) {
+      await AndroidForegroundService.startService();
+    }
+  }
+
+  static Future<void> stopBackgroundMonitoring() async {
+    if (Platform.isIOS) {
+      await IosBackgroundService.stopMonitoring();
+    } else if (Platform.isAndroid) {
+      await AndroidForegroundService.stopService();
+    }
+  }
+
+  static String getBackgroundType() {
+    if (Platform.isIOS) {
+      return 'iOS Background App Refresh';
+    } else if (Platform.isAndroid) {
+      return 'Android Foreground Service';
+    }
+    return 'Unknown Platform';
+  }
+}
+완료 조건:
+* 플랫폼 자동 감지 및 분기
+* 통일된 인터페이스 제공
+* 크로스 플랫폼 호환성 보장
+Phase 5: 통합 및 최적화
+5.1 서비스 통합 및 생명주기 관리
+담당자: 시니어 개발자 예상 소요시간: 4시간 우선순위: 높음
+파일: lib/services/coin_alarm_service.dart
+import 'app_lifecycle_service.dart';
+import 'background_manager.dart';
+import 'notification_service.dart';
+import '../repositories/alarm_repository.dart';
+
+class CoinAlarmService {
+  static final CoinAlarmService _instance = CoinAlarmService._internal();
+  factory CoinAlarmService() => _instance;
+  CoinAlarmService._internal();
+
+  final AppLifecycleService _lifecycleService = AppLifecycleService();
+  final AlarmRepository _alarmRepository = AlarmRepository();
+  bool _isInitialized = false;
+
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+
+    await NotificationService().initialize();
+    await BackgroundManager.initialize();
+
+    _lifecycleService.initialize(
+      onBackground: _onAppBackground,
+      onForeground: _onAppForeground,
+    );
+
+    _isInitialized = true;
+  }
+
+  Future<void> _onAppBackground() async {
+    print('앱이 백그라운드로 전환됨');
+    final hasAlarms = await _hasActiveAlarms();
+    
+    if (hasAlarms) {
+      await BackgroundManager.startBackgroundMonitoring();
+      print('백그라운드 모니터링 시작');
+    }
+  }
+
+  Future<void> _onAppForeground() async {
+    print('앱이 포그라운드로 복귀됨');
+    await BackgroundManager.stopBackgroundMonitoring();
+    print('백그라운드 모니터링 중지');
+  }
+
+  Future<bool> _hasActiveAlarms() async {
+    final alarms = await _alarmRepository.getAlarms();
+    return alarms.any((alarm) => alarm.isEnabled);
+  }
+
+  Future<void> dispose() async {
+    await BackgroundManager.stopBackgroundMonitoring();
+    _lifecycleService.dispose();
+  }
+}
+완료 조건:
+* 앱 생명주기와 백그라운드 서비스 연동
+* 알림 설정 존재 시에만 백그라운드 동작
+* 메모리 누수 방지 및 정리
+5.2 에러 핸들링 및 복구 메커니즘
+담당자: 백엔드 개발자 예상 소요시간: 3시간 우선순위: 중간
+파일: lib/utils/error_handler.dart
+import 'dart:io';
+
+class ErrorHandler {
+  static void handleApiError(dynamic error) {
+    if (error is SocketException) {
+      print('네트워크 연결 에러: ${error.message}');
+    } else if (error is HttpException) {
+      print('HTTP 에러: ${error.message}');
+    } else {
+      print('알 수 없는 API 에러: $error');
+    }
+  }
+
+  static void handleBackgroundError(dynamic error) {
+    print('백그라운드 처리 에러: $error');
+    // 로그 저장 또는 에러 리포팅
+  }
+
+  static void handleNotificationError(dynamic error) {
+    print('알림 에러: $error');
+    // 알림 권한 재요청 등 복구 로직
+  }
+}
+완료 조건:
+* 포괄적인 에러 처리
+* 자동 복구 메커니즘
+* 에러 로깅 시스템
+5.3 성능 최적화 및 배터리 효율성
+담당자: 시니어 개발자 예상 소요시간: 4시간 우선순위: 중간
+최적화 항목:
+1. API 호출 빈도 최적화
+2. 배터리 사용량 모니터링
+3. 메모리 효율성 개선
+4. 불필요한 백그라운드 작업 제거
+완료 조건:
+* 배터리 드레인 최소화
+* 성능 테스트 통과
+* 사용자 경험 개선
+
+📅 일정 및 마일스톤
+Week 1: 인프라 구축
+* Phase 1 완료
+* 기본 권한 및 패키지 설정
+Week 2: 핵심 기능 개발
+* Phase 2, 3 완료
+* 알림 시스템 및 가격 모니터링
+Week 3: 플랫폼별 구현
+* Phase 4 완료
+* iOS/Android 백그라운드 처리
+Week 4: 통합 및 테스트
+* Phase 5 완료
+* 전체 시스템 통합 테스트
+
+🧪 테스트 전략
+단위 테스트 (Unit Tests)
+담당자: 각 기능별 담당 개발자 예상 소요시간: 8시간
+테스트 파일: test/services/price_monitor_service_test.dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
+import '../lib/services/price_monitor_service.dart';
+import '../lib/models/alarm_setting.dart';
+
+void main() {
+  group('PriceMonitorService Tests', () {
+    test('should trigger alarm when price goes above target', () async {
+      // Given
+      final alarm = AlarmSetting(
+        id: '1',
+        coinSymbol: 'BTC',
+        coinName: 'Bitcoin',
+        targetPrice: 50000000,
+        alarmType: AlarmType.above,
+        createdAt: DateTime.now(),
+      );
+      
+      // When & Then
+      final service = PriceMonitorService();
+      final shouldTrigger = service._shouldTriggerAlarm(alarm, 55000000);
+      expect(shouldTrigger, true);
+    });
+  });
+}
+테스트 커버리지 목표: 80% 이상
+통합 테스트 (Integration Tests)
+담당자: QA 엔지니어 예상 소요시간: 12시간
+테스트 시나리오:
+1. 앱 생명주기 테스트
+    * 포그라운드 → 백그라운드 전환
+    * 백그라운드 → 포그라운드 복귀
+    * 앱 완전 종료 후 재시작
+2. 알림 기능 테스트
+    * 가격 조건 만족 시 알림 발생
+    * 중복 알림 방지 확인
+    * 알림 권한 거부 시 처리
+3. 플랫폼별 테스트
+    * iOS Background App Refresh 동작
+    * Android Foreground Service 동작
+    * 각 플랫폼의 제약사항 준수
+성능 테스트
+담당자: 성능 엔지니어 예상 소요시간: 6시간
+측정 항목:
+* 배터리 사용량 (24시간 기준)
+* 메모리 사용량
+* CPU 사용률
+* 네트워크 트래픽
+성능 기준:
+* 배터리 드레인: 5% 미만/시간
+* 메모리 사용량: 50MB 미만
+* API 응답시간: 3초 미만
+
+📱 사용자 인터페이스 연동
+UI 컴포넌트 구현
+담당자: UI/UX 개발자 예상 소요시간: 6시간
+파일: lib/screens/alarm_setting_screen.dart
+import 'package:flutter/material.dart';
+import '../services/coin_alarm_service.dart';
+import '../models/alarm_setting.dart';
+import '../repositories/alarm_repository.dart';
+
+class AlarmSettingScreen extends StatefulWidget {
+  @override
+  _AlarmSettingScreenState createState() => _AlarmSettingScreenState();
+}
+
+class _AlarmSettingScreenState extends State<AlarmSettingScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _priceController = TextEditingController();
+  final AlarmRepository _repository = AlarmRepository();
+  
+  String _selectedCoin = 'BTC';
+  AlarmType _alarmType = AlarmType.above;
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('알림 설정')),
+      body: Form(
+        key: _formKey,
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              _buildCoinSelector(),
+              _buildPriceInput(),
+              _buildAlarmTypeSelector(),
+              _buildSaveButton(),
+              _buildAlarmList(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCoinSelector() {
+    return DropdownButtonFormField<String>(
+      value: _selectedCoin,
+      decoration: InputDecoration(labelText: '코인 선택'),
+      items: ['BTC', 'ETH', 'XRP', 'ADA', 'DOT']
+          .map((coin) => DropdownMenuItem(
+                value: coin,
+                child: Text(coin),
+              ))
+          .toList(),
+      onChanged: (value) => setState(() => _selectedCoin = value!),
+    );
+  }
+
+  Widget _buildPriceInput() {
+    return TextFormField(
+      controller: _priceController,
+      decoration: InputDecoration(
+        labelText: '목표 가격 (원)',
+        suffixText: '원',
+      ),
+      keyboardType: TextInputType.number,
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return '가격을 입력해주세요';
+        }
+        if (double.tryParse(value) == null) {
+          return '올바른 숫자를 입력해주세요';
+        }
+        return null;
+      },
+    );
+  }
+
+  Widget _buildAlarmTypeSelector() {
+    return Column(
+      children: [
+        RadioListTile<AlarmType>(
+          title: Text('가격이 이상일 때'),
+          value: AlarmType.above,
+          groupValue: _alarmType,
+          onChanged: (value) => setState(() => _alarmType = value!),
+        ),
+        RadioListTile<AlarmType>(
+          title: Text('가격이 이하일 때'),
+          value: AlarmType.below,
+          groupValue: _alarmType,
+          onChanged: (value) => setState(() => _alarmType = value!),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return ElevatedButton(
+      onPressed: _saveAlarm,
+      child: Text('알림 설정'),
+      style: ElevatedButton.styleFrom(
+        minimumSize: Size(double.infinity, 50),
+      ),
+    );
+  }
+
+  Widget _buildAlarmList() {
+    return Expanded(
+      child: FutureBuilder<List<AlarmSetting>>(
+        future: _repository.getAlarms(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return Center(child: CircularProgressIndicator());
+          }
+          
+          final alarms = snapshot.data!;
+          return ListView.builder(
+            itemCount: alarms.length,
+            itemBuilder: (context, index) {
+              final alarm = alarms[index];
+              return _buildAlarmTile(alarm);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAlarmTile(AlarmSetting alarm) {
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(child: Text(alarm.coinSymbol)),
+        title: Text('${alarm.coinName} (${alarm.coinSymbol})'),
+        subtitle: Text(
+          '${alarm.alarmType == AlarmType.above ? "이상" : "이하"}: '
+          '${alarm.targetPrice.toStringAsFixed(0)}원'
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Switch(
+              value: alarm.isEnabled,
+              onChanged: (enabled) => _toggleAlarm(alarm, enabled),
+            ),
+            IconButton(
+              icon: Icon(Icons.delete),
+              onPressed: () => _deleteAlarm(alarm.id),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveAlarm() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final alarm = AlarmSetting(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      coinSymbol: _selectedCoin,
+      coinName: _getCoinName(_selectedCoin),
+      targetPrice: double.parse(_priceController.text),
+      alarmType: _alarmType,
+      createdAt: DateTime.now(),
+    );
+
+    await _repository.saveAlarm(alarm);
+    _priceController.clear();
+    setState(() {});
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('알림이 설정되었습니다')),
+    );
+  }
+
+  String _getCoinName(String symbol) {
+    final coinNames = {
+      'BTC': 'Bitcoin',
+      'ETH': 'Ethereum',
+      'XRP': 'Ripple',
+      'ADA': 'Cardano',
+      'DOT': 'Polkadot',
+    };
+    return coinNames[symbol] ?? symbol;
+  }
+
+  Future<void> _toggleAlarm(AlarmSetting alarm, bool enabled) async {
+    final updatedAlarm = AlarmSetting(
+      id: alarm.id,
+      coinSymbol: alarm.coinSymbol,
+      coinName: alarm.coinName,
+      targetPrice: alarm.targetPrice,
+      alarmType: alarm.alarmType,
+      isEnabled: enabled,
+      createdAt: alarm.createdAt,
+    );
+    
+    await _repository.updateAlarm(updatedAlarm);
+    setState(() {});
+  }
+
+  Future<void> _deleteAlarm(String id) async {
+    await _repository.deleteAlarm(id);
+    setState(() {});
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('알림이 삭제되었습니다')),
+    );
+  }
+}
+메인 앱 통합
+파일: lib/main.dart
+import 'package:flutter/material.dart';
+import 'services/coin_alarm_service.dart';
+import 'screens/alarm_setting_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // 코인 알림 서비스 초기화
+  await CoinAlarmService().initialize();
+  
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: '코인알림',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      home: AlarmSettingScreen(),
+    );
+  }
+}
+
+🔧 개발 환경 설정
+필수 도구 및 버전
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mockito: ^5.4.2
+  build_runner: ^2.4.6
+  integration_test:
+    sdk: flutter
+IDE 설정 (VS Code)
+파일: .vscode/launch.json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Development",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "development"]
+    },
+    {
+      "name": "Launch Production",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "production"]
+    }
+  ]
+}
+Git 브랜치 전략
+main
+├── develop
+│   ├── feature/background-service
+│   ├── feature/notification-system
+│   ├── feature/price-monitoring
+│   └── feature/ui-integration
+└── release/v1.0.0
+
+📋 체크리스트 및 완료 기준
+Phase 1 체크리스트
+* [ ] 모든 의존성 패키지 설치 완료
+* [ ] iOS/Android 권한 설정 완료
+* [ ] 앱 생명주기 감지 정상 동작
+* [ ] 권한 요청 다이얼로그 테스트 완료
+Phase 2 체크리스트
+* [ ] AlarmSetting 모델 정의 완료
+* [ ] SharedPreferences를 통한 데이터 저장/로드 테스트
+* [ ] 로컬 알림 권한 요청 및 발송 테스트
+* [ ] 알림 스타일 iOS/Android 각각 확인
+Phase 3 체크리스트
+* [ ] 업비트 API 연동 및 가격 조회 테스트
+* [ ] 다중 코인 가격 동시 조회 성능 테스트
+* [ ] 가격 비교 로직 정확성 검증
+* [ ] 알림 트리거 후 자동 비활성화 확인
+Phase 4 체크리스트
+* [ ] iOS Background App Refresh 설정 및 테스트
+* [ ] Android Foreground Service 정상 동작 확인
+* [ ] 플랫폼별 백그라운드 작업 주기 테스트
+* [ ] 배터리 최적화 예외 설정 안내
+Phase 5 체크리스트
+* [ ] 앱 생명주기와 백그라운드 서비스 연동 테스트
+* [ ] 네트워크 에러 상황 복구 테스트
+* [ ] 메모리 누수 검사 완료
+* [ ] 24시간 연속 동작 안정성 테스트
+
+🚨 주의사항 및 제약사항
+iOS 제약사항
+1. Background App Refresh 의존성
+    * 사용자가 설정에서 비활성화할 수 있음
+    * 앱에서 Background App Refresh 활성화 안내 필요
+2. 백그라운드 작업 시간 제한
+    * iOS는 백그라운드 작업 시간이 제한적
+    * 최소 15분 간격으로만 실행 가능
+3. 앱 스토어 심사
+    * 백그라운드 사용 목적을 명확히 설명해야 함
+    * 불필요한 백그라운드 활동으로 판단될 수 있음
+Android 제약사항
+1. 도즈 모드 (Doze Mode)
+    * Android 6.0 이상에서 배터리 최적화 영향
+    * 사용자에게 배터리 최적화 예외 설정 요청 필요
+2. 포그라운드 서비스 제한
+    * Android 8.0 이상에서 백그라운드 서비스 제한
+    * 포그라운드 서비스만 장시간 실행 가능
+3. 알림 권한
+    * Android 13 이상에서 알림 권한 별도 요청 필요
+공통 주의사항
+1. API 호출 빈도
+    * 업비트 API 제한 준수 (초당 10회)
+    * 과도한 호출 시 IP 차단 위험
+2. 사용자 경험
+    * 배터리 사용량 최적화
+    * 불필요한 알림 방지
+3. 데이터 사용량
+    * 모바일 데이터 사용 시 비용 고려
+    * WiFi 연결 상태 확인 로직 권장
+
+📞 커뮤니케이션 및 협업 가이드
+일일 스탠드업 미팅
+* 시간: 매일 오전 9:30
+* 참석자: 전체 개발팀
+* 안건: 전일 작업 완료사항, 금일 작업 계획, 이슈 및 블로커
+코드 리뷰 프로세스
+1. 기능 완성 후 Pull Request 생성
+2. 최소 2명의 팀원 승인 필요
+3. 자동화된 테스트 통과 확인
+4. main 브랜치로 병합
+이슈 추적 및 보고
+* 도구: GitHub Issues 또는 Jira
+* 우선순위: Critical > High > Medium > Low
+* 라벨링: bug, feature, enhancement, documentation
+문서화 요구사항
+* API 문서화 (README.md)
+* 코드 주석 (복잡한 비즈니스 로직)
+* 설정 가이드 (사용자용)
+* 트러블슈팅 가이드
+
+🎯 성공 지표 및 KPI
+기술적 지표
+* 빌드 성공률: 95% 이상
+* 테스트 커버리지: 80% 이상
+* 앱 크래시율: 1% 미만
+* API 응답 성공률: 99% 이상
+사용자 경험 지표
+* 알림 정확도: 95% 이상
+* 배터리 사용량: 시간당 5% 미만
+* 앱 시작 시간: 3초 미만
+* 사용자 만족도: 4.0/5.0 이상
+비즈니스 지표
+* 일일 활성 사용자: 목표치 달성
+* 알림 설정 완료율: 70% 이상
+* 앱 리텐션율: 1주일 60%, 1개월 30%

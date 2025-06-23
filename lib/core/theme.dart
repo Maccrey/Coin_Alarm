@@ -37,6 +37,7 @@ class AppTheme {
 
   /// 라이트 테마 생성
   static ThemeData lightTheme() {
+    final baseTheme = ThemeData.light();
     // 라이트 테마 직접 생성
     return ThemeData(
       brightness: Brightness.light,
@@ -62,7 +63,7 @@ class AppTheme {
         elevation: 0,
         centerTitle: true,
         iconTheme: const IconThemeData(color: primaryColor),
-        titleTextStyle: GoogleFonts.notoSansKr(
+        titleTextStyle: GoogleFonts.notoSans(
           fontSize: 18,
           fontWeight: FontWeight.bold,
           color: lightTextColor,
@@ -123,7 +124,7 @@ class AppTheme {
         ),
       ),
       textTheme: _getTextTheme(
-        GoogleFonts.notoSansKrTextTheme(),
+        _applyNotoSansFont(baseTheme.textTheme),
         lightTextColor,
         lightSecondaryTextColor,
       ),
@@ -172,6 +173,7 @@ class AppTheme {
 
   /// 다크 테마 생성
   static ThemeData darkTheme() {
+    final baseTheme = ThemeData.dark();
     // 다크 테마 직접 생성
     return ThemeData(
       brightness: Brightness.dark,
@@ -197,7 +199,7 @@ class AppTheme {
         elevation: 0,
         centerTitle: true,
         iconTheme: IconThemeData(color: primaryColor.withOpacity(0.9)),
-        titleTextStyle: GoogleFonts.notoSansKr(
+        titleTextStyle: GoogleFonts.notoSans(
           fontSize: 18,
           fontWeight: FontWeight.bold,
           color: darkTextColor,
@@ -258,7 +260,7 @@ class AppTheme {
         ),
       ),
       textTheme: _getTextTheme(
-        GoogleFonts.notoSansKrTextTheme(ThemeData.dark().textTheme),
+        _applyNotoSansFont(baseTheme.textTheme),
         darkTextColor,
         darkSecondaryTextColor,
       ),
@@ -304,6 +306,27 @@ class AppTheme {
       listTileTheme: ListTileThemeData(
         iconColor: primaryColor.withOpacity(0.9),
       ),
+    );
+  }
+
+  /// Noto Sans 폰트를 TextTheme에 적용
+  static TextTheme _applyNotoSansFont(TextTheme textTheme) {
+    return TextTheme(
+      displayLarge: GoogleFonts.notoSans(textStyle: textTheme.displayLarge),
+      displayMedium: GoogleFonts.notoSans(textStyle: textTheme.displayMedium),
+      displaySmall: GoogleFonts.notoSans(textStyle: textTheme.displaySmall),
+      headlineLarge: GoogleFonts.notoSans(textStyle: textTheme.headlineLarge),
+      headlineMedium: GoogleFonts.notoSans(textStyle: textTheme.headlineMedium),
+      headlineSmall: GoogleFonts.notoSans(textStyle: textTheme.headlineSmall),
+      titleLarge: GoogleFonts.notoSans(textStyle: textTheme.titleLarge),
+      titleMedium: GoogleFonts.notoSans(textStyle: textTheme.titleMedium),
+      titleSmall: GoogleFonts.notoSans(textStyle: textTheme.titleSmall),
+      bodyLarge: GoogleFonts.notoSans(textStyle: textTheme.bodyLarge),
+      bodyMedium: GoogleFonts.notoSans(textStyle: textTheme.bodyMedium),
+      bodySmall: GoogleFonts.notoSans(textStyle: textTheme.bodySmall),
+      labelLarge: GoogleFonts.notoSans(textStyle: textTheme.labelLarge),
+      labelMedium: GoogleFonts.notoSans(textStyle: textTheme.labelMedium),
+      labelSmall: GoogleFonts.notoSans(textStyle: textTheme.labelSmall),
     );
   }
 

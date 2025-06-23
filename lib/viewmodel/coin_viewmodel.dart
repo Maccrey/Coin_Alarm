@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../services/supabase_service.dart';
+import '../services/firebase_service.dart';
 import '../model/coin_model.dart';
 import '../core/constants.dart';
 
 // 코인 데이터 관련 ViewModel 클래스
 class CoinViewModel extends ChangeNotifier {
-  final SupabaseService _supabaseService;
+  final FirebaseService _firebaseService;
 
   // 상태 관리
   bool _isLoading = false;
@@ -19,7 +19,7 @@ class CoinViewModel extends ChangeNotifier {
   Timer? _refreshTimer;
 
   // 생성자
-  CoinViewModel(this._supabaseService) {
+  CoinViewModel(this._firebaseService) {
     // 초기 코인 데이터 로드
     refreshCoins();
 
@@ -56,7 +56,7 @@ class CoinViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 현재 SupabaseService에 getCoins 메서드가 구현되지 않았으므로 더미 데이터 사용
+      // Firebase 서비스에 해당 기능이 구현되어 있지 않으므로 더미 데이터 사용
       _coins = DefaultSettings.defaultCoins;
       _errorMessage = null;
 
@@ -89,7 +89,7 @@ class CoinViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 현재 SupabaseService에 getCoinById 메서드가 구현되지 않았으므로 로컬에서 찾기
+      // Firebase 서비스에 해당 기능이 구현되어 있지 않으므로 로컬에서 찾기
       _selectedCoin = getCoinById(coinId);
       _errorMessage = null;
     } catch (e) {
@@ -106,7 +106,7 @@ class CoinViewModel extends ChangeNotifier {
     if (_selectedCoin == null) return;
 
     try {
-      // 현재 SupabaseService에 getCoinById 메서드가 구현되지 않았으므로 로컬에서 찾기
+      // Firebase 서비스에 해당 기능이 구현되어 있지 않으므로 로컬에서 찾기
       final updatedCoin = getCoinById(_selectedCoin!.id);
       if (updatedCoin != null) {
         _selectedCoin = updatedCoin;
@@ -138,26 +138,8 @@ class CoinViewModel extends ChangeNotifier {
 
   // 즐겨찾기 DB 업데이트 (로그인 필요)
   Future<void> _updateFavoritesInDb() async {
-    try {
-      final currentUser = await _supabaseService.getCurrentUser();
-      if (currentUser == null) return; // 로그인되지 않은 경우
-
-      // 현재 SupabaseService에 updateUser 메서드가 구현되지 않았으므로 로그만 출력
-      debugPrint('즐겨찾기 업데이트: ${_favoriteCoins.join(", ")}');
-    } catch (e) {
-      debugPrint('즐겨찾기 DB 업데이트 실패: $e');
-    }
-  }
-
-  // 사용자 즐겨찾기 로드
-  Future<void> loadUserFavorites(String userId) async {
-    try {
-      // 현재 SupabaseService에 updateUser 메서드가 구현되지 않았으므로 기본값 사용
-      _favoriteCoins = DefaultSettings.defaultFavoriteCoins;
-      notifyListeners();
-    } catch (e) {
-      debugPrint('사용자 즐겨찾기 로드 실패: $e');
-    }
+    // Firebase 서비스에 해당 기능이 구현되어 있지 않으므로 로컬 상태만 업데이트
+    debugPrint('즐겨찾기 업데이트: ${_favoriteCoins.join(', ')}');
   }
 
   // 에러 메시지 초기화

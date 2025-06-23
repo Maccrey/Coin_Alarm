@@ -316,4 +316,16 @@ class SettingsService {
   Future<void> removeUseBiometrics() async {
     await _box.delete('useBiometrics');
   }
+
+  /// 다크 모드 설정 가져오기
+  Future<bool> getDarkMode() async {
+    final box = Hive.box('settings');
+    return box.get('dark_mode', defaultValue: false) as bool;
+  }
+
+  /// 다크 모드 설정 저장
+  Future<void> setDarkMode(bool isDarkMode) async {
+    final box = Hive.box('settings');
+    await box.put('dark_mode', isDarkMode);
+  }
 }

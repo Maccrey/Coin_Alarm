@@ -292,18 +292,21 @@ class _NewsScreenState extends State<NewsScreen> {
               SizedBox(
                 height: 160,
                 width: double.infinity,
-                child: news.imageUrl != null
+                child: news.imageUrl != null && news.imageUrl!.isNotEmpty
                     ? Image.network(
                         news.imageUrl!,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: Colors.grey[300],
-                          child: const Icon(
-                            Icons.image_not_supported,
-                            size: 48,
-                            color: Colors.grey,
-                          ),
-                        ),
+                        errorBuilder: (context, error, stackTrace) {
+                          debugPrint('이미지 로드 오류: $error');
+                          return Container(
+                            color: Colors.grey[300],
+                            child: const Icon(
+                              Icons.image_not_supported,
+                              size: 48,
+                              color: Colors.grey,
+                            ),
+                          );
+                        },
                       )
                     : Container(
                         color: Colors.grey[300],
@@ -474,21 +477,24 @@ class _NewsScreenState extends State<NewsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 뉴스 이미지 (있는 경우)
-            if (news.imageUrl != null)
+            if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
               SizedBox(
                 height: 180,
                 width: double.infinity,
                 child: Image.network(
                   news.imageUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: Colors.grey[300],
-                    child: const Icon(
-                      Icons.image_not_supported,
-                      size: 48,
-                      color: Colors.grey,
-                    ),
-                  ),
+                  errorBuilder: (context, error, stackTrace) {
+                    debugPrint('뉴스 이미지 로드 오류: $error');
+                    return Container(
+                      color: Colors.grey[300],
+                      child: const Icon(
+                        Icons.image_not_supported,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
+                    );
+                  },
                 ),
               ),
 
@@ -596,7 +602,7 @@ class _NewsScreenState extends State<NewsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // 이미지 (있는 경우)
-            if (news.imageUrl != null)
+            if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
               ClipRRect(
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(16),
@@ -607,15 +613,18 @@ class _NewsScreenState extends State<NewsScreen> {
                   height: 200,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: 200,
-                    color: Colors.grey[300],
-                    child: const Icon(
-                      Icons.image_not_supported,
-                      size: 64,
-                      color: Colors.grey,
-                    ),
-                  ),
+                  errorBuilder: (context, error, stackTrace) {
+                    debugPrint('상세 뉴스 이미지 로드 오류: $error');
+                    return Container(
+                      height: 200,
+                      color: Colors.grey[300],
+                      child: const Icon(
+                        Icons.image_not_supported,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                    );
+                  },
                 ),
               ),
 

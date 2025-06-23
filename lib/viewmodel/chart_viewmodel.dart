@@ -12,8 +12,9 @@ class ChartViewModel extends ChangeNotifier {
   final ChartApiServiceFactory _serviceFactory = ChartApiServiceFactory();
   final ChartCacheService _cacheService;
   final SettingsService _settingsService = SettingsService();
-  final InternetConnectionChecker _connectionChecker =
-      InternetConnectionChecker.createInstance();
+
+  // 웹 플랫폼에서는 InternetConnectionChecker를 사용하지 않음
+  InternetConnectionChecker? _connectionChecker;
 
   // 상태 변수
   ChartApiService? _apiService;
@@ -44,6 +45,14 @@ class ChartViewModel extends ChangeNotifier {
 
   // 생성자
   ChartViewModel(this._cacheService) {
+    // 웹이 아닌 경우에만 InternetConnectionChecker 초기화
+    if (!kIsWeb) {
+      try {
+        _connectionChecker = InternetConnectionChecker.createInstance();
+      } catch (e) {
+        debugPrint('ChartViewModel: InternetConnectionChecker 초기화 실패 - $e');
+      }
+    }
     _initialize();
   }
 
@@ -102,9 +111,20 @@ class ChartViewModel extends ChangeNotifier {
 
   // 네트워크 연결 상태 초기화
   Future<void> _initConnectivity() async {
+    // 웹 플랫폼에서는 항상 연결된 것으로 가정
+    if (kIsWeb) {
+      _isConnected = true;
+      debugPrint('ChartViewModel: 웹 플랫폼에서는 항상 연결된 것으로 가정합니다.');
+      return;
+    }
+
     try {
-      final result = await _connectionChecker.hasConnection;
-      _updateConnectionStatus(result);
+      if (_connectionChecker != null) {
+        final result = await _connectionChecker!.hasConnection;
+        _updateConnectionStatus(result);
+      } else {
+        _isConnected = true; // 기본값은 연결된 것으로 가정
+      }
     } catch (e) {
       debugPrint('ChartViewModel: 연결 상태 확인 오류 - $e');
       _isConnected = false;
@@ -113,12 +133,24 @@ class ChartViewModel extends ChangeNotifier {
 
   // 네트워크 연결 상태 모니터링 설정
   void _setupConnectivityMonitoring() {
-    _connectivitySubscription = _connectionChecker.onStatusChange.listen((
-      InternetConnectionStatus status,
-    ) {
-      final isConnected = status == InternetConnectionStatus.connected;
-      _updateConnectionStatus(isConnected);
-    });
+    // 웹 플랫폼에서는 연결 모니터링을 건너뜁니다
+    if (kIsWeb) {
+      debugPrint('ChartViewModel: 웹 플랫폼에서는 연결 모니터링을 건너뜁니다.');
+      return;
+    }
+
+    try {
+      if (_connectionChecker != null) {
+        _connectivitySubscription = _connectionChecker!.onStatusChange.listen((
+          InternetConnectionStatus status,
+        ) {
+          final isConnected = status == InternetConnectionStatus.connected;
+          _updateConnectionStatus(isConnected);
+        });
+      }
+    } catch (e) {
+      debugPrint('ChartViewModel: 연결 모니터링 설정 오류 - $e');
+    }
   }
 
   // 연결 상태 업데이트

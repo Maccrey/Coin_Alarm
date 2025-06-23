@@ -11,6 +11,7 @@ class News {
   final DateTime publishedAt;
   final List<String> relatedCoins;
   final String? imageUrl;
+  final int viewCount;
 
   News({
     required this.id,
@@ -21,12 +22,18 @@ class News {
     required this.publishedAt,
     required this.relatedCoins,
     this.imageUrl,
+    this.viewCount = 0,
   });
 
   // JSON에서 변환
   factory News.fromJson(Map<String, dynamic> json) {
     // related_coins가 String(예: '["xrp"]')으로 들어오는 경우도 robust하게 처리
     dynamic coins = json['related_coins'];
+    if (coins == null) {
+      // Firebase Realtime Database 구조에 맞게 필드 이름 확인
+      coins = json['related_coins'];
+    }
+
     List<String> relatedCoins;
     if (coins is String) {
       try {
@@ -39,15 +46,24 @@ class News {
     } else {
       relatedCoins = [];
     }
+
+    // Firebase Realtime Database의 필드 이름 매핑
+    final String publishedAtStr =
+        json['published_at'] ??
+        json['pub_date'] ??
+        DateTime.now().toIso8601String();
+    final String imageUrlStr = json['image_url'] ?? '';
+
     return News(
       id: json['id'],
       title: json['title'],
       content: json['content'],
       source: json['source'],
       url: json['url'],
-      publishedAt: DateTime.parse(json['published_at']).toLocal(),
+      publishedAt: DateTime.parse(publishedAtStr).toLocal(),
       relatedCoins: relatedCoins,
-      imageUrl: json['image_url'],
+      imageUrl: imageUrlStr,
+      viewCount: json['view_count'] as int? ?? 0,
     );
   }
 
@@ -62,6 +78,7 @@ class News {
       'published_at': publishedAt.toIso8601String(),
       'related_coins': relatedCoins,
       'image_url': imageUrl,
+      'view_count': viewCount,
     };
   }
 
@@ -125,6 +142,7 @@ class News {
     DateTime? publishedAt,
     List<String>? relatedCoins,
     String? imageUrl,
+    int? viewCount,
   }) {
     return News(
       id: id ?? this.id,
@@ -135,6 +153,7 @@ class News {
       publishedAt: publishedAt ?? this.publishedAt,
       relatedCoins: relatedCoins ?? this.relatedCoins,
       imageUrl: imageUrl ?? this.imageUrl,
+      viewCount: viewCount ?? this.viewCount,
     );
   }
 }

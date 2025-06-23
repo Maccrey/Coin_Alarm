@@ -61,22 +61,53 @@ class _SplashScreenState extends State<SplashScreen>
 
   // 다음 화면으로 이동 (로그인 여부에 따라)
   Future<void> _navigateToNextScreen() async {
-    // 3초 후 다음 화면으로 이동
-    Timer(const Duration(seconds: 3), () {
-      final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+    debugPrint('SplashScreen: 다음 화면 이동 준비 시작');
 
-      if (authViewModel.isLoggedIn) {
-        // 로그인된 상태면 홈 화면으로
+    // 화면 전환 전 약간의 지연 추가 (애니메이션 효과를 보여주기 위함)
+    await Future.delayed(const Duration(seconds: 2));
+
+    debugPrint('SplashScreen: 지연 완료, 화면 전환 시도');
+
+    // mounted 체크
+    if (!mounted) {
+      debugPrint('SplashScreen: 위젯이 더 이상 마운트되어 있지 않음');
+      return;
+    }
+
+    try {
+      // 인증 상태 확인
+      final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+      debugPrint('SplashScreen: AuthViewModel 가져오기 성공');
+
+      // 로그인 상태에 따라 화면 전환
+      final isLoggedIn = authViewModel.isLoggedIn;
+      debugPrint('SplashScreen: 로그인 상태 - $isLoggedIn');
+
+      // 안전하게 화면 전환
+      if (!mounted) return;
+
+      if (isLoggedIn) {
+        debugPrint('SplashScreen: 홈 화면으로 이동');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
       } else {
-        // 로그인되지 않은 상태면 로그인 화면으로
+        debugPrint('SplashScreen: 로그인 화면으로 이동');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
         );
       }
-    });
+    } catch (e) {
+      debugPrint('SplashScreen: 오류 발생 - $e');
+
+      // 오류 발생 시 로그인 화면으로 이동
+      if (mounted) {
+        debugPrint('SplashScreen: 오류로 인해 로그인 화면으로 이동');
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      }
+    }
   }
 
   @override

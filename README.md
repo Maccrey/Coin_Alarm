@@ -4,7 +4,7 @@
 
 ## 소개
 
-Coin Alarm은 암호화폐 가격을 실시간으로 모니터링하고 사용자가 설정한 가격에 도달하면 알림을 보내는 모바일 앱입니다. Flutter로 개발되었으며, Supabase를 백엔드로 사용합니다.
+Coin Alarm은 암호화폐 가격을 실시간으로 모니터링하고 사용자가 설정한 가격에 도달하면 알림을 보내는 모바일 앱입니다. Flutter로 개발되었으며, Supabase와 Firebase를 백엔드로 사용합니다.
 
 ## 주요 기능
 
@@ -20,12 +20,15 @@ Coin Alarm은 암호화폐 가격을 실시간으로 모니터링하고 사용�
 - 코인 시세/차트/뉴스/알림 실시간 제공
 - **설정: 생체 인증(지문/Face ID) 사용 가능**
 - 로컬 저장소(Hive) 기반 자동 로그인/알림/차트 캐시
+- **Firebase Realtime Database 연동 실시간 데이터 동기화**
 
 ## 기술 스택
 
 - **프론트엔드**: Flutter
-- **백엔드**: Supabase (PostgreSQL, Auth, Storage, Functions, Realtime)
-- **상태 관리**: Provider
+- **백엔드**:
+  - Supabase (PostgreSQL, Auth, Storage, Functions, Realtime)
+  - Firebase (Authentication, Realtime Database)
+- **상태 관리**: Provider, Riverpod
 - **API**: Upbit, Binance
 - **로컬 저장소**: Hive, SharedPreferences
 - **차트**: 커스텀 차트 위젯
@@ -61,6 +64,33 @@ Supabase의 RLS(Row Level Security) 기능을 사용하여 다음과 같은 보�
 
 - 사용자는 자신의 프로필, 알림 설정, 앱 설정만 읽고 수정할 수 있습니다.
 - 코인 정보, 가격 이력, 뉴스는 모든 사용자가 읽기 가능합니다.
+
+## Firebase 연동
+
+### 1. Firebase Realtime Database
+
+Firebase Realtime Database를 사용하여 다음과 같은 기능을 구현했습니다:
+
+- 실시간 데이터 동기화: 사용자 설정 및 알림 정보를 여러 기기 간에 실시간으로 동기화
+- 오프라인 지원: 네트워크 연결이 끊겨도 로컬에서 데이터 조작 가능, 연결 복구 시 자동 동기화
+- 실시간 알림 처리: 가격 알림 조건 충족 시 즉시 알림 트리거
+
+### 2. Firebase 데이터 구조
+
+Firebase Realtime Database에는 다음과 같은 데이터 구조가 구성되어 있습니다:
+
+- `/users/{userId}/settings`: 사용자별 설정 정보
+- `/users/{userId}/alerts`: 사용자별 알림 설정
+- `/coins/{coinId}/price`: 코인별 최신 가격 정보
+- `/coins/{coinId}/alerts`: 코인별 알림 조건 및 트리거 상태
+
+### 3. Firebase 보안 규칙
+
+Firebase Realtime Database의 보안 규칙을 통해 다음과 같은 보안 정책을 적용했습니다:
+
+- 사용자는 자신의 데이터(`/users/{userId}/`)만 읽고 쓸 수 있습니다.
+- 코인 가격 정보는 모든 인증된 사용자가 읽을 수 있지만, 쓰기는 관리자만 가능합니다.
+- 인증되지 않은 사용자는 데이터에 접근할 수 없습니다.
 
 ## 뉴스 크롤링 서버 (MSA 아키텍처)
 
@@ -182,7 +212,9 @@ Supabase의 RLS(Row Level Security) 기능을 사용하여 다음과 같은 보�
 ```
 lib/
 ├── core/           # 상수, 테마, 유틸리티 함수
-├── database/       # Supabase 데이터베이스 스키마 및 문서
+├── database/       # 데이터베이스 관련 코드
+│   ├── firebase/   # Firebase Realtime Database 관련 코드
+│   └── supabase/   # Supabase 데이터베이스 스키마 및 문서
 ├── data/           # 더미 데이터 및 로컬 데이터 소스
 ├── model/          # 데이터 모델 클래스
 ├── services/       # 서비스 클래스 (API, 저장소, 인증 등)
@@ -233,3 +265,58 @@ webcrawler/         # 뉴스 크롤링 서버 (MSA 아키텍처)
 - 설정 화면에서 '생체 인증 사용' 스위치를 켜면, 기기에서 지문/Face ID 인증을 요구합니다.
 - 인증에 성공하면 이후 앱 실행/로그인 시 생체 인증을 사용할 수 있습니다.
 - 기기에서 생체 인증이 미지원/실패 시 안내 메시지가 표시됩니다.
+
+## Firebase Realtime Database 사용법
+
+### 데이터 저장 및 조회
+
+- `FirebaseDatabaseService` 클래스를 통해 데이터 저장, 조회, 업데이트, 삭제 기능을 사용할 수 있습니다.
+- 예시:
+
+  ```dart
+  final databaseService = FirebaseDatabaseService();
+
+  // 데이터 저장
+  await databaseService.saveData('coins/bitcoin', {
+    'name': 'Bitcoin',
+    'price': 50000,
+    'timestamp': DateTime.now().millisecondsSinceEpoch,
+  });
+
+  // 데이터 조회
+  final data = await databaseService.getData('coins/bitcoin');
+
+  // 데이터 업데이트
+  await databaseService.updateData('coins/bitcoin', {
+    'price': 55000,
+    'updated_at': DateTime.now().millisecondsSinceEpoch,
+  });
+
+  // 데이터 삭제
+  await databaseService.deleteData('coins/bitcoin');
+  ```
+
+### 실시간 데이터 리스닝
+
+- `listenToData` 메서드를 사용하여 특정 경로의 데이터 변경을 실시간으로 감지할 수 있습니다.
+- 예시:
+
+  ```dart
+  final databaseService = FirebaseDatabaseService();
+
+  // 실시간 데이터 리스닝
+  final Stream<DatabaseEvent> stream = databaseService.listenToData('coins/bitcoin');
+
+  stream.listen((DatabaseEvent event) {
+    if (event.snapshot.exists) {
+      final data = event.snapshot.value as Map<String, dynamic>;
+      print('실시간 데이터 업데이트: $data');
+      // 데이터 처리 로직
+    }
+  });
+  ```
+
+### 오프라인 지원
+
+- Firebase Realtime Database는 오프라인 지원 기능을 제공합니다.
+- 네트워크 연결이 끊겨도 로컬에서 데이터 조작이 가능하며, 연결이 복구되면 자동으로 동기화됩니다.

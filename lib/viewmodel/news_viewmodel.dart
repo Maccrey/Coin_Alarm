@@ -1,14 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
-import '../services/supabase_service.dart';
+import 'package:hive/hive.dart';
+import 'package:uuid/uuid.dart';
+
+import '../services/firebase_service.dart';
 import '../model/news_model.dart';
 import '../core/constants.dart';
-import 'package:hive/hive.dart';
 
-// 뉴스 데이터 관련 ViewModel 클래스
+/// 뉴스 관련 ViewModel
+///
+/// 뉴스 데이터 로드, 필터링, 검색 등의 기능을 제공합니다.
 class NewsViewModel extends ChangeNotifier {
-  final SupabaseService _supabaseService;
+  final FirebaseService _firebaseService;
 
   // 상태 관리
   bool _isLoading = false;
@@ -27,14 +32,14 @@ class NewsViewModel extends ChangeNotifier {
   // 오프라인 모드 관련
   bool _isOfflineMode = false;
   bool _isConnected = true;
-  late StreamSubscription _connectivitySubscription;
+  StreamSubscription? _connectivitySubscription;
 
   // 원본 값과 정규화된 값 모두 저장
   String? _rawCoinFilter;
   String? _normalizedCoinFilter;
 
   // 생성자
-  NewsViewModel(this._supabaseService) {
+  NewsViewModel(this._firebaseService) {
     // Hive 박스가 열려 있으면 즉시 캐시 데이터를 동기 로드
     if (Hive.isBoxOpen('news_cache')) {
       final box = Hive.box('news_cache');
@@ -134,6 +139,13 @@ class NewsViewModel extends ChangeNotifier {
 
   // 네트워크 연결 상태 초기화
   Future<void> _initConnectivity() async {
+    // 웹 플랫폼에서는 항상 연결된 것으로 가정
+    if (kIsWeb) {
+      _isConnected = true;
+      debugPrint('NewsViewModel: 웹 플랫폼에서는 항상 연결된 것으로 가정합니다.');
+      return;
+    }
+
     try {
       final checker = InternetConnectionChecker.createInstance();
       _isConnected = await checker.hasConnection;
@@ -146,24 +158,34 @@ class NewsViewModel extends ChangeNotifier {
 
   // 네트워크 연결 상태 모니터링
   void _setupConnectivityMonitoring() {
-    final checker = InternetConnectionChecker.createInstance();
-    _connectivitySubscription = checker.onStatusChange.listen((status) {
-      final isConnected = status == InternetConnectionStatus.connected;
+    // 웹 플랫폼에서는 연결 모니터링을 건너뜁니다
+    if (kIsWeb) {
+      debugPrint('NewsViewModel: 웹 플랫폼에서는 연결 모니터링을 건너뜁니다.');
+      return;
+    }
 
-      if (_isConnected != isConnected) {
-        _isConnected = isConnected;
-        debugPrint(
-          'NewsViewModel: 네트워크 상태 변경 - ${_isConnected ? "연결됨" : "연결 끊김"}',
-        );
+    try {
+      final checker = InternetConnectionChecker.createInstance();
+      _connectivitySubscription = checker.onStatusChange.listen((status) {
+        final isConnected = status == InternetConnectionStatus.connected;
 
-        // 오프라인 모드가 아니고 연결이 복구된 경우 데이터 새로고침
-        if (_isConnected && !_isOfflineMode) {
-          refreshNews();
+        if (_isConnected != isConnected) {
+          _isConnected = isConnected;
+          debugPrint(
+            'NewsViewModel: 네트워크 상태 변경 - ${_isConnected ? "연결됨" : "연결 끊김"}',
+          );
+
+          // 오프라인 모드가 아니고 연결이 복구된 경우 데이터 새로고침
+          if (_isConnected && !_isOfflineMode) {
+            refreshNews();
+          }
+
+          notifyListeners();
         }
-
-        notifyListeners();
-      }
-    });
+      });
+    } catch (e) {
+      debugPrint('NewsViewModel: 연결 모니터링 설정 오류 - $e');
+    }
   }
 
   // 오프라인 모드 설정
@@ -276,134 +298,228 @@ class NewsViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _connectivitySubscription.cancel();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
-  // 뉴스 목록 갱신 (캐시 우선, 네트워크 백그라운드)
-  Future<void> refreshNews() async {
-    // 현재 필터 상태 저장
-    final currentFilter = _coinFilter;
-    final currentQuery = _searchQuery;
-
-    // 필터 초기화
-    _coinFilter = null;
-    _searchQuery = '';
-
-    // 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시만 사용
-    if (_isOfflineMode || !_isConnected) {
-      final cachedNews = await _supabaseService.getCachedNews();
-      if (cachedNews.isNotEmpty) {
-        _newsList = cachedNews;
-        // 인기 뉴스는 캐시된 뉴스 중 상위 3개만 사용
-        _popularNews = List.of(cachedNews)
-          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-        _popularNews = _popularNews.take(3).toList();
-        debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
-      } else {
-        debugPrint('캐시된 뉴스 데이터가 없습니다');
+  // 캐시된 뉴스 데이터 가져오기
+  Future<List<News>> _getCachedNews() async {
+    try {
+      if (Hive.isBoxOpen('news_cache')) {
+        final box = Hive.box('news_cache');
+        final cachedData = box.get('cached_news');
+        if (cachedData != null) {
+          final List<dynamic> newsJsonList = cachedData;
+          return newsJsonList
+              .map(
+                (json) => News.fromJson(Map<String, dynamic>.from(json as Map)),
+              )
+              .toList();
+        }
       }
-      _isLoading = false;
-      notifyListeners();
-      return;
+    } catch (e) {
+      debugPrint('캐시된 뉴스 데이터 로드 실패: $e');
     }
+    return [];
+  }
 
-    // 2. 네트워크로 최신 데이터 요청 (백그라운드)
+  // 뉴스 데이터를 캐시에 저장
+  Future<void> _cacheNewsData(List<News> newsList) async {
+    try {
+      if (Hive.isBoxOpen('news_cache')) {
+        final box = Hive.box('news_cache');
+        final newsJsonList = newsList.map((news) => news.toJson()).toList();
+        await box.put('cached_news', newsJsonList);
+        debugPrint('뉴스 데이터 캐싱 완료: ${newsList.length}개');
+      }
+    } catch (e) {
+      debugPrint('뉴스 데이터 캐싱 실패: $e');
+    }
+  }
+
+  // 모의 뉴스 데이터 생성
+  List<News> _generateMockNews() {
+    return [
+      News(
+        id: const Uuid().v4(),
+        title: '비트코인 신규 고점 돌파',
+        content: '비트코인이 새로운 역사적 고점을 돌파했습니다.',
+        source: 'CoinNews',
+        url: 'https://example.com/news/1',
+        imageUrl: 'https://example.com/images/1.jpg',
+        publishedAt: DateTime.now().subtract(const Duration(hours: 2)),
+        relatedCoins: ['bitcoin'],
+      ),
+      News(
+        id: const Uuid().v4(),
+        title: '이더리움 업데이트 예정',
+        content: '이더리움 네트워크의 새로운 업데이트가 다음 주에 예정되어 있습니다.',
+        source: 'CryptoDaily',
+        url: 'https://example.com/news/2',
+        imageUrl: 'https://example.com/images/2.jpg',
+        publishedAt: DateTime.now().subtract(const Duration(hours: 5)),
+        relatedCoins: ['ethereum'],
+      ),
+      News(
+        id: const Uuid().v4(),
+        title: '솔라나 생태계 확장',
+        content: '솔라나 생태계가 빠르게 확장되고 있으며, 새로운 프로젝트들이 계속해서 추가되고 있습니다.',
+        source: 'BlockchainToday',
+        url: 'https://example.com/news/3',
+        imageUrl: 'https://example.com/images/3.jpg',
+        publishedAt: DateTime.now().subtract(const Duration(hours: 8)),
+        relatedCoins: ['solana'],
+      ),
+    ];
+  }
+
+  /// 뉴스 데이터 새로고침
+  Future<void> refreshNews() async {
+    if (_isLoading) return;
+
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
     try {
-      // Supabase에서 뉴스 데이터 가져오기
-      _newsList = await _supabaseService.getNews();
-      debugPrint('refreshNews: 뉴스 ${_newsList.length}개 로드됨');
-      final now = DateTime.now();
-      for (final news in _newsList) {
-        final diff = now.difference(news.publishedAt).inSeconds;
-        debugPrint(
-          '뉴스 publishedAt: ${news.publishedAt.toIso8601String()}, now와의 차이(초): $diff, title: ${news.title}',
-        );
+      debugPrint('NewsViewModel: 뉴스 데이터 새로고침 시작');
+
+      // 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시 데이터 사용
+      if (_isOfflineMode || !_isConnected) {
+        debugPrint('NewsViewModel: 오프라인 모드 또는 네트워크 연결 없음 - 캐시 데이터 사용');
+        await _loadCachedNews();
+        _isLoading = false;
+        notifyListeners();
+        return;
       }
 
-      try {
-        // 인기 뉴스 로드 (별도 try-catch로 분리하여 인기 뉴스 로드 실패가 전체 로드에 영향 없게 함)
-        _popularNews = await _supabaseService.getPopularNews();
-        debugPrint('refreshNews: 인기 뉴스 ${_popularNews.length}개 로드됨');
-      } catch (e) {
-        debugPrint('인기 뉴스 로드 실패: $e');
-        _popularNews = []; // 실패 시 빈 리스트로 설정
+      // 서버에서 뉴스 데이터 로드
+      final newsList = await _firebaseService.getNews(limit: 50);
+      debugPrint('NewsViewModel: 뉴스 ${newsList.length}개 로드됨');
+
+      if (newsList.isEmpty) {
+        debugPrint('NewsViewModel: 로드된 뉴스가 없음');
+        _errorMessage = '뉴스 데이터를 불러올 수 없습니다.';
+        _isLoading = false;
+        notifyListeners();
+        return;
       }
 
-      // 가져온 데이터 캐싱
-      await _supabaseService.cacheNewsData(_newsList);
+      // 뉴스 데이터 업데이트
+      _newsList = newsList;
 
-      _errorMessage = null;
+      // 인기 뉴스 정렬 (조회수 기준)
+      _popularNews = List.from(_newsList)
+        ..sort((a, b) => b.viewCount.compareTo(a.viewCount));
+      _popularNews = _popularNews.take(5).toList();
+
+      // 뉴스 데이터 캐싱
+      _cacheNewsData(_newsList);
+
+      debugPrint('NewsViewModel: 뉴스 데이터 새로고침 완료');
     } catch (e) {
-      _errorMessage = '뉴스 데이터 로드 실패: $e';
-      debugPrint(_errorMessage);
-      // 오류 발생 시 캐시 데이터만 유지
+      debugPrint('NewsViewModel: 뉴스 데이터 새로고침 실패 - $e');
+      _errorMessage = '뉴스를 불러오는 중 오류가 발생했습니다: $e';
+
+      // 오류 발생 시 캐시 데이터 사용 시도
+      await _loadCachedNews();
     } finally {
-      // 필터 복원 (만약 필터가 적용된 상태였다면)
-      if (currentFilter != null && currentFilter.isNotEmpty) {
-        _coinFilter = currentFilter;
-      }
-      if (currentQuery.isNotEmpty) {
-        _searchQuery = currentQuery;
-      }
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// 캐시된 뉴스 데이터 로드
+  Future<void> _loadCachedNews() async {
+    try {
+      debugPrint('NewsViewModel: 캐시된 뉴스 데이터 로드 시도');
+      final cachedNews = await _getCachedNews();
+
+      if (cachedNews.isNotEmpty) {
+        _newsList = cachedNews;
+        // 인기 뉴스는 캐시된 뉴스 중 조회수 상위 5개 사용
+        _popularNews = List.of(cachedNews)
+          ..sort((a, b) => b.viewCount.compareTo(a.viewCount));
+        _popularNews = _popularNews.take(5).toList();
+        debugPrint('NewsViewModel: 캐시된 뉴스 데이터 로드 완료 - ${cachedNews.length}개');
+      } else {
+        debugPrint('NewsViewModel: 캐시된 뉴스 데이터가 없음');
+        _errorMessage = '저장된 뉴스 데이터가 없습니다. 네트워크 연결을 확인해주세요.';
+      }
+    } catch (e) {
+      debugPrint('NewsViewModel: 캐시된 뉴스 데이터 로드 실패 - $e');
+      _errorMessage = '저장된 뉴스 데이터를 불러오는 중 오류가 발생했습니다.';
     }
   }
 
   // 특정 코인 관련 뉴스 로드
   Future<void> loadNewsByCoinId(String coinId) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
     try {
+      debugPrint('NewsViewModel: 코인별 뉴스 로드 시작 - $coinId');
+
       if (coinId.isEmpty || coinId == '전체') {
         // 전체 뉴스 로드
         await refreshNews();
         _coinFilter = null;
-      } else {
-        // 코인 ID 또는 심볼 정규화
-        final normalizedCoinId = _normalizeCoinId(coinId);
-        // 원본 값과 정규화된 값 모두 저장
-        _coinFilter = coinId;
-        _rawCoinFilter = coinId;
-        _normalizedCoinFilter = normalizedCoinId;
+        _rawCoinFilter = null;
+        _normalizedCoinFilter = null;
+        return;
+      }
 
-        if (_isOfflineMode || !_isConnected) {
-          // 오프라인 모드에서는 캐시된 데이터를 필터링
-          final cachedNews = await _supabaseService.getCachedNews();
-          if (cachedNews.isNotEmpty) {
-            _newsList = cachedNews;
-            _popularNews = List.of(cachedNews)
-              ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-            _popularNews = _popularNews.take(3).toList();
-            debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
-          } else {
-            debugPrint('캐시된 뉴스 데이터가 없습니다');
-          }
-        } else {
-          // 전체 뉴스만 받아오고, 필터는 클라이언트에서 적용
-          _newsList = await _supabaseService.getNews();
-        }
-        _errorMessage = null;
+      // 코인 ID 또는 심볼 정규화
+      final normalizedCoinId = _normalizeCoinId(coinId);
+      // 원본 값과 정규화된 값 모두 저장
+      _coinFilter = coinId;
+      _rawCoinFilter = coinId;
+      _normalizedCoinFilter = normalizedCoinId;
+
+      debugPrint('NewsViewModel: 코인 ID 정규화 - $coinId -> $normalizedCoinId');
+
+      // 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시 데이터 사용
+      if (_isOfflineMode || !_isConnected) {
+        debugPrint('NewsViewModel: 오프라인 모드 또는 네트워크 연결 없음 - 캐시 데이터 사용');
+        await _loadCachedNews();
+        // 필터는 _applyFilters 메서드에서 자동으로 적용됨
+        return;
       }
+
+      // Firebase에서 특정 코인 관련 뉴스 로드
+      final newsList = await _firebaseService.getNewsByCoin(
+        normalizedCoinId,
+        limit: 20,
+      );
+      debugPrint('NewsViewModel: 코인별 뉴스 ${newsList.length}개 로드됨');
+
+      if (newsList.isEmpty) {
+        debugPrint('NewsViewModel: 로드된 코인별 뉴스가 없음');
+        _errorMessage = '해당 코인에 관련된 뉴스가 없습니다.';
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // 뉴스 데이터 업데이트
+      _newsList = newsList;
+
+      // 인기 뉴스 정렬 (조회수 기준)
+      _popularNews = List.from(_newsList)
+        ..sort((a, b) => b.viewCount.compareTo(a.viewCount));
+      _popularNews = _popularNews.take(5).toList();
+
+      // 뉴스 데이터 캐싱
+      _cacheNewsData(_newsList);
+
+      debugPrint('NewsViewModel: 코인별 뉴스 로드 완료');
     } catch (e) {
-      _errorMessage = '코인 관련 뉴스 로드 실패: $e';
-      debugPrint(_errorMessage);
-      // 오류 발생 시 캐시 데이터만 유지
-      final cachedNews = await _supabaseService.getCachedNews();
-      if (cachedNews.isNotEmpty) {
-        _newsList = cachedNews;
-        _popularNews = List.of(cachedNews)
-          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-        _popularNews = _popularNews.take(3).toList();
-        debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
-      } else {
-        debugPrint('캐시된 뉴스 데이터가 없습니다');
-      }
+      debugPrint('NewsViewModel: 코인별 뉴스 로드 실패 - $e');
+      _errorMessage = '코인 관련 뉴스를 불러오는 중 오류가 발생했습니다: $e';
+
+      // 오류 발생 시 캐시 데이터 사용 시도
+      await _loadCachedNews();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -437,40 +553,65 @@ class NewsViewModel extends ChangeNotifier {
     }
 
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
     try {
+      debugPrint('NewsViewModel: 뉴스 검색 시작 - 검색어: "$query"');
+
+      // 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시 데이터 사용
       if (_isOfflineMode || !_isConnected) {
-        // 오프라인 모드에서는 캐시된 데이터를 검색어로 필터링
-        final cachedNews = await _supabaseService.getCachedNews();
-        if (cachedNews.isNotEmpty) {
-          _newsList = cachedNews;
-          _popularNews = List.of(cachedNews)
-            ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-          _popularNews = _popularNews.take(3).toList();
-          debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
-        } else {
-          debugPrint('캐시된 뉴스 데이터가 없습니다');
-        }
-      } else {
-        // 서버에서 검색 수행
-        _newsList = await _supabaseService.searchNews(query: query);
+        debugPrint('NewsViewModel: 오프라인 모드 또는 네트워크 연결 없음 - 캐시 데이터 사용');
+        await _loadCachedNews();
+        // 검색어는 _applyFilters 메서드에서 자동으로 적용됨
+        return;
       }
-      _errorMessage = null;
+
+      // 모든 뉴스 로드 후 클라이언트 측에서 검색
+      // 참고: 실제 구현에서는 서버 측 검색 API를 사용하는 것이 더 효율적임
+      final allNews = await _firebaseService.getNews(limit: 50);
+      debugPrint('NewsViewModel: 검색용 뉴스 ${allNews.length}개 로드됨');
+
+      if (allNews.isEmpty) {
+        debugPrint('NewsViewModel: 검색할 뉴스가 없음');
+        _errorMessage = '검색할 뉴스 데이터가 없습니다.';
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // 검색어로 필터링
+      final lowerQuery = query.toLowerCase();
+      final filteredNews = allNews.where((news) {
+        return news.title.toLowerCase().contains(lowerQuery) ||
+            news.content.toLowerCase().contains(lowerQuery);
+      }).toList();
+
+      debugPrint('NewsViewModel: 검색 결과 ${filteredNews.length}개 찾음');
+
+      // 검색 결과가 없는 경우
+      if (filteredNews.isEmpty) {
+        _errorMessage = '"$query"에 대한 검색 결과가 없습니다.';
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // 뉴스 데이터 업데이트
+      _newsList = filteredNews;
+
+      // 인기 뉴스 정렬 (조회수 기준)
+      _popularNews = List.from(_newsList)
+        ..sort((a, b) => b.viewCount.compareTo(a.viewCount));
+      _popularNews = _popularNews.take(5).toList();
+
+      debugPrint('NewsViewModel: 뉴스 검색 완료');
     } catch (e) {
-      _errorMessage = '뉴스 검색 실패: $e';
-      debugPrint(_errorMessage);
-      // 오류 발생 시 캐시 데이터만 유지
-      final cachedNews = await _supabaseService.getCachedNews();
-      if (cachedNews.isNotEmpty) {
-        _newsList = cachedNews;
-        _popularNews = List.of(cachedNews)
-          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-        _popularNews = _popularNews.take(3).toList();
-        debugPrint('캐시된 뉴스 데이터 로드 완료: \\${cachedNews.length}개');
-      } else {
-        debugPrint('캐시된 뉴스 데이터가 없습니다');
-      }
+      debugPrint('NewsViewModel: 뉴스 검색 실패 - $e');
+      _errorMessage = '뉴스 검색 중 오류가 발생했습니다: $e';
+
+      // 오류 발생 시 캐시 데이터 사용 시도
+      await _loadCachedNews();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -480,19 +621,7 @@ class NewsViewModel extends ChangeNotifier {
   // 특정 뉴스 선택
   void selectNews(News news) {
     _selectedNews = news;
-
-    // 오프라인 모드가 아니고 네트워크 연결이 있는 경우에만 조회수 증가 API 호출
-    if (!_isOfflineMode && _isConnected) {
-      _supabaseService
-          .incrementNewsViewCount(news.id)
-          .then((_) {
-            debugPrint('뉴스 조회수 증가 완료: ${news.id}');
-          })
-          .catchError((e) {
-            debugPrint('뉴스 조회수 증가 실패: $e');
-          });
-    }
-
+    debugPrint('뉴스 선택됨: ${news.title}');
     notifyListeners();
   }
 

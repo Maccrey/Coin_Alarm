@@ -33,52 +33,54 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^1.0.2
 
   # 상태 관리
-  provider: ^6.1.1
+  provider: ^6.0.5
   flutter_riverpod: ^2.4.9
 
   # 네트워크 및 데이터
-  http: ^1.2.1
+  http: ^0.13.5
   dio: ^5.4.0
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.2.0
   crypto: ^3.0.3
+  internet_connection_checker: ^1.0.0
 
   # 유틸리티
-  intl: ^0.19.0
+  intl: ^0.17.0
   path_provider: ^2.1.5
-  flutter_dotenv: ^5.2.1
-  uuid: ^4.5.1
+  flutter_dotenv: ^5.1.0
+  uuid: ^3.0.7
   logger: ^2.0.2+1
 
   # UI/UX
   flutter_svg: ^2.0.9
-  google_fonts: ^6.1.0
+  google_fonts: ^4.0.4
   fl_chart: ^0.66.0
   shimmer: ^3.0.0
   lottie: ^2.7.0
   cached_network_image: ^3.3.1
-  supabase_flutter: ^2.9.0
-  postgrest: ^2.4.2
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  internet_connection_checker: ^3.0.1
-  url_launcher: ^6.2.5
   local_auth: ^2.1.7
-  workmanager: ^0.6.0
+  workmanager: ^0.5.1
+  flutter_local_notifications: ^14.1.1
 
-  # Supabase (주석 처리 - 더미데이터로 대체)
-  # supabase_flutter: ^1.10.25
-  # postgrest: ^1.5.0
+  # 기타
+  url_launcher: ^6.1.12
+
+  # Firebase
+  firebase_core: ^3.14.0
+  firebase_auth: ^5.6.0
+  firebase_database: ^11.3.7
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   mockito: ^5.4.4
-  build_runner: ^2.4.15
+  build_runner: ^2.3.3
   test: ^1.24.9
-  flutter_lints: ^5.0.0
+  flutter_lints: ^2.0.0
   flutter_launcher_icons: ^0.13.1
   hive_generator: ^2.0.1
 
@@ -87,7 +89,7 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/icons/coin_alarm.png"
-  min_sdk_android: 21 # android min sdk min:16, default 21
+  min_sdk_android: 23 # android min sdk min:16, default 21
   adaptive_icon_background: "#FFFFFF" # 안드로이드 적응형 아이콘 배경색
   adaptive_icon_foreground: "assets/icons/coin_alarm.png" # 안드로이드 적응형 아이콘 전경 이미지
   remove_alpha_ios: true # iOS 아이콘에서 알파 채널 제거

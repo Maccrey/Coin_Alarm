@@ -553,7 +553,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user?.name ?? '사용자',
+                        user?.displayName ?? '사용자',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,

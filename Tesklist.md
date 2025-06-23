@@ -14,6 +14,7 @@
 - [ ] **5. logger**: 각 단계별 로그/상태를 실시간 대시보드로 시각화 (최신 30건, KPI, 에러 강조, 다크테마 등)
 - [x] **6. 불필요 파일/임시/중복/테스트 파일(.DS_Store, temp_cleaner.py 등) 정리 및 삭제** (0번 항목에서 완료)
 - [x] **7. `README.md` 문서 업데이트**: 프로젝트 정리 및 구조 변경 사항을 `README.md`에 반영하여 최신 상태를 유지했습니다.
+- [x] **8. Firebase Realtime Database 설치 및 테스트**: Firebase Realtime Database 의존성을 추가하고 서비스 클래스를 구현하여 데이터 저장, 조회, 업데이트, 삭제 기능을 테스트했습니다. Android 빌드를 위해 minSdkVersion을 23으로 업데이트했습니다.
 
 ---
 
@@ -119,3 +120,22 @@ _이전 작업 내역_
   - 각 서비스의 최근 로그에서 에러/경고를 파싱하여 상태 요약(정상/에러/경고/최근 실행 시간 등) 표시
   - 에러/경고 발생 시 실시간 알림(Toast 등) 제공
   - TDD: 상태 요약/알림 테스트
+
+### 10. Firebase 통합 및 실시간 데이터베이스 구현
+
+- [x] **1. Firebase Realtime Database 설치 및 의존성 추가**
+
+  - Firebase Realtime Database 의존성(`firebase_database: ^11.3.7`) 추가
+  - Android minSdkVersion을 23으로 업데이트하여 Firebase 호환성 확보
+  - 의존성 설치 및 iOS/Android 빌드 테스트 완료 (2024-06-24)
+
+- [x] **2. Firebase Realtime Database 서비스 클래스 구현**
+
+  - `FirebaseDatabaseService` 클래스 구현 (데이터 저장, 조회, 업데이트, 삭제, 실시간 리스닝)
+  - 모든 메서드에 한글 주석 및 예외 처리 추가
+  - 테스트 코드 작성 및 의존성 확인 테스트 완료 (2024-06-24)
+
+- [x] **3. Firebase Realtime Database 예제 구현**
+  - 데이터 저장, 조회, 업데이트, 삭제 기능을 포함한 예제 UI 구현
+  - 실시간 데이터 리스닝 기능 구현
+  - 예제 코드 작성 완료 (2024-06-24)
