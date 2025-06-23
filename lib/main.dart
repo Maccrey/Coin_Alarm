@@ -10,6 +10,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'core/theme.dart';
 import 'services/settings_service.dart';
@@ -31,6 +32,8 @@ import 'model/news_model.dart';
 import 'viewmodel/theme_viewmodel.dart';
 import 'services/firebase_service.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
+import 'firebase_options.dart';
 
 // 백그라운드에서 사용할 코인 가격 fetch 함수 (Upbit API 연동)
 Future<List<Coin>> fetchCoinPricesForBackground() async {
@@ -139,17 +142,7 @@ void main() async {
   await dotenv.load();
 
   // Firebase 초기화
-  try {
-    if (kIsWeb) {
-      debugPrint('웹 플랫폼에서는 Firebase 초기화를 건너뜁니다.');
-    } else {
-      await Firebase.initializeApp();
-      debugPrint('Firebase 초기화 성공');
-    }
-  } catch (e) {
-    debugPrint('Firebase 초기화 실패: $e');
-    debugPrint('Firebase 초기화 실패로 인해 모의 서비스로 대체됩니다.');
-  }
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Hive 초기화
   await Hive.initFlutter();
@@ -210,6 +203,9 @@ void main() async {
     // 초기화 실패해도 계속 진행
   }
 
+  // 알림 서비스 초기화
+  await NotificationService().initialize();
+
   // 앱 실행
   runApp(
     MyApp(
@@ -222,7 +218,11 @@ void main() async {
 }
 
 // 앱의 루트 위젯
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
+  // 전역 네비게이터 키 (알림 처리용)
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   final FirebaseService firebaseService;
   final SettingsService settingsService;
   final AuthService authService;
@@ -237,32 +237,84 @@ class MyApp extends StatelessWidget {
   });
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+
+    // 알림 권한 확인 및 요청
+    AwesomeNotifications().isNotificationAllowed().then((isAllowed) {
+      if (!isAllowed) {
+        // 알림 권한 요청
+        NotificationService.requestUserPermissions(
+          context,
+          permissionList: [
+            NotificationPermission.Alert,
+            NotificationPermission.Sound,
+            NotificationPermission.Badge,
+            NotificationPermission.Vibration,
+            NotificationPermission.Light,
+            NotificationPermission.PreciseAlarms,
+            NotificationPermission.FullScreenIntent,
+            NotificationPermission.CriticalAlert,
+          ],
+        );
+      }
+    });
+
+    // 알림 리스너 설정
+    NotificationService().setListeners(
+      onActionReceivedMethod: _onNotificationAction,
+    );
+  }
+
+  // 알림 탭 이벤트 처리
+  void _onNotificationAction(ReceivedAction receivedAction) {
+    // 알림 탭 처리 로직
+    debugPrint('알림 탭: ${receivedAction.payload}');
+
+    // 필요한 경우 특정 화면으로 이동
+    // MyApp.navigatorKey.currentState?.pushNamed('/notification-details', arguments: receivedAction);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         // 테마 관련 ViewModel
-        ChangeNotifierProvider(create: (_) => ThemeViewModel(settingsService)),
+        ChangeNotifierProvider(
+          create: (_) => ThemeViewModel(widget.settingsService),
+        ),
 
         // 인증 관련 ViewModel
-        ChangeNotifierProvider(create: (_) => AuthViewModel(authService)),
+        ChangeNotifierProvider(
+          create: (_) => AuthViewModel(widget.authService),
+        ),
 
         // 차트 캐시 서비스 Provider (다른 ViewModel에서 사용)
-        Provider.value(value: chartCacheService),
+        Provider.value(value: widget.chartCacheService),
 
         // 설정 서비스 Provider (다른 ViewModel에서 사용)
-        Provider.value(value: settingsService),
+        Provider.value(value: widget.settingsService),
 
         // 코인 관련 ViewModel
-        ChangeNotifierProvider(create: (_) => CoinViewModel(firebaseService)),
+        ChangeNotifierProvider(
+          create: (_) => CoinViewModel(widget.firebaseService),
+        ),
 
         // 암호화폐 관련 ViewModel
         ChangeNotifierProvider(
           create: (context) =>
-              CryptoViewModel(settingsService: context.read<SettingsService>()),
+              CryptoViewModel(settingsService: widget.settingsService),
         ),
 
         // 뉴스 관련 ViewModel
-        ChangeNotifierProvider(create: (_) => NewsViewModel(firebaseService)),
+        ChangeNotifierProvider(
+          create: (_) => NewsViewModel(widget.firebaseService),
+        ),
 
         // 가격 알림 관련 ViewModel
         ChangeNotifierProvider(
@@ -271,7 +323,7 @@ class MyApp extends StatelessWidget {
 
         // 설정 관련 ViewModel
         ChangeNotifierProvider(
-          create: (_) => SettingsViewModel(settingsService),
+          create: (_) => SettingsViewModel(widget.settingsService),
         ),
 
         // 차트 관련 ViewModel
@@ -283,6 +335,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeViewModel>(
         builder: (context, themeViewModel, _) {
           return MaterialApp(
+            navigatorKey: MyApp.navigatorKey,
             title: '코인 알람',
             theme: AppTheme.lightTheme(),
             darkTheme: AppTheme.darkTheme(),

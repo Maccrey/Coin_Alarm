@@ -21,6 +21,7 @@ Coin Alarm은 암호화폐 가격을 실시간으로 모니터링하고 사용�
 - **설정: 생체 인증(지문/Face ID) 사용 가능**
 - 로컬 저장소(Hive) 기반 자동 로그인/알림/차트 캐시
 - **Firebase Realtime Database 연동 실시간 데이터 동기화**
+- **강력한 알림 기능 (Awesome Notifications 기반)**
 
 ## 기술 스택
 
@@ -33,6 +34,7 @@ Coin Alarm은 암호화폐 가격을 실시간으로 모니터링하고 사용�
 - **로컬 저장소**: Hive, SharedPreferences
 - **차트**: 커스텀 차트 위젯
 - **뉴스 크롤링**: Python, BeautifulSoup, Docker, MSA 아키텍처
+- **알림 시스템**: Awesome Notifications
 
 ## Supabase 연동
 
@@ -91,6 +93,31 @@ Firebase Realtime Database의 보안 규칙을 통해 다음과 같은 보안 �
 - 사용자는 자신의 데이터(`/users/{userId}/`)만 읽고 쓸 수 있습니다.
 - 코인 가격 정보는 모든 인증된 사용자가 읽을 수 있지만, 쓰기는 관리자만 가능합니다.
 - 인증되지 않은 사용자는 데이터에 접근할 수 없습니다.
+
+## 알림 시스템
+
+### 1. Awesome Notifications
+
+최신 버전의 Awesome Notifications 패키지를 사용하여 강력한 알림 기능을 구현했습니다:
+
+- 고급 알림 기능: 사용자 지정 소리, 진동 패턴, LED 색상 등 설정 가능
+- 예약 알림: 특정 시간에 알림을 예약하여 표시 가능
+- 알림 채널 및 그룹: 알림을 유형별로 구분하여 관리
+- 알림 권한 관리: 사용자 친화적인 권한 요청 UI 제공
+- 플랫폼별 최적화: Android, iOS 플랫폼별 최적화된 알림 설정
+
+### 2. 알림 권한 관리
+
+- 앱 최초 실행 시 알림 권한을 요청합니다.
+- 권한이 거부된 경우, 사용자에게 필요한 권한과 그 이유를 설명하는 다이얼로그를 표시합니다.
+- 사용자는 설정 화면에서 언제든지 알림 권한을 관리할 수 있습니다.
+
+### 3. 알림 유형
+
+- **코인 가격 알림**: 사용자가 설정한 가격에 도달하면 알림을 표시합니다.
+- **예약 알림**: 특정 시간에 알림을 예약하여 표시합니다.
+- **뉴스 알림**: 주요 암호화폐 뉴스가 발생하면 알림을 표시합니다.
+- **시스템 알림**: 앱 업데이트, 서비스 점검 등 시스템 관련 알림을 표시합니다.
 
 ## 뉴스 크롤링 서버 (MSA 아키텍처)
 
@@ -259,6 +286,18 @@ webcrawler/         # 뉴스 크롤링 서버 (MSA 아키텍처)
 - **증상:** SettingsService 등에서 Hive Box 사용 시 LateInitializationError 발생
 - **원인:** main.dart에서 Hive.initFlutter()와 어댑터 등록이 SettingsService.initialize()보다 늦게 실행되어, Box가 열리기 전에 접근이 발생함
 - **해결:** Hive 초기화 및 어댑터 등록을 SettingsService.initialize()보다 먼저 실행하도록 main.dart 코드 순서 수정
+
+### 알림 시스템 업그레이드
+
+- **증상:** 기존 flutter_local_notifications 패키지로 구현된 알림 시스템이 일부 기기에서 작동하지 않는 문제 발생
+- **원인:** 패키지 버전 호환성 문제 및 Android 12+ 권한 변경 사항
+- **해결:**
+  - flutter_local_notifications에서 awesome_notifications 패키지로 교체
+  - NotificationService 클래스를 최신 API에 맞게 전면 수정
+  - AndroidManifest.xml에 필요한 권한 및 서비스 설정 추가
+  - iOS Podfile에 Awesome Notifications 설정 추가
+  - 사용자 친화적인 권한 요청 다이얼로그 구현
+  - intl 패키지 버전을 ^0.20.2로 업데이트하여 호환성 확보
 
 ## 설정 > 생체 인증 사용법
 

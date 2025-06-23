@@ -47,11 +47,12 @@ dependencies:
   internet_connection_checker: ^1.0.0
 
   # 유틸리티
-  intl: ^0.17.0
+  intl: ^0.20.2
   path_provider: ^2.1.5
   flutter_dotenv: ^5.1.0
   uuid: ^3.0.7
   logger: ^2.0.2+1
+  timezone: ^0.9.2
 
   # UI/UX
   flutter_svg: ^2.0.9
@@ -63,8 +64,8 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   local_auth: ^2.1.7
-  workmanager: ^0.5.1
-  flutter_local_notifications: ^14.1.1
+  workmanager: ^0.6.0
+  awesome_notifications: ^0.10.1
 
   # 기타
   url_launcher: ^6.1.12
