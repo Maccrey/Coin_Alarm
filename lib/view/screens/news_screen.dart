@@ -393,7 +393,7 @@ class _NewsScreenState extends State<NewsScreen> {
               // 뉴스 이미지
               if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
                 SizedBox(
-                  height: 130,
+                  height: 120,
                   width: double.infinity,
                   child: Image.network(
                     news.imageUrl!,
