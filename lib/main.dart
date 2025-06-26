@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -79,6 +81,40 @@ Future<List<Coin>> fetchCoinPricesForBackground() async {
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     debugPrint('[백그라운드] Workmanager 태스크 실행됨: $task');
+
+    // Firebase 초기화
+    try {
+      // 백그라운드 전용 Firebase 앱 이름 지정
+      const appName = 'coin_alarm_background';
+
+      // 이미 해당 이름의 앱이 초기화되었는지 확인
+      FirebaseApp app;
+      try {
+        app = Firebase.app(appName);
+        debugPrint('[백그라운드] 기존 Firebase 앱($appName) 사용');
+      } catch (e) {
+        // 해당 이름의 앱이 없으면 새로 초기화 시도
+        try {
+          app = await Firebase.initializeApp(
+            name: appName,
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
+          debugPrint('[백그라운드] 새 Firebase 앱($appName) 초기화 성공');
+        } catch (e) {
+          if (e.toString().contains('duplicate-app')) {
+            // 중복 앱 오류인 경우 기존 앱 사용
+            app = Firebase.app(appName);
+            debugPrint('[백그라운드] 중복 앱 오류 해결: 기존 Firebase 앱($appName) 사용');
+          } else {
+            debugPrint('[백그라운드] Firebase 초기화 실패: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[백그라운드] Firebase 초기화 오류: $e');
+    }
+
+    // Hive 초기화 및 알림 처리는 계속 진행
     await Hive.initFlutter();
     await PriceAlertService().initialize();
     debugPrint('[백그라운드] PriceAlertService 초기화 완료');
@@ -91,31 +127,6 @@ void callbackDispatcher() {
     debugPrint('[백그라운드] 알림 체크 완료. 트리거된 알림 개수: ${triggeredAlerts.length}');
     return Future.value(true);
   });
-}
-
-// 테스트용 샘플 뉴스 데이터 추가
-Future<void> addSampleNewsData(FirebaseService firebaseService) async {
-  try {
-    // 샘플 뉴스 데이터
-    final sampleNews = News(
-      id: '68bb7245c9945f331aab97ea8bd233e0',
-      title: '美 와이오밍주, 공식 스테이블코인 WYST 8월 메인넷 출시 목표',
-      content:
-          "스테이블코인 [사진: Reve AI] [디지털투데이 황치규 기자]미국 와이오밍주는 공식 스테이블코인 프로젝트 WYST를 오는 8월 20일 출시하는 것을 목표로 하고 있다고 더블록이 20일(현지시간) 보도했다. 와이오밍스테이블토큰위원회는 최근 회의에서 블록체인 테스트 일정을 공개하고, 대상 체인 범위도 확대했다. WYST는 와이오밍스테이블토큰법에 따라 발행되는 달러 연동형 스테이블코인이다. 와이오밍주는 이 코인을 통해 블록체인 산업 중심지로 부상한다는 전략이다. 현재까지 후보에 오른 체인은 앱토스, 아비트럼, 아발란체, 베이스, 이더리움, 옵티미즘, 폴리곤, 세이, 솔라나, 스텔라, 수이 등 총 11개다. 이 중 앱토스와 세이는 지난 5월 회의에서 공식 후보로 추가됐다. 위원회는 오는 8월 열리는 와이오밍 블록체인 심포지엄에서 WYST 메인넷 출시를 발표할 계획이다. 이를 위해 6월과 7월 중 각 블록체인들에 WYST 테스트넷 컨트랙트를 재배포하고, 파이어블록스 인프라...",
-      source: 'digitaltoday',
-      url: 'https://www.digitaltoday.co.kr/news/articleView.html?idxno=572332',
-      publishedAt: DateTime.parse('2025-06-22T12:44:47.226323+09:00'),
-      relatedCoins: ['ethereum', 'solana', 'polygon'],
-      imageUrl: '',
-      viewCount: 0,
-    );
-
-    // 일시적으로 주석 처리
-    // await firebaseService.addNews(sampleNews);
-    debugPrint('샘플 뉴스 데이터 추가 기능 일시 중단');
-  } catch (e) {
-    debugPrint('샘플 뉴스 데이터 추가 실패: $e');
-  }
 }
 
 // 앱 진입점
@@ -142,14 +153,92 @@ void main() async {
   await dotenv.load();
 
   // Firebase 초기화
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  FirebaseApp? app;
+  try {
+    debugPrint('Firebase 초기화 시도 (main)');
+    debugPrint('플랫폼: ${defaultTargetPlatform.toString()}');
+
+    if (Firebase.apps.isEmpty) {
+      final options = DefaultFirebaseOptions.currentPlatform;
+      debugPrint('Firebase 옵션: $options');
+
+      try {
+        // iOS에서는 특별히 처리
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          debugPrint('iOS 플랫폼에서 Firebase 초기화 시도');
+
+          app = await Firebase.initializeApp(
+            options: options,
+            name: 'CoinAlarmApp', // iOS에서 명시적 앱 이름 지정
+          );
+          debugPrint('iOS에서 Firebase 초기화 성공 - 앱 이름: ${app.name}');
+
+          // iOS에서 Firebase Auth 초기화 확인
+          try {
+            final auth = FirebaseAuth.instance;
+            debugPrint('iOS에서 Firebase Auth 인스턴스 확인: $auth');
+
+            // 현재 로그인된 사용자가 있다면 로그아웃 (초기 상태 정리)
+            if (auth.currentUser != null) {
+              await auth.signOut();
+              debugPrint('iOS에서 기존 사용자 로그아웃 완료');
+            }
+          } catch (e) {
+            debugPrint('iOS에서 Firebase Auth 확인 중 오류: $e');
+          }
+        } else {
+          app = await Firebase.initializeApp(options: options);
+          debugPrint('Firebase 초기화 성공 (main)');
+        }
+      } catch (e) {
+        if (e.toString().contains('duplicate-app')) {
+          // 중복 앱 오류인 경우 기존 앱 사용
+          if (defaultTargetPlatform == TargetPlatform.iOS) {
+            try {
+              app = Firebase.app('CoinAlarmApp');
+              debugPrint('iOS에서 기존 Firebase 앱 사용 - 앱 이름: ${app.name}');
+            } catch (_) {
+              app = Firebase.app();
+              debugPrint('iOS에서 기본 Firebase 앱 사용');
+            }
+          } else {
+            app = Firebase.app();
+            debugPrint('Firebase 중복 앱 오류 해결: 기존 앱 사용 (main)');
+          }
+        } else {
+          debugPrint('Firebase 초기화 실패: $e');
+          debugPrint('스택 트레이스: ${StackTrace.current}');
+          throw e;
+        }
+      }
+    } else {
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        try {
+          app = Firebase.app('CoinAlarmApp');
+          debugPrint('iOS에서 기존 Firebase 앱 사용 - 앱 이름: ${app.name}');
+        } catch (_) {
+          app = Firebase.app();
+          debugPrint('iOS에서 기본 Firebase 앱 사용');
+        }
+      } else {
+        app = Firebase.app();
+        debugPrint('Firebase 이미 초기화됨 (main) - 앱 이름: ${app.name}');
+      }
+    }
+  } catch (e) {
+    debugPrint('Firebase 초기화 실패: $e');
+    debugPrint('스택 트레이스: ${StackTrace.current}');
+    // Firebase 초기화 실패 시 앱 실행을 중단합니다.
+    throw Exception('Firebase 초기화 실패: $e');
+  }
 
   // Hive 초기화
   await Hive.initFlutter();
 
   // Hive 어댑터 등록
-  if (Hive.isAdapterRegistered(36) == false) {
-    debugPrint('Hive 어댑터 등록 생략 - 모의 서비스 사용 중');
+  if (!Hive.isAdapterRegistered(10)) {
+    Hive.registerAdapter(PriceAlertAdapter());
+    debugPrint('Hive 어댑터 등록 완료');
   }
 
   await Hive.openBox('settings');
@@ -164,13 +253,20 @@ void main() async {
   await chartCacheService.initialize();
   await PriceAlertService().initialize();
 
-  // Firebase 서비스 초기화 (모의 서비스로 전환)
+  // Firebase 서비스 초기화
   final firebaseService = FirebaseService();
   try {
     await firebaseService.initialize();
-    debugPrint('Firebase 서비스 초기화 성공 (모의 서비스)');
+    debugPrint('Firebase 서비스 초기화 성공');
   } catch (e) {
     debugPrint('Firebase 서비스 초기화 실패: $e');
+    // 권한 오류인 경우 경고만 표시하고 계속 진행
+    if (!e.toString().contains('permission-denied')) {
+      throw Exception('Firebase 서비스 초기화 실패: $e');
+    } else {
+      debugPrint('Firebase 권한 오류가 발생했지만 앱은 계속 실행됩니다.');
+      debugPrint('Firebase 콘솔에서 Realtime Database 보안 규칙을 확인하세요.');
+    }
   }
 
   // Workmanager 초기화 (백그라운드 태스크 등록) - 모바일 플랫폼에서만 실행
@@ -282,6 +378,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('MyApp: build 메서드 호출됨');
     return MultiProvider(
       providers: [
         // 테마 관련 ViewModel
@@ -291,7 +388,10 @@ class _MyAppState extends State<MyApp> {
 
         // 인증 관련 ViewModel
         ChangeNotifierProvider(
-          create: (_) => AuthViewModel(widget.authService),
+          create: (_) {
+            debugPrint('MyApp: AuthViewModel 생성');
+            return AuthViewModel(widget.authService);
+          },
         ),
 
         // 차트 캐시 서비스 Provider (다른 ViewModel에서 사용)
@@ -334,6 +434,7 @@ class _MyAppState extends State<MyApp> {
       ],
       child: Consumer<ThemeViewModel>(
         builder: (context, themeViewModel, _) {
+          debugPrint('MyApp: ThemeViewModel Consumer 빌드');
           return MaterialApp(
             navigatorKey: MyApp.navigatorKey,
             title: '코인 알람',
@@ -341,7 +442,12 @@ class _MyAppState extends State<MyApp> {
             darkTheme: AppTheme.darkTheme(),
             themeMode: themeViewModel.themeMode,
             debugShowCheckedModeBanner: false,
-            home: const SplashScreen(),
+            home: Builder(
+              builder: (context) {
+                debugPrint('MyApp: SplashScreen 생성 시작');
+                return const SplashScreen();
+              },
+            ),
           );
         },
       ),

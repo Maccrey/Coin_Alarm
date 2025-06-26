@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import '../model/user_model.dart';
 import '../services/auth_service.dart';
 
@@ -30,10 +32,14 @@ class AuthViewModel extends ChangeNotifier {
 
   /// ViewModel 초기화 및 현재 사용자 정보 로드
   AuthViewModel(this._authService) {
+    debugPrint('AuthViewModel: 생성자 호출됨');
     _loadCurrentUser();
 
     // 인증 상태 변경 리스너 등록
     _authService.authStateChanges.listen((user) {
+      debugPrint(
+        'AuthViewModel: 인증 상태 변경 감지 - ${user != null ? "로그인됨" : "로그아웃됨"}',
+      );
       _currentUser = user;
       notifyListeners();
     });
@@ -41,18 +47,32 @@ class AuthViewModel extends ChangeNotifier {
 
   /// 현재 사용자 정보 로드
   Future<void> _loadCurrentUser() async {
+    debugPrint('AuthViewModel: 현재 사용자 정보 로드 시작');
     _setLoading(true);
     try {
+      // 서비스가 초기화되었는지 확인
+      if (!_authService.isInitialized) {
+        debugPrint('AuthViewModel: AuthService가 초기화되지 않음, 초기화 시도');
+        await _authService.initialize();
+        debugPrint('AuthViewModel: AuthService 초기화 완료');
+      }
+
       _currentUser = _authService.currentUser;
       _setError(null);
       debugPrint(
-        'AuthViewModel: 사용자 정보 로드 성공 - ${_currentUser != null ? '로그인됨' : '로그인되지 않음'}',
+        'AuthViewModel: 사용자 정보 로드 성공 - ${_currentUser != null ? '로그인됨 (${_currentUser?.email})' : '로그인되지 않음'}',
       );
     } catch (e) {
       _setError('사용자 정보를 불러오는데 실패했습니다.');
       debugPrint('AuthViewModel: 사용자 정보 로드 실패 - $e');
+      debugPrint('AuthViewModel: 오류 스택 트레이스 - ${StackTrace.current}');
+
+      // 오류 발생 시 모의 사용자로 설정 (앱 작동 유지를 위함)
+      debugPrint('AuthViewModel: 모의 사용자로 설정');
+      _currentUser = null;
     } finally {
       _isInitialized = true;
+      debugPrint('AuthViewModel: 초기화 완료 설정');
       _setLoading(false);
     }
   }
@@ -92,16 +112,21 @@ class AuthViewModel extends ChangeNotifier {
   Future<bool> signInWithEmailAndPassword(String email, String password) async {
     _setLoading(true);
     try {
+      debugPrint(
+        'AuthViewModel: 로그인 시도 - 이메일: $email, 플랫폼: ${defaultTargetPlatform.toString()}',
+      );
       _currentUser = await _authService.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
+      debugPrint('AuthViewModel: 로그인 성공 - 사용자 ID: ${_currentUser?.id}');
       _setError(null);
       notifyListeners();
       return true;
     } catch (e) {
-      _setError('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
       debugPrint('AuthViewModel: 로그인 실패 - $e');
+      debugPrint('AuthViewModel: 오류 스택 트레이스 - ${StackTrace.current}');
+      _setError('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
       return false;
     } finally {
       _setLoading(false);

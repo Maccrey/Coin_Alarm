@@ -32,25 +32,35 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('LoginScreen: initState 호출됨');
+
     // 화면이 마운트된 후에 저장된 데이터 로드 및 상태 동기화
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      debugPrint('LoginScreen: postFrameCallback 호출됨');
       final settingsViewModel = Provider.of<SettingsViewModel>(
         context,
         listen: false,
       );
+      debugPrint('LoginScreen: SettingsViewModel 가져오기 성공');
+
       // Hive에서 저장된 이메일/비밀번호/저장여부 불러오기
       final saveLoginInfo = settingsViewModel.saveLoginInfo;
       setState(() {
         _saveLoginInfo = saveLoginInfo;
       });
+      debugPrint('LoginScreen: 로그인 정보 저장 설정 - $_saveLoginInfo');
+
       if (saveLoginInfo) {
         // 이메일/비밀번호 자동 입력
         final email = settingsViewModel.getSavedEmail();
         final password = settingsViewModel.getSavedPassword();
         if (email != null) _emailController.text = email;
         if (password != null) _passwordController.text = password;
+        debugPrint('LoginScreen: 저장된 이메일/비밀번호 로드 완료');
       }
     });
+
+    debugPrint('LoginScreen: initState 완료');
   }
 
   @override
@@ -62,16 +72,21 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // 로그인 시도
   Future<void> _login() async {
+    debugPrint('LoginScreen: 로그인 시도 시작');
+
     // 폼 유효성 검사
     if (!_formKey.currentState!.validate()) {
+      debugPrint('LoginScreen: 폼 유효성 검사 실패');
       return;
     }
 
     // 키보드 닫기
     FocusScope.of(context).unfocus();
+    debugPrint('LoginScreen: 키보드 닫기');
 
     // 로그인 정보 저장 설정
     try {
+      debugPrint('LoginScreen: 로그인 정보 저장 설정 시작');
       final settingsViewModel = Provider.of<SettingsViewModel>(
         context,
         listen: false,
@@ -81,25 +96,33 @@ class _LoginScreenState extends State<LoginScreen> {
       if (_saveLoginInfo) {
         await settingsViewModel.setSavedEmail(_emailController.text.trim());
         await settingsViewModel.setSavedPassword(_passwordController.text);
+        debugPrint('LoginScreen: 로그인 정보 저장 완료');
       } else {
         await settingsViewModel.clearLoginInfo();
+        debugPrint('LoginScreen: 로그인 정보 삭제 완료');
       }
     } catch (e) {
-      debugPrint('로그인 정보 저장 설정 오류: $e');
+      debugPrint('LoginScreen: 로그인 정보 저장 설정 오류: $e');
     }
 
     // 로그인 시도
+    debugPrint('LoginScreen: AuthViewModel에서 로그인 시도');
     final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
     final success = await authViewModel.signInWithEmailAndPassword(
       _emailController.text.trim(),
       _passwordController.text,
     );
+    debugPrint('LoginScreen: 로그인 결과 - $success');
 
     if (success && mounted) {
       // 로그인 성공 시 홈 화면으로 이동
+      debugPrint('LoginScreen: 로그인 성공, 홈 화면으로 이동 시작');
       Navigator.of(
         context,
       ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
+      debugPrint('LoginScreen: 홈 화면으로 이동 완료');
+    } else {
+      debugPrint('LoginScreen: 로그인 실패 또는 위젯이 마운트되지 않음');
     }
   }
 

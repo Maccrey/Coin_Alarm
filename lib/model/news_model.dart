@@ -31,7 +31,7 @@ class News {
     dynamic coins = json['related_coins'];
     if (coins == null) {
       // Firebase Realtime Database 구조에 맞게 필드 이름 확인
-      coins = json['related_coins'];
+      coins = json['relatedCoins'];
     }
 
     List<String> relatedCoins;
@@ -48,11 +48,35 @@ class News {
     }
 
     // Firebase Realtime Database의 필드 이름 매핑
-    final String publishedAtStr =
-        json['published_at'] ??
-        json['pub_date'] ??
-        DateTime.now().toIso8601String();
-    final String imageUrlStr = json['image_url'] ?? '';
+    String? publishedAtStr = json['published_at'] ?? json['pub_date'];
+
+    // publishedAt이 없는 경우 timestamp 필드 확인 (Firebase Realtime Database에서 자주 사용)
+    if (publishedAtStr == null) {
+      final timestamp = json['timestamp'] ?? json['publishedAt'];
+      if (timestamp is int) {
+        // Unix timestamp (밀리초)
+        return News(
+          id: json['id'],
+          title: json['title'],
+          content: json['content'],
+          source: json['source'],
+          url: json['url'],
+          publishedAt: DateTime.fromMillisecondsSinceEpoch(timestamp).toLocal(),
+          relatedCoins: relatedCoins,
+          imageUrl: json['image_url'] ?? json['imageUrl'],
+          viewCount:
+              json['view_count'] as int? ?? json['viewCount'] as int? ?? 0,
+        );
+      } else if (timestamp is String) {
+        // ISO 문자열
+        publishedAtStr = timestamp;
+      } else {
+        // 기본값
+        publishedAtStr = DateTime.now().toIso8601String();
+      }
+    }
+
+    final String imageUrlStr = json['image_url'] ?? json['imageUrl'] ?? '';
 
     return News(
       id: json['id'],
@@ -63,7 +87,7 @@ class News {
       publishedAt: DateTime.parse(publishedAtStr).toLocal(),
       relatedCoins: relatedCoins,
       imageUrl: imageUrlStr,
-      viewCount: json['view_count'] as int? ?? 0,
+      viewCount: json['view_count'] as int? ?? json['viewCount'] as int? ?? 0,
     );
   }
 

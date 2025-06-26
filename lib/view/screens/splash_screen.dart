@@ -74,34 +74,109 @@ class _SplashScreenState extends State<SplashScreen>
       return;
     }
 
-    try {
-      // 인증 상태 확인
-      final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
-      debugPrint('SplashScreen: AuthViewModel 가져오기 성공');
+    // 전체 타임아웃 설정 (10초)
+    bool timeoutOccurred = false;
+    Timer? timeoutTimer;
 
-      // 로그인 상태에 따라 화면 전환
-      final isLoggedIn = authViewModel.isLoggedIn;
-      debugPrint('SplashScreen: 로그인 상태 - $isLoggedIn');
+    timeoutTimer = Timer(const Duration(seconds: 10), () {
+      timeoutOccurred = true;
+      debugPrint('SplashScreen: 전체 프로세스 타임아웃 발생, 강제로 로그인 화면으로 이동');
 
-      // 안전하게 화면 전환
-      if (!mounted) return;
-
-      if (isLoggedIn) {
-        debugPrint('SplashScreen: 홈 화면으로 이동');
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      } else {
-        debugPrint('SplashScreen: 로그인 화면으로 이동');
+      if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
         );
       }
+    });
+
+    try {
+      // 인증 상태 확인
+      debugPrint('SplashScreen: AuthViewModel 가져오기 시도');
+      final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+      debugPrint('SplashScreen: AuthViewModel 가져오기 성공');
+
+      // AuthViewModel이 초기화될 때까지 기다림 (최대 5초)
+      if (!authViewModel.isInitialized) {
+        debugPrint('SplashScreen: AuthViewModel 초기화 대기 시작');
+
+        // 타임아웃 설정 (5초)
+        bool isInitialized = false;
+        int attempts = 0;
+        const maxAttempts = 50; // 100ms 간격으로 50번 시도 (총 5초)
+
+        while (!isInitialized &&
+            attempts < maxAttempts &&
+            mounted &&
+            !timeoutOccurred) {
+          await Future.delayed(const Duration(milliseconds: 100));
+          attempts++;
+
+          // 현재 상태 확인
+          isInitialized = authViewModel.isInitialized;
+
+          if (attempts % 10 == 0) {
+            debugPrint(
+              'SplashScreen: AuthViewModel 초기화 대기 중... ($attempts/$maxAttempts)',
+            );
+          }
+        }
+
+        if (!isInitialized && !timeoutOccurred) {
+          debugPrint('SplashScreen: AuthViewModel 초기화 타임아웃, 강제로 진행');
+        } else if (isInitialized) {
+          debugPrint('SplashScreen: AuthViewModel 초기화 완료 확인');
+        }
+      }
+
+      // 타임아웃이 발생했는지 확인
+      if (timeoutOccurred) {
+        debugPrint('SplashScreen: 이미 타임아웃으로 화면 전환됨');
+        timeoutTimer.cancel();
+        return;
+      }
+
+      // 로그인 상태에 따라 화면 전환
+      final isLoggedIn = authViewModel.isLoggedIn;
+      debugPrint('SplashScreen: 로그인 상태 - $isLoggedIn');
+      debugPrint(
+        'SplashScreen: 현재 사용자 - ${authViewModel.currentUser?.email ?? "없음"}',
+      );
+
+      // 안전하게 화면 전환
+      if (!mounted) {
+        debugPrint('SplashScreen: 화면 전환 전 위젯이 마운트 해제됨');
+        timeoutTimer.cancel();
+        return;
+      }
+
+      // 타임아웃 타이머 취소
+      timeoutTimer.cancel();
+
+      debugPrint(
+        'SplashScreen: 화면 전환 시도 - ${isLoggedIn ? "홈 화면" : "로그인 화면"}으로 이동',
+      );
+      if (isLoggedIn) {
+        debugPrint('SplashScreen: 홈 화면으로 이동 시작');
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+        debugPrint('SplashScreen: 홈 화면으로 이동 완료');
+      } else {
+        debugPrint('SplashScreen: 로그인 화면으로 이동 시작');
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+        debugPrint('SplashScreen: 로그인 화면으로 이동 완료');
+      }
     } catch (e) {
+      // 타임아웃 타이머 취소
+      timeoutTimer.cancel();
+
       debugPrint('SplashScreen: 오류 발생 - $e');
+      debugPrint('SplashScreen: 오류 스택 트레이스 - ${StackTrace.current}');
 
       // 오류 발생 시 로그인 화면으로 이동
-      if (mounted) {
+      if (mounted && !timeoutOccurred) {
         debugPrint('SplashScreen: 오류로 인해 로그인 화면으로 이동');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const LoginScreen()),

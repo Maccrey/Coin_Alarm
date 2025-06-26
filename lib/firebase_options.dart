@@ -5,8 +5,6 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 /// 기본 Firebase 옵션 설정
-///
-/// 실제 값은 Firebase 콘솔에서 앱을 등록한 후 생성된 값으로 대체해야 합니다.
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -20,10 +18,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
         return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -36,47 +31,58 @@ class DefaultFirebaseOptions {
     }
   }
 
-  // 웹 플랫폼 설정 (테스트용 값)
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAgUhHU8wSJgO5MVNy95tMT07NEjzMOfz0',
-    appId: '1:448618578101:web:0b650370bb29e29cac3efc',
-    messagingSenderId: '448618578101',
-    projectId: 'react-native-firebase-testing',
-    authDomain: 'react-native-firebase-testing.firebaseapp.com',
-    storageBucket: 'react-native-firebase-testing.appspot.com',
-    measurementId: 'G-F79DJ0VFGS',
+    apiKey: 'AIzaSyC2U56xPgPIt4yWeu4TY5kuZT55wXSV9WY',
+    appId: '1:471717023137:web:2fe8c2c0f23b3d7b944fe0',
+    messagingSenderId: '471717023137',
+    projectId: 'coinalarm-55400',
+    authDomain: 'coinalarm-55400.firebaseapp.com',
+    databaseURL: 'https://coinalarm-55400-default-rtdb.firebaseio.com',
+    storageBucket: 'coinalarm-55400.firebasestorage.app',
+    measurementId: 'G-W2TP22XT0F',
   );
 
-  // 안드로이드 플랫폼 설정 (테스트용 값)
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCuu4tbv9CwwTudNOweMNstzZHIDBhgJxA',
-    appId: '1:448618578101:android:0446912d5f1476b6ac3efc',
-    messagingSenderId: '448618578101',
-    projectId: 'react-native-firebase-testing',
-    storageBucket: 'react-native-firebase-testing.appspot.com',
+    apiKey: 'AIzaSyAdVtFTxfuXI_2tNDd3FSfFg8fwxtDzaQo',
+    appId: '1:471717023137:android:3fd397650a992a93944fe0',
+    messagingSenderId: '471717023137',
+    projectId: 'coinalarm-55400',
+    databaseURL: 'https://coinalarm-55400-default-rtdb.firebaseio.com',
+    storageBucket: 'coinalarm-55400.firebasestorage.app',
   );
 
-  // iOS 플랫폼 설정 (테스트용 값)
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAHAsf51D0A407EklG1bs-5wA7EbyfNFg0',
-    appId: '1:448618578101:ios:0b259f8a0d57ccecac3efc',
-    messagingSenderId: '448618578101',
-    projectId: 'react-native-firebase-testing',
-    storageBucket: 'react-native-firebase-testing.appspot.com',
+    apiKey: 'AIzaSyCJmH5wPU_zNsmkkn3q7qyfbEunHBQc_G0',
+    appId: '1:471717023137:ios:6a9a0be1a7a8a27f944fe0',
+    messagingSenderId: '471717023137',
+    projectId: 'coinalarm-55400',
+    databaseURL: 'https://coinalarm-55400-default-rtdb.firebaseio.com',
+    storageBucket: 'coinalarm-55400.firebasestorage.app',
+    iosBundleId: 'com.example.coinAlarm',
+    androidClientId:
+        '471717023137-3fd397650a992a93944fe0.apps.googleusercontent.com',
     iosClientId:
-        '448618578101-28tsenal97j4v1nljt65h7r2tgnp0q11.apps.googleusercontent.com',
-    iosBundleId: 'io.flutter.plugins.firebaseCoreTesting',
+        '471717023137-6a9a0be1a7a8a27f944fe0.apps.googleusercontent.com',
   );
 
-  // macOS 플랫폼 설정 (테스트용 값)
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyAHAsf51D0A407EklG1bs-5wA7EbyfNFg0',
-    appId: '1:448618578101:ios:0b259f8a0d57ccecac3efc',
-    messagingSenderId: '448618578101',
-    projectId: 'react-native-firebase-testing',
-    storageBucket: 'react-native-firebase-testing.appspot.com',
-    iosClientId:
-        '448618578101-28tsenal97j4v1nljt65h7r2tgnp0q11.apps.googleusercontent.com',
-    iosBundleId: 'io.flutter.plugins.firebaseCoreTesting',
+    apiKey: 'AIzaSyCJmH5wPU_zNsmkkn3q7qyfbEunHBQc_G0',
+    appId: '1:471717023137:ios:6a9a0be1a7a8a27f944fe0',
+    messagingSenderId: '471717023137',
+    projectId: 'coinalarm-55400',
+    databaseURL: 'https://coinalarm-55400-default-rtdb.firebaseio.com',
+    storageBucket: 'coinalarm-55400.firebasestorage.app',
+    iosBundleId: 'com.example.coinAlarm',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyC2U56xPgPIt4yWeu4TY5kuZT55wXSV9WY',
+    appId: '1:471717023137:web:88a6b82ca3a44389944fe0',
+    messagingSenderId: '471717023137',
+    projectId: 'coinalarm-55400',
+    authDomain: 'coinalarm-55400.firebaseapp.com',
+    databaseURL: 'https://coinalarm-55400-default-rtdb.firebaseio.com',
+    storageBucket: 'coinalarm-55400.firebasestorage.app',
+    measurementId: 'G-5B64Z0RL2Y',
   );
 }

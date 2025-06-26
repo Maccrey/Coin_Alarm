@@ -37,22 +37,33 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('HomeScreen: initState 호출됨');
 
     // 기본적으로 DefaultSettings에서 기본 코인 목록을 가져옴
     _selectedCoins = List<String>.from(DefaultSettings.defaultFavoriteCoins);
+    debugPrint('HomeScreen: 기본 코인 목록 설정 - $_selectedCoins');
 
     // CryptoViewModel의 새로고침 간격이 변경될 때마다 UI 업데이트를 위한 리스너 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('HomeScreen: postFrameCallback 호출됨');
       final cryptoViewModel = Provider.of<CryptoViewModel>(
         context,
         listen: false,
       );
+      debugPrint('HomeScreen: CryptoViewModel 가져오기 성공');
 
       // 화면이 처음 로드될 때 데이터 가져오기
       if (cryptoViewModel.topCoins.isEmpty) {
+        debugPrint('HomeScreen: 코인 데이터가 비어있어 새로고침 시작');
         cryptoViewModel.refresh();
+      } else {
+        debugPrint(
+          'HomeScreen: 이미 코인 데이터가 있음 (${cryptoViewModel.topCoins.length}개)',
+        );
       }
     });
+
+    debugPrint('HomeScreen: initState 완료');
   }
 
   @override

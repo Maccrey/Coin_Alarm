@@ -10,10 +10,19 @@ import 'package:firebase_core/firebase_core.dart';
 import '../model/news_model.dart';
 import '../model/coin_model.dart';
 import '../model/price_alert_model.dart';
+import '../firebase_options.dart';
+
+/// 뉴스 페이징 결과 모델
+class NewsPageResult {
+  final List<News> news;
+  final dynamic lastDoc; // Firestore: DocumentSnapshot, RealtimeDB: key
+  final bool hasMore;
+  NewsPageResult({required this.news, this.lastDoc, required this.hasMore});
+}
 
 /// Firebase 서비스
 ///
-/// Firebase Realtime Database에서 데이터를 가져오며, 웹 환경에서는 모의 서비스로 대체됩니다.
+/// Firebase Realtime Database에서 데이터를 가져옵니다.
 class FirebaseService {
   // 싱글톤 패턴 구현
   static final FirebaseService _instance = FirebaseService._internal();
@@ -27,86 +36,103 @@ class FirebaseService {
   bool _isInitialized = false;
   bool _isWeb = false;
 
+  // 초기화 상태 확인용 public getter
+  bool get isInitialized => _isInitialized;
+  bool get isWeb => _isWeb;
+
   /// 서비스 초기화
   Future<void> initialize() async {
-    if (_isInitialized) return;
+    if (_isInitialized) {
+      debugPrint('FirebaseService: 이미 초기화되어 있습니다.');
+      return;
+    }
 
     debugPrint('FirebaseService: 초기화 시작');
 
     try {
       _isWeb = kIsWeb;
+      debugPrint('FirebaseService: 플랫폼 - ${_isWeb ? "웹" : "모바일/데스크톱"}');
 
-      if (!_isWeb) {
-        // 모바일 환경에서는 실제 Firebase 사용
-        _database = FirebaseDatabase.instance;
-        _database.setPersistenceEnabled(true); // 오프라인 캐싱 활성화
-        _database.setPersistenceCacheSizeBytes(10000000); // 캐시 크기 설정 (10MB)
-        _isInitialized = true;
-        debugPrint('FirebaseService: 초기화 완료');
+      // Firebase 앱 인스턴스 확인
+      final apps = Firebase.apps;
+      debugPrint('FirebaseService: Firebase 앱 수: ${apps.length}');
+
+      FirebaseApp app;
+      if (apps.isEmpty) {
+        debugPrint('FirebaseService: Firebase 앱이 초기화되지 않았습니다. 초기화를 진행합니다.');
+        try {
+          app = await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
+          debugPrint('FirebaseService: Firebase 앱 초기화 성공');
+        } catch (e) {
+          debugPrint('FirebaseService: Firebase 앱 초기화 실패 - $e');
+          throw e;
+        }
       } else {
-        // 웹 환경에서는 모의 데이터 사용
-        await _initializeMockData();
-        _isInitialized = true;
-        debugPrint('FirebaseService: 초기화 완료 (모의 서비스)');
+        app = Firebase.app();
+        debugPrint('FirebaseService: 기존 Firebase 앱 사용');
       }
+
+      // 데이터베이스 인스턴스 생성 전에 URL 확인
+      final databaseURL = app.options.databaseURL;
+      if (databaseURL == null || databaseURL.isEmpty) {
+        debugPrint('FirebaseService: 오류 - Firebase Database URL이 설정되지 않았습니다.');
+        throw Exception('Firebase Database URL이 설정되지 않았습니다.');
+      }
+
+      debugPrint('FirebaseService: Database URL - $databaseURL');
+
+      // 명시적으로 URL 설정하여 데이터베이스 인스턴스 생성
+      _database = FirebaseDatabase.instanceFor(
+        app: app,
+        databaseURL: databaseURL,
+      );
+      debugPrint('FirebaseService: Firebase Realtime Database 인스턴스 생성 성공');
+
+      // 연결 설정
+      _database.setLoggingEnabled(true); // 로깅 활성화
+      _database.setPersistenceEnabled(true); // 오프라인 캐싱 활성화
+
+      // 데이터베이스 연결 테스트
+      try {
+        // 연결 확인 전 짧은 지연 추가
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        final testRef = _database.ref('.info/connected');
+        final snapshot = await testRef.get();
+        final connected = snapshot.value == true;
+        debugPrint(
+          'FirebaseService: Firebase Realtime Database 연결 상태: ${connected ? "연결됨" : "연결 안됨"}',
+        );
+
+        if (!connected) {
+          debugPrint('FirebaseService: 데이터베이스 연결이 확인되지 않았습니다. 계속 진행합니다.');
+        }
+      } catch (e) {
+        // 권한 오류인 경우 경고만 표시하고 계속 진행
+        if (e.toString().contains('permission-denied')) {
+          debugPrint('FirebaseService: 데이터베이스 권한 오류 - $e');
+          debugPrint(
+            'FirebaseService: 권한 오류가 발생했지만 계속 진행합니다. Firebase 콘솔에서 보안 규칙을 확인하세요.',
+          );
+        } else {
+          debugPrint('FirebaseService: 데이터베이스 연결 테스트 실패 - $e');
+          throw e;
+        }
+      }
+
+      _isInitialized = true;
+      debugPrint('FirebaseService: 초기화 완료');
     } catch (e) {
       debugPrint('FirebaseService: 초기화 실패 - $e');
-      // 실패 시 모의 데이터로 폴백
-      await _initializeMockData();
-      _isInitialized = true;
-      debugPrint('FirebaseService: 모의 서비스로 폴백');
-    }
-  }
-
-  /// 모의 데이터 초기화
-  Future<void> _initializeMockData() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // 모의 뉴스 데이터 초기화
-    if (prefs.getString('mock_news') == null) {
-      final mockNews = [
-        News(
-          id: '003f6eebef791b3f9182f4c127d214db',
-          title: '[주요 뉴스] 바운드리스, 블록체인 인프라 혁신 ... 조연이 빛나는 무대',
-          content:
-              "[블록미디어] 2025년 블록체인 산업은 '무대 위'가 아닌 '무대 뒤'로 중심이 이동했다. 스마트라이트 경쟁이 끝나고, 다른 프로젝트들이 빛날 수 있도록 설계된 인프라 기술이 주목받고 있다. 바운드리스는 이러한 변화의 중심에 있다.",
-          source: 'blockmedia',
-          url: 'https://www.blockmedia.co.kr/archives/932666',
-          publishedAt: DateTime.parse('2025-06-23T12:04:16.450117+09:00'),
-          relatedCoins: ['bitcoin', 'ethereum'],
-          imageUrl:
-              'https://www.blockmedia.co.kr/wp-content/uploads/2025/06/Screenshot-2025-06-19-at-5.39.27PM.png?v=1750645235',
-          viewCount: 0,
-        ),
-        News(
-          id: '01412db61ea7feaae4f314669b9ca9d3',
-          title: '비트코인, 6만 달러 돌파... 기관 투자자 유입 증가',
-          content:
-              "비트코인이 6만 달러를 돌파했다. 이는 기관 투자자들의 유입이 증가하면서 나타난 현상으로 분석된다. 특히 블랙록의 비트코인 ETF가 출시된 이후 기관 자금의 유입이 크게 늘어났다. 전문가들은 이러한 추세가 계속될 경우 연말까지 7만 달러 돌파도 가능할 것으로 전망하고 있다. 한편, 이더리움 역시 강세를 보이며 3,500달러를 향해 상승 중이다.",
-          source: 'cryptonews',
-          url: 'https://example.com/bitcoin-60k',
-          publishedAt: DateTime.now().subtract(const Duration(days: 1)),
-          relatedCoins: ['bitcoin', 'ethereum'],
-          imageUrl:
-              'https://www.blockmedia.co.kr/wp-content/uploads/2025/06/Screenshot-2025-06-19-at-5.39.27PM.png?v=1750645235',
-          viewCount: 0,
-        ),
-      ];
-
-      await prefs.setString(
-        'mock_news',
-        json.encode(mockNews.map((e) => e.toJson()).toList()),
-      );
+      throw e;
     }
   }
 
   /// 뉴스 목록 가져오기
   Future<List<News>> getNews({int limit = 10}) async {
     try {
-      if (_isWeb) {
-        return _getMockNews(limit: limit);
-      }
-
       // Firebase Realtime Database에서 뉴스 데이터 가져오기
       final snapshot = await _database.ref('news').limitToLast(limit).get();
 
@@ -141,39 +167,13 @@ class FirebaseService {
       return [];
     } catch (e) {
       debugPrint('FirebaseService: 뉴스 가져오기 실패 - $e');
-      // 오류 발생 시 모의 데이터로 폴백
-      return _getMockNews(limit: limit);
-    }
-  }
-
-  /// 모의 뉴스 데이터 가져오기
-  Future<List<News>> _getMockNews({int limit = 10}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final newsJson = prefs.getString('mock_news');
-
-      if (newsJson != null) {
-        final List<dynamic> newsData = json.decode(newsJson);
-        final newsList = newsData.map((data) => News.fromJson(data)).toList()
-          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-
-        return newsList.take(limit).toList();
-      }
-      return [];
-    } catch (e) {
-      debugPrint('FirebaseService: 모의 뉴스 가져오기 실패 - $e');
-      return [];
+      rethrow;
     }
   }
 
   /// 뉴스 추가
   Future<void> addNews(News news) async {
     try {
-      if (_isWeb) {
-        await _addMockNews(news);
-        return;
-      }
-
       // Firebase Realtime Database에 뉴스 추가
       await _database.ref('news/${news.id}').set({
         'id': news.id,
@@ -185,30 +185,10 @@ class FirebaseService {
         'image_url': news.imageUrl,
         'related_coins': news.relatedCoins,
         'view_count': news.viewCount,
+        'timestamp': ServerValue.timestamp,
       });
     } catch (e) {
       debugPrint('FirebaseService: 뉴스 추가 실패 - $e');
-      // 오류 발생 시 모의 데이터에 추가
-      await _addMockNews(news);
-    }
-  }
-
-  /// 모의 뉴스 추가
-  Future<void> _addMockNews(News news) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final newsJson = prefs.getString('mock_news');
-
-      final List<dynamic> newsData = newsJson != null
-          ? json.decode(newsJson)
-          : [];
-
-      // 기존 뉴스 목록에 새 뉴스 추가
-      newsData.add(news.toJson());
-
-      await prefs.setString('mock_news', json.encode(newsData));
-    } catch (e) {
-      debugPrint('FirebaseService: 모의 뉴스 추가 실패 - $e');
       rethrow;
     }
   }
@@ -216,11 +196,6 @@ class FirebaseService {
   /// 뉴스 업데이트
   Future<void> updateNews(News news) async {
     try {
-      if (_isWeb) {
-        await _updateMockNews(news);
-        return;
-      }
-
       // Firebase Realtime Database에서 뉴스 업데이트
       await _database.ref('news/${news.id}').update({
         'title': news.title,
@@ -231,32 +206,10 @@ class FirebaseService {
         'image_url': news.imageUrl,
         'related_coins': news.relatedCoins,
         'view_count': news.viewCount,
+        'timestamp': ServerValue.timestamp,
       });
     } catch (e) {
       debugPrint('FirebaseService: 뉴스 업데이트 실패 - $e');
-      // 오류 발생 시 모의 데이터 업데이트
-      await _updateMockNews(news);
-    }
-  }
-
-  /// 모의 뉴스 업데이트
-  Future<void> _updateMockNews(News news) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final newsJson = prefs.getString('mock_news');
-
-      if (newsJson != null) {
-        final List<dynamic> newsData = json.decode(newsJson);
-
-        // 기존 뉴스 찾아 업데이트
-        final index = newsData.indexWhere((data) => data['id'] == news.id);
-        if (index != -1) {
-          newsData[index] = news.toJson();
-          await prefs.setString('mock_news', json.encode(newsData));
-        }
-      }
-    } catch (e) {
-      debugPrint('FirebaseService: 모의 뉴스 업데이트 실패 - $e');
       rethrow;
     }
   }
@@ -264,37 +217,10 @@ class FirebaseService {
   /// 뉴스 삭제
   Future<void> deleteNews(String newsId) async {
     try {
-      if (_isWeb) {
-        await _deleteMockNews(newsId);
-        return;
-      }
-
       // Firebase Realtime Database에서 뉴스 삭제
       await _database.ref('news/$newsId').remove();
     } catch (e) {
       debugPrint('FirebaseService: 뉴스 삭제 실패 - $e');
-      // 오류 발생 시 모의 데이터에서 삭제
-      await _deleteMockNews(newsId);
-    }
-  }
-
-  /// 모의 뉴스 삭제
-  Future<void> _deleteMockNews(String newsId) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final newsJson = prefs.getString('mock_news');
-
-      if (newsJson != null) {
-        final List<dynamic> newsData = json.decode(newsJson);
-
-        // 해당 ID의 뉴스 삭제
-        final filteredNews = newsData
-            .where((data) => data['id'] != newsId)
-            .toList();
-        await prefs.setString('mock_news', json.encode(filteredNews));
-      }
-    } catch (e) {
-      debugPrint('FirebaseService: 모의 뉴스 삭제 실패 - $e');
       rethrow;
     }
   }
@@ -302,10 +228,6 @@ class FirebaseService {
   /// 코인별 뉴스 가져오기
   Future<List<News>> getNewsByCoin(String coinId, {int limit = 5}) async {
     try {
-      if (_isWeb) {
-        return _getMockNewsByCoin(coinId, limit: limit);
-      }
-
       // Firebase Realtime Database에서 특정 코인 관련 뉴스 가져오기
       // 참고: 실제 구현에서는 쿼리 최적화가 필요할 수 있음
       final snapshot = await _database.ref('news').get();
@@ -360,78 +282,63 @@ class FirebaseService {
       return [];
     } catch (e) {
       debugPrint('FirebaseService: 코인별 뉴스 가져오기 실패 - $e');
-      // 오류 발생 시 모의 데이터로 폴백
-      return _getMockNewsByCoin(coinId, limit: limit);
-    }
-  }
-
-  /// 모의 코인별 뉴스 가져오기
-  Future<List<News>> _getMockNewsByCoin(String coinId, {int limit = 5}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final newsJson = prefs.getString('mock_news');
-
-      if (newsJson != null) {
-        final List<dynamic> newsData = json.decode(newsJson);
-        final newsList =
-            newsData
-                .map((data) => News.fromJson(data))
-                .where((news) => news.relatedCoins.contains(coinId))
-                .toList()
-              ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-
-        return newsList.take(limit).toList();
-      }
-      return [];
-    } catch (e) {
-      debugPrint('FirebaseService: 모의 코인별 뉴스 가져오기 실패 - $e');
-      return [];
+      rethrow;
     }
   }
 
   /// 가격 알림 목록 가져오기
   Future<List<PriceAlert>> getPriceAlerts(String userId) async {
-    // 가격 알림은 모의 데이터만 사용 (실제 Firebase 구현은 생략)
-    return _getMockPriceAlerts(userId);
-  }
-
-  /// 모의 가격 알림 목록 가져오기
-  Future<List<PriceAlert>> _getMockPriceAlerts(String userId) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final alertsJson = prefs.getString('mock_alerts_$userId');
+      final snapshot = await _database.ref('price_alerts/$userId').get();
 
-      if (alertsJson != null) {
-        final List<dynamic> alertsData = json.decode(alertsJson);
-        return alertsData.map((data) => PriceAlert.fromJson(data)).toList();
+      if (snapshot.exists) {
+        final List<PriceAlert> alerts = [];
+        final Map<dynamic, dynamic> values =
+            snapshot.value as Map<dynamic, dynamic>;
+
+        values.forEach((key, value) {
+          final Map<String, dynamic> alertData = {
+            'id': value['id'] ?? key,
+            'user_id': value['user_id'] ?? userId,
+            'coin_id': value['coin_id'] ?? '',
+            'coin_symbol': value['coin_symbol'] ?? '',
+            'price_target': value['price_target'] ?? 0.0,
+            'is_above': value['is_above'] ?? true,
+            'is_triggered': value['is_triggered'] ?? false,
+            'created_at':
+                value['created_at'] ?? DateTime.now().toIso8601String(),
+            'triggered_at': value['triggered_at'],
+            'notes': value['notes'],
+          };
+
+          alerts.add(PriceAlert.fromJson(alertData));
+        });
+
+        return alerts;
       }
+
       return [];
     } catch (e) {
       debugPrint('FirebaseService: 가격 알림 목록 가져오기 실패 - $e');
-      return [];
+      rethrow;
     }
   }
 
   /// 가격 알림 추가
   Future<void> addPriceAlert(String userId, PriceAlert alert) async {
-    // 가격 알림은 모의 데이터만 사용 (실제 Firebase 구현은 생략)
-    await _addMockPriceAlert(userId, alert);
-  }
-
-  /// 모의 가격 알림 추가
-  Future<void> _addMockPriceAlert(String userId, PriceAlert alert) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final alertsJson = prefs.getString('mock_alerts_$userId');
-
-      final List<dynamic> alertsData = alertsJson != null
-          ? json.decode(alertsJson)
-          : [];
-
-      // 기존 알림 목록에 새 알림 추가
-      alertsData.add(alert.toJson());
-
-      await prefs.setString('mock_alerts_$userId', json.encode(alertsData));
+      await _database.ref('price_alerts/$userId/${alert.id}').set({
+        'id': alert.id,
+        'user_id': alert.userId,
+        'coin_id': alert.coinId,
+        'coin_symbol': alert.coinSymbol,
+        'price_target': alert.priceTarget,
+        'is_above': alert.isAbove,
+        'is_triggered': alert.isTriggered,
+        'created_at': alert.createdAt.toIso8601String(),
+        'triggered_at': alert.triggeredAt?.toIso8601String(),
+        'notes': alert.notes,
+      });
     } catch (e) {
       debugPrint('FirebaseService: 가격 알림 추가 실패 - $e');
       rethrow;
@@ -440,26 +347,14 @@ class FirebaseService {
 
   /// 가격 알림 업데이트
   Future<void> updatePriceAlert(String userId, PriceAlert alert) async {
-    // 가격 알림은 모의 데이터만 사용 (실제 Firebase 구현은 생략)
-    await _updateMockPriceAlert(userId, alert);
-  }
-
-  /// 모의 가격 알림 업데이트
-  Future<void> _updateMockPriceAlert(String userId, PriceAlert alert) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final alertsJson = prefs.getString('mock_alerts_$userId');
-
-      if (alertsJson != null) {
-        final List<dynamic> alertsData = json.decode(alertsJson);
-
-        // 기존 알림 찾아 업데이트
-        final index = alertsData.indexWhere((data) => data['id'] == alert.id);
-        if (index != -1) {
-          alertsData[index] = alert.toJson();
-          await prefs.setString('mock_alerts_$userId', json.encode(alertsData));
-        }
-      }
+      await _database.ref('price_alerts/$userId/${alert.id}').update({
+        'price_target': alert.priceTarget,
+        'is_above': alert.isAbove,
+        'is_triggered': alert.isTriggered,
+        'triggered_at': alert.triggeredAt?.toIso8601String(),
+        'notes': alert.notes,
+      });
     } catch (e) {
       debugPrint('FirebaseService: 가격 알림 업데이트 실패 - $e');
       rethrow;
@@ -468,43 +363,177 @@ class FirebaseService {
 
   /// 가격 알림 삭제
   Future<void> deletePriceAlert(String userId, String alertId) async {
-    // 가격 알림은 모의 데이터만 사용 (실제 Firebase 구현은 생략)
-    await _deleteMockPriceAlert(userId, alertId);
-  }
-
-  /// 모의 가격 알림 삭제
-  Future<void> _deleteMockPriceAlert(String userId, String alertId) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final alertsJson = prefs.getString('mock_alerts_$userId');
-
-      if (alertsJson != null) {
-        final List<dynamic> alertsData = json.decode(alertsJson);
-
-        // 해당 ID의 알림 삭제
-        final filteredAlerts = alertsData
-            .where((data) => data['id'] != alertId)
-            .toList();
-        await prefs.setString(
-          'mock_alerts_$userId',
-          json.encode(filteredAlerts),
-        );
-      }
+      await _database.ref('price_alerts/$userId/$alertId').remove();
     } catch (e) {
       debugPrint('FirebaseService: 가격 알림 삭제 실패 - $e');
       rethrow;
     }
   }
 
-  /// 이미지 업로드 (모의 구현)
+  /// 이미지 업로드 (실제 구현은 Firebase Storage 필요)
   Future<String> uploadImage(String path, List<int> bytes) async {
-    // 실제로는 이미지를 업로드하지 않고, 가상 URL 반환
-    await Future.delayed(const Duration(seconds: 1));
-    return 'https://example.com/mock-image-${DateTime.now().millisecondsSinceEpoch}.jpg';
+    // 실제로는 Firebase Storage에 업로드 로직 구현 필요
+    throw UnimplementedError('이미지 업로드 기능은 아직 구현되지 않았습니다.');
   }
 
   /// 리소스 정리
   void dispose() {
     // 리소스 정리가 필요한 경우 여기에 구현
+  }
+
+  /// Firebase Realtime Database에서 페이징된 뉴스 데이터 가져오기
+  Future<NewsPageResult> getNewsPaged({
+    int limit = 20,
+    dynamic startAfter,
+  }) async {
+    debugPrint(
+      'FirebaseService: [뉴스 요청] 시작 - limit: $limit, startAfter: $startAfter',
+    );
+
+    if (!isInitialized) {
+      debugPrint('FirebaseService: [뉴스 요청] Firebase가 초기화되지 않음, 초기화 시도');
+      await initialize();
+    }
+
+    try {
+      final startTime = DateTime.now();
+      final databaseRef = _database.ref();
+      final newsRef = databaseRef.child('news');
+
+      debugPrint(
+        'FirebaseService: [뉴스 요청] Realtime Database 경로: ${newsRef.path}',
+      );
+
+      // 최신 뉴스부터 가져오기 위해 orderByChild('timestamp') 사용
+      Query query = newsRef.orderByChild('timestamp').limitToLast(limit);
+
+      debugPrint('FirebaseService: [뉴스 요청] 쿼리 실행 중...');
+      final snapshot = await query.get();
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+
+      debugPrint(
+        'FirebaseService: [뉴스 요청] 응답 받음 - 소요 시간: ${duration.inMilliseconds}ms, 데이터 있음: ${snapshot.exists}',
+      );
+
+      if (!snapshot.exists) {
+        debugPrint('FirebaseService: [뉴스 요청] 스냅샷에 데이터 없음');
+        return NewsPageResult(news: [], lastDoc: null, hasMore: false);
+      }
+
+      final Map<dynamic, dynamic>? data =
+          snapshot.value as Map<dynamic, dynamic>?;
+
+      if (data == null) {
+        debugPrint('FirebaseService: [뉴스 요청] 데이터가 null임');
+        return NewsPageResult(news: [], lastDoc: null, hasMore: false);
+      }
+
+      debugPrint('FirebaseService: [뉴스 요청] 데이터 맵 크기: ${data.length}개 항목');
+
+      int successCount = 0;
+      int errorCount = 0;
+      final newsList = <News>[];
+
+      data.forEach((key, value) {
+        try {
+          // Firebase Realtime Database는 Map<dynamic, dynamic> 형태로 반환하므로 변환 필요
+          final Map<String, dynamic> newsData = Map<String, dynamic>.from(
+            value as Map,
+          );
+
+          // ID 필드가 없는 경우 키를 ID로 사용
+          if (!newsData.containsKey('id')) {
+            newsData['id'] = key.toString();
+          }
+
+          // 첫 번째 항목의 데이터 구조 로깅
+          if (successCount == 0) {
+            debugPrint(
+              'FirebaseService: [뉴스 요청] 첫 번째 항목 데이터 구조: ${newsData.keys.join(", ")}',
+            );
+            debugPrint(
+              'FirebaseService: [뉴스 요청] 첫 번째 항목 ID: ${newsData['id']}, 제목: ${newsData['title'] ?? "제목 없음"}',
+            );
+          }
+
+          // 필드명 정규화 - Firebase Realtime Database는 카멜케이스를 사용할 수 있음
+          if (!newsData.containsKey('published_at') &&
+              newsData.containsKey('publishedAt')) {
+            newsData['published_at'] = newsData['publishedAt'];
+          }
+
+          if (!newsData.containsKey('image_url') &&
+              newsData.containsKey('imageUrl')) {
+            newsData['image_url'] = newsData['imageUrl'];
+          }
+
+          if (!newsData.containsKey('view_count') &&
+              newsData.containsKey('viewCount')) {
+            newsData['view_count'] = newsData['viewCount'];
+          }
+
+          if (!newsData.containsKey('related_coins') &&
+              newsData.containsKey('relatedCoins')) {
+            newsData['related_coins'] = newsData['relatedCoins'];
+          }
+
+          final news = News.fromJson(newsData);
+          newsList.add(news);
+          successCount++;
+        } catch (e) {
+          errorCount++;
+          debugPrint('FirebaseService: [뉴스 요청] 항목 변환 오류 - 키: $key, 오류: $e');
+
+          // 첫 번째 오류 발생 시 데이터 구조 로깅
+          if (errorCount == 1) {
+            try {
+              final rawData = value as Map;
+              debugPrint(
+                'FirebaseService: [뉴스 요청] 오류 항목 데이터 구조: ${rawData.keys.join(", ")}',
+              );
+              // 원본 데이터 출력
+              debugPrint('FirebaseService: [뉴스 요청] 오류 항목 원본 데이터: $rawData');
+            } catch (e2) {
+              debugPrint('FirebaseService: [뉴스 요청] 오류 항목 데이터 구조 확인 실패: $e2');
+            }
+          }
+        }
+      });
+
+      debugPrint(
+        'FirebaseService: [뉴스 요청] 데이터 변환 결과 - 성공: $successCount개, 실패: $errorCount개',
+      );
+
+      // 최신순으로 정렬 (publishedAt 기준 내림차순)
+      newsList.sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+
+      if (newsList.isNotEmpty) {
+        debugPrint(
+          'FirebaseService: [뉴스 요청] 첫 번째 뉴스 - ID: ${newsList.first.id}, 제목: ${newsList.first.title}, 시간: ${newsList.first.publishedAt}',
+        );
+        debugPrint(
+          'FirebaseService: [뉴스 요청] 마지막 뉴스 - ID: ${newsList.last.id}, 제목: ${newsList.last.title}, 시간: ${newsList.last.publishedAt}',
+        );
+      }
+
+      // 더 데이터가 있는지 여부 (Realtime Database에서는 정확한 판단이 어려움)
+      // 요청한 limit보다 적은 데이터가 반환되면 더 이상 데이터가 없다고 가정
+      final hasMore = newsList.length >= limit;
+
+      debugPrint(
+        'FirebaseService: [뉴스 요청] 완료 - ${newsList.length}개 뉴스, 더 있음: $hasMore',
+      );
+
+      return NewsPageResult(
+        news: newsList,
+        lastDoc: null, // Realtime Database에서는 lastDoc 개념이 다름
+        hasMore: hasMore,
+      );
+    } catch (e) {
+      debugPrint('FirebaseService: [뉴스 요청] 예외 발생 - $e');
+      rethrow;
+    }
   }
 }

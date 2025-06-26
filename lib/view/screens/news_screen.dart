@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import '../../viewmodel/news_viewmodel.dart';
 // import '../../data/dummy_coins.dart';
 import '../../model/news_model.dart';
@@ -22,24 +23,67 @@ class _NewsScreenState extends State<NewsScreen> {
   // 검색 컨트롤러
   final TextEditingController _searchController = TextEditingController();
 
+  // 스크롤 컨트롤러(페이징용)
+  final ScrollController _scrollController = ScrollController();
+
+  Timer? _searchDebounce;
+  String _lastSearchQuery = '';
+
   @override
   void initState() {
     super.initState();
-    // 컴포넌트가 마운트되면 뉴스 데이터 로드
+    _scrollController.addListener(_scrollListener);
+    _searchController.addListener(() {
+      // 검색어가 변경될 때마다 검색 수행
+      if (_searchController.text != _lastSearchQuery) {
+        _performSearch(_searchController.text);
+      }
+    });
+
+    // 화면 초기화 시 뉴스 데이터 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('뉴스 화면 초기화: 페이징 뉴스 첫 페이지 로드 요청');
       final newsViewModel = Provider.of<NewsViewModel>(context, listen: false);
-      // 모든 필터 초기화 후 전체 뉴스 로드
-      _selectedFilter = '전체';
-      newsViewModel.clearFilter(); // 필터 초기화
-      newsViewModel.refreshNews(); // 전체 뉴스 로드
-      debugPrint('뉴스 화면 초기화: 전체 뉴스 로드 요청');
+
+      // 데이터가 없는 경우에만 로드
+      if (newsViewModel.pagedNewsList.isEmpty) {
+        debugPrint('뉴스 화면 초기화: 데이터가 없어 첫 페이지 로드 요청');
+        newsViewModel.fetchInitialNewsPage();
+      } else {
+        debugPrint(
+          '뉴스 화면 초기화: 이미 ${newsViewModel.pagedNewsList.length}개 데이터가 있어 로드 건너뜀',
+        );
+      }
     });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  // 스크롤 이벤트 처리
+  void _scrollListener() {
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+
+    // 스크롤이 80% 이상 내려갔을 때 추가 데이터 로드
+    if (currentScroll >= maxScroll * 0.8) {
+      debugPrint('NewsScreen: 스크롤 80% 이상 도달, 추가 데이터 로드 요청');
+      final newsViewModel = Provider.of<NewsViewModel>(context, listen: false);
+
+      // 이미 로딩 중이거나 더 이상 데이터가 없으면 건너뜀
+      if (!newsViewModel.isLoadingMore && newsViewModel.hasMore) {
+        debugPrint('NewsScreen: 다음 페이지 로드 요청');
+        newsViewModel.fetchNextNewsPage();
+      } else {
+        debugPrint(
+          'NewsScreen: 추가 데이터 로드 건너뜀 - 로딩 중: ${newsViewModel.isLoadingMore}, 더 있음: ${newsViewModel.hasMore}',
+        );
+      }
+    }
   }
 
   // 필터 적용
@@ -53,11 +97,26 @@ class _NewsScreenState extends State<NewsScreen> {
     await newsViewModel.loadNewsByCoinId(filter);
   }
 
-  // 검색 실행
+  // 검색어 처리
   void _performSearch(String query) {
-    // NewsViewModel을 통해 검색 실행
+    debugPrint('NewsScreen: 검색 수행 - 검색어: "$query"');
+    _lastSearchQuery = query;
+
     final newsViewModel = Provider.of<NewsViewModel>(context, listen: false);
-    newsViewModel.searchNews(query);
+
+    // 검색어가 비어있고 필터도 '전체'인 경우 전체 뉴스 표시
+    if (query.isEmpty && _selectedFilter == '전체') {
+      debugPrint('NewsScreen: 검색어와 필터 모두 없음, 전체 뉴스 표시');
+      newsViewModel.clearFilter();
+      newsViewModel.fetchInitialNewsPage();
+      return;
+    }
+
+    // 검색어만 설정
+    if (query.isNotEmpty) {
+      debugPrint('NewsScreen: 검색어 설정 - "$query"');
+      newsViewModel.searchNews(query);
+    }
   }
 
   @override
@@ -66,6 +125,15 @@ class _NewsScreenState extends State<NewsScreen> {
     // Provider.of<NewsViewModel>(context) 대신 Consumer 사용
     return Consumer<NewsViewModel>(
       builder: (context, newsViewModel, _) {
+        debugPrint(
+          'NewsScreen: 뉴스 화면 빌드 - 로딩 상태: ${newsViewModel.isLoading}, 뉴스 개수: ${newsViewModel.pagedNewsList.length}, 에러: ${newsViewModel.errorMessage != null}',
+        );
+
+        // 뉴스 데이터가 있으면 바로 표시
+        final hasNewsData =
+            newsViewModel.pagedNewsList.isNotEmpty ||
+            newsViewModel.newsList.isNotEmpty;
+
         return Scaffold(
           appBar: AppBar(
             automaticallyImplyLeading: false,
@@ -106,60 +174,172 @@ class _NewsScreenState extends State<NewsScreen> {
                 ),
               ),
             ),
+            actions: [
+              // 새로고침 버튼 추가
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () {
+                  debugPrint('NewsScreen: 수동 새로고침 요청');
+                  newsViewModel.fetchInitialNewsPage();
+                },
+                tooltip: '새로고침',
+              ),
+            ],
           ),
-          body: newsViewModel.isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : newsViewModel.errorMessage != null
-              ? _buildErrorView(newsViewModel.errorMessage!)
-              : _searchController.text.isNotEmpty || _selectedFilter != '전체'
-              ? _buildNewsList(newsViewModel)
-              : _buildNewsPageWithSections(newsViewModel),
+          body: Stack(
+            children: [
+              // 메인 콘텐츠
+              hasNewsData
+                  ? _searchController.text.isNotEmpty || _selectedFilter != '전체'
+                        ? _buildNewsList(newsViewModel)
+                        : _buildNewsPageWithSections(newsViewModel)
+                  : _buildEmptyView(newsViewModel),
+
+              // 로딩 인디케이터 (데이터가 없을 때만 전체 화면, 있을 때는 오버레이)
+              if (newsViewModel.isLoading)
+                hasNewsData
+                    ? Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withOpacity(0.1),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surface,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 8,
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const CircularProgressIndicator(),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    '뉴스 업데이트 중...',
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    : _buildLoadingView(newsViewModel),
+
+              // 에러 메시지 (데이터가 있을 때만 스낵바 형태로 표시)
+              if (newsViewModel.errorMessage != null && hasNewsData)
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  right: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.error,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: theme.colorScheme.onError,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            newsViewModel.errorMessage!,
+                            style: TextStyle(color: theme.colorScheme.onError),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.close,
+                            color: theme.colorScheme.onError,
+                          ),
+                          onPressed: () {
+                            newsViewModel.clearError();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
   }
 
-  // 에러 화면
-  Widget _buildErrorView(String errorMessage) {
+  // 로딩 화면 (상세 정보 포함)
+  Widget _buildLoadingView(NewsViewModel viewModel) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Theme.of(context).colorScheme.error,
-          ),
+          const CircularProgressIndicator(),
           const SizedBox(height: 16),
           Text(
-            '데이터 로드 오류',
+            '뉴스 데이터 로딩 중...',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.error,
+              color: Theme.of(context).textTheme.bodyLarge?.color,
             ),
           ),
           const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              errorMessage,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+          Text(
+            viewModel.pagedNewsList.isNotEmpty
+                ? '${viewModel.pagedNewsList.length}개의 캐시된 뉴스 표시 중'
+                : viewModel.newsList.isNotEmpty
+                ? '${viewModel.newsList.length}개의 뉴스 표시 중'
+                : '캐시된 데이터 확인 중...',
+            style: TextStyle(
+              fontSize: 14,
+              color: Theme.of(context).textTheme.bodyMedium?.color,
             ),
           ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: () {
-              final newsViewModel = Provider.of<NewsViewModel>(
-                context,
-                listen: false,
-              );
-              newsViewModel.refreshNews();
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text('다시 시도'),
-          ),
+          if (viewModel.isLoadingMore) ...[
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '추가 데이터 로드 중...',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 24),
+          if (viewModel.pagedNewsList.isEmpty && viewModel.newsList.isEmpty)
+            ElevatedButton.icon(
+              onPressed: () {
+                viewModel.fetchInitialNewsPage();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('다시 시도'),
+            ),
         ],
       ),
     );
@@ -167,110 +347,58 @@ class _NewsScreenState extends State<NewsScreen> {
 
   // 섹션으로 구분된 뉴스 페이지
   Widget _buildNewsPageWithSections(NewsViewModel viewModel) {
-    return RefreshIndicator(
-      onRefresh: () => viewModel.refreshNews(),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 인기 뉴스 섹션
-            const Text(
-              '인기 뉴스',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
+    debugPrint(
+      'NewsScreen: 섹션별 뉴스 페이지 빌드 - ${viewModel.pagedNewsList.length}개 뉴스',
+    );
 
-            // 인기 뉴스 가로 스크롤
-            SizedBox(
-              height: 300,
-              child: viewModel.popularNews.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.trending_up,
-                            size: 48,
-                            color: Theme.of(context).disabledColor,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            '아직 인기 뉴스가 없습니다',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Theme.of(context).disabledColor,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '뉴스를 읽으면 인기 뉴스에 표시됩니다',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Theme.of(context).hintColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: viewModel.popularNews.length,
-                      itemBuilder: (context, index) {
-                        final news = viewModel.popularNews[index];
-                        return _buildFeaturedNewsItem(news);
-                      },
-                    ),
-            ),
+    return Column(
+      children: [
+        // 필터 버튼 목록
+        _buildFilterButtons(),
 
-            const SizedBox(height: 24),
-
-            // 최신 뉴스 섹션
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        // 뉴스 목록 (섹션별)
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              debugPrint('NewsScreen: 당겨서 새로고침 요청');
+              await viewModel.fetchInitialNewsPage();
+            },
+            child: ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.only(top: 8),
               children: [
-                const Text(
-                  '최신 뉴스',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                TextButton(
-                  onPressed: () {
-                    // 모든 뉴스 보기 기능
-                    setState(() {
-                      _selectedFilter = '전체';
-                    });
-                    final newsViewModel = Provider.of<NewsViewModel>(
-                      context,
-                      listen: false,
-                    );
-                    viewModel.loadNewsByCoinId('');
-                  },
-                  child: const Text('전체 보기'),
-                ),
+                // 주요 뉴스 섹션
+                if (viewModel.pagedNewsList.isNotEmpty) ...[
+                  _buildNewsSection(
+                    '주요 뉴스',
+                    viewModel.pagedNewsList.take(1).toList(),
+                    isMainNews: true,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // 최신 뉴스 섹션
+                if (viewModel.pagedNewsList.length > 1) ...[
+                  _buildNewsSection(
+                    '최신 뉴스',
+                    viewModel.pagedNewsList.skip(1).toList(),
+                  ),
+                ],
+
+                // 로딩 인디케이터 (바닥)
+                if (viewModel.isLoadingMore)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+
+                // 바닥 여백
+                const SizedBox(height: 16),
               ],
             ),
-            const SizedBox(height: 8),
-
-            // 최신 뉴스 목록
-            viewModel.newsList.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32.0),
-                      child: Text('뉴스가 없습니다'),
-                    ),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: viewModel.newsList.length,
-                    itemBuilder: (context, index) {
-                      final news = viewModel.newsList[index];
-                      return _buildNewsItem(news);
-                    },
-                  ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -376,213 +504,184 @@ class _NewsScreenState extends State<NewsScreen> {
     );
   }
 
-  // 뉴스 목록 위젯
+  // 뉴스 목록 위젯 (페이징 적용)
   Widget _buildNewsList(NewsViewModel viewModel) {
-    // 디버깅용 로그 추가
+    final newsList = viewModel.filteredNewsList.isNotEmpty
+        ? viewModel.filteredNewsList
+        : viewModel.pagedNewsList;
+
     debugPrint(
-      '뉴스 목록 표시: 필터=[38;5;2m${_selectedFilter}[0m, 뉴스 개수=${viewModel.newsList.length}',
+      'NewsScreen: 뉴스 목록 빌드 - ${newsList.length}개 뉴스, 필터링됨: ${viewModel.filteredNewsList.isNotEmpty}',
     );
 
-    final filteredList = viewModel.newsList;
-    final onlyFilterList = viewModel.newsListWithoutSearch;
+    return Column(
+      children: [
+        // 필터 버튼 목록
+        _buildFilterButtons(),
 
-    if (filteredList.isEmpty) {
-      debugPrint('뉴스 목록이 비어있음');
-      // 검색어가 있고, 필터만 적용하면 뉴스가 있을 때 fallback
-      if (_searchController.text.isNotEmpty && onlyFilterList.isNotEmpty) {
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                '검색 결과가 없습니다.\n필터에 해당하는 모든 뉴스를 보여드립니다.',
-                style: TextStyle(color: Theme.of(context).hintColor),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: onlyFilterList.length,
-                itemBuilder: (context, index) {
-                  final news = onlyFilterList[index];
-                  return _buildNewsItem(news);
-                },
-              ),
-            ),
-          ],
-        );
-      }
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.article_outlined,
-              size: 64,
-              color: Theme.of(context).disabledColor,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '뉴스가 없습니다',
-              style: TextStyle(
-                fontSize: 18,
-                color: Theme.of(context).disabledColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              icon: const Icon(Icons.refresh),
-              label: const Text('다시 로드'),
-              onPressed: () {
-                _searchController.clear();
-                setState(() {
-                  _selectedFilter = '전체';
-                });
-                final newsViewModel = Provider.of<NewsViewModel>(
-                  context,
-                  listen: false,
-                );
-                newsViewModel.clearFilter(); // 필터와 검색어 모두 초기화
-                newsViewModel.refreshNews(); // 전체 뉴스 로드
+        // 뉴스 목록
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              debugPrint('NewsScreen: 당겨서 새로고침 요청');
+              await viewModel.fetchInitialNewsPage();
+            },
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.only(top: 8),
+              itemCount: newsList.length + (viewModel.isLoadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                // 로딩 인디케이터 표시 (마지막 아이템)
+                if (index == newsList.length) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                // 뉴스 아이템
+                final news = newsList[index];
+                return _buildNewsItem(news);
               },
             ),
-          ],
+          ),
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: () => viewModel.refreshNews(),
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: filteredList.length,
-        itemBuilder: (context, index) {
-          final news = filteredList[index];
-          return _buildNewsItem(news);
-        },
-      ),
+      ],
     );
   }
 
   // 뉴스 아이템 위젯
   Widget _buildNewsItem(News news) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onTap: () => _showNewsDetailDialog(news),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 뉴스 이미지 (있는 경우)
-            if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
-              SizedBox(
-                height: 180,
-                width: double.infinity,
-                child: Image.network(
-                  news.imageUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    debugPrint('뉴스 이미지 로드 오류: $error');
-                    return Container(
-                      color: Colors.grey[300],
-                      child: const Icon(
-                        Icons.image_not_supported,
-                        size: 48,
-                        color: Colors.grey,
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-            // 뉴스 내용
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 제목
-                  Text(
-                    news.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // 요약
-                  Text(
-                    news.summary,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Theme.of(context).textTheme.bodyMedium?.color,
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 12),
-
-                  // 소스 및 시간
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // 출처
-                      Text(
-                        news.source,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryColor,
-                          fontSize: 13,
-                        ),
-                      ),
-                      // 시간
-                      Text(
-                        news.getTimeAgo(),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Theme.of(context).hintColor,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  // 관련 코인 태그
-                  if (news.relatedCoins.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      children: news.relatedCoins.map((coinId) {
-                        final symbol = coinId.toUpperCase();
-
+        onTap: () {
+          debugPrint('NewsScreen: 뉴스 선택됨 - ${news.title}');
+          Navigator.pushNamed(context, '/news_detail', arguments: news);
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 뉴스 이미지
+              if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 80,
+                    height: 80,
+                    child: Image.network(
+                      news.imageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            symbol,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.primaryColor,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          color: Colors.grey.shade200,
+                          child: const Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey,
                           ),
                         );
-                      }).toList(),
+                      },
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.article, color: Colors.grey),
+                ),
+
+              const SizedBox(width: 12),
+
+              // 뉴스 정보
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 뉴스 제목
+                    Text(
+                      news.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    // 뉴스 내용 요약
+                    Text(
+                      news.contentSummary,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // 뉴스 소스 및 시간
+                    Row(
+                      children: [
+                        Text(
+                          news.source,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          news.publishedTimeAgo,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const Spacer(),
+
+                        // 관련 코인 태그
+                        if (news.relatedCoins.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              news.relatedCoins.first.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -750,5 +849,168 @@ class _NewsScreenState extends State<NewsScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('원문을 열 수 없습니다: $e')));
     }
+  }
+
+  // 데이터가 없을 때 표시할 빈 화면
+  Widget _buildEmptyView(NewsViewModel viewModel) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.article_outlined,
+            size: 64,
+            color: Theme.of(context).disabledColor,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '뉴스가 없습니다',
+            style: TextStyle(
+              fontSize: 18,
+              color: Theme.of(context).disabledColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (!viewModel.isLoading)
+            TextButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text('다시 로드'),
+              onPressed: () {
+                _searchController.clear();
+                setState(() {
+                  _selectedFilter = '전체';
+                });
+                viewModel.clearFilter();
+                viewModel.fetchInitialNewsPage();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  // 필터 버튼 목록
+  Widget _buildFilterButtons() {
+    final coinFilters = [
+      '전체',
+      'bitcoin',
+      'ethereum',
+      'solana',
+      'cardano',
+      'ripple',
+      'dogecoin',
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: coinFilters.map((filter) {
+            final isSelected = _selectedFilter == filter;
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                label: Text(
+                  filter == 'bitcoin'
+                      ? 'Bitcoin'
+                      : filter == 'ethereum'
+                      ? 'Ethereum'
+                      : filter == 'solana'
+                      ? 'Solana'
+                      : filter == 'cardano'
+                      ? 'Cardano'
+                      : filter == 'ripple'
+                      ? 'Ripple'
+                      : filter == 'dogecoin'
+                      ? 'Dogecoin'
+                      : filter,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : null,
+                    fontWeight: isSelected ? FontWeight.bold : null,
+                  ),
+                ),
+                selected: isSelected,
+                onSelected: (selected) {
+                  if (selected) {
+                    debugPrint('NewsScreen: 필터 선택 - $filter');
+                    _applyFilter(filter);
+                  }
+                },
+                showCheckmark: false,
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                selectedColor: Theme.of(context).colorScheme.primary,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  // 뉴스 섹션 위젯
+  Widget _buildNewsSection(
+    String title,
+    List<News> newsList, {
+    bool isMainNews = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: isMainNews
+                ? Theme.of(context).primaryColor
+                : Theme.of(context).textTheme.bodyLarge?.color,
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: isMainNews ? 300 : 200,
+          child: newsList.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.trending_up,
+                        size: 48,
+                        color: Theme.of(context).disabledColor,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        '아직 인기 뉴스가 없습니다',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Theme.of(context).disabledColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '뉴스를 읽으면 인기 뉴스에 표시됩니다',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).hintColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: newsList.length,
+                  itemBuilder: (context, index) {
+                    final news = newsList[index];
+                    return _buildFeaturedNewsItem(news);
+                  },
+                ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
   }
 }

@@ -26,12 +26,21 @@ class _FirebaseDatabaseExampleState extends State<FirebaseDatabaseExample> {
   /// Firebase 초기화
   Future<void> _initializeFirebase() async {
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      setState(() {
-        _result = 'Firebase 초기화 성공';
-      });
+      // 중복 초기화 방지 (이미 초기화된 경우 기존 인스턴스 사용)
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        setState(() {
+          _result = 'Firebase 초기화 성공';
+        });
+      } else {
+        // 이미 초기화된 앱 인스턴스 사용
+        Firebase.app();
+        setState(() {
+          _result = 'Firebase 이미 초기화됨 (기존 인스턴스 사용)';
+        });
+      }
     } catch (e) {
       setState(() {
         _result = '초기화 실패: $e';

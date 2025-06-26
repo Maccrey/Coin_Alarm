@@ -110,7 +110,7 @@ class CryptoViewModel extends ChangeNotifier {
         debugPrint('CryptoViewModel: 활성 서비스가 없어 서비스를 다시 확인합니다');
         _checkAvailableServices();
         if (_activeService == null) {
-          _error = '설정된 암호화폐 API가 없습니다.';
+          _error = '사용 가능한 암호화폐 API가 없습니다. API 키를 설정해주세요.';
           _topCoins = [];
           debugPrint('CryptoViewModel: 사용 가능한 서비스가 없습니다. API 키 설정이 필요합니다.');
           return;
@@ -120,6 +120,13 @@ class CryptoViewModel extends ChangeNotifier {
       debugPrint(
         'CryptoViewModel: ${_activeService!.exchangeName} 서비스를 통해 데이터를 요청합니다.',
       );
+
+      // 모의 데이터 서비스인 경우 사용자에게 알림
+      if (_activeService is MockCryptoApiService) {
+        _error = '모의 데이터를 표시 중입니다. 실제 데이터를 보려면 설정에서 API 키를 구성해주세요.';
+        debugPrint('CryptoViewModel: 모의 데이터 서비스 사용 중');
+      }
+
       final coins = await _activeService!.getTopCoins(limit: 0);
 
       debugPrint('CryptoViewModel: API 응답 수신 - ${coins.length}개 코인');

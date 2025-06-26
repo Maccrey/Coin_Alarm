@@ -118,13 +118,10 @@ class UpbitApiService implements CryptoApiService {
       );
 
       // KRW 마켓 코드만 필터링
-      final krwMarkets =
-          (marketResponse.data as List)
-              .where(
-                (market) => (market['market'] as String).startsWith('KRW-'),
-              )
-              .map((market) => market['market'] as String)
-              .toList();
+      final krwMarkets = (marketResponse.data as List)
+          .where((market) => (market['market'] as String).startsWith('KRW-'))
+          .map((market) => market['market'] as String)
+          .toList();
 
       debugPrint('UpbitApiService: KRW 마켓 필터링 결과 - ${krwMarkets.length}개 마켓');
 
@@ -171,34 +168,27 @@ class UpbitApiService implements CryptoApiService {
             id: symbol.toLowerCase(),
             name: name,
             symbol: symbol,
-            currentPrice:
-                (ticker['trade_price'] is int)
-                    ? (ticker['trade_price'] as int).toDouble()
-                    : ticker['trade_price'] as double,
-            priceChange24h:
-                (ticker['signed_change_price'] is int)
-                    ? (ticker['signed_change_price'] as int).toDouble()
-                    : ticker['signed_change_price'] as double,
-            priceChangePercentage24h:
-                (ticker['signed_change_rate'] is int)
-                    ? (ticker['signed_change_rate'] as int) * 100.0
-                    : ticker['signed_change_rate'] * 100 as double,
-            marketCap:
-                (ticker['acc_trade_price_24h'] is int)
-                    ? (ticker['acc_trade_price_24h'] as int).toDouble()
-                    : ticker['acc_trade_price_24h'] as double,
-            volume24h:
-                (ticker['acc_trade_volume_24h'] is int)
-                    ? (ticker['acc_trade_volume_24h'] as int).toDouble()
-                    : ticker['acc_trade_volume_24h'] as double,
-            high24h:
-                (ticker['high_price'] is int)
-                    ? (ticker['high_price'] as int).toDouble()
-                    : ticker['high_price'] as double,
-            low24h:
-                (ticker['low_price'] is int)
-                    ? (ticker['low_price'] as int).toDouble()
-                    : ticker['low_price'] as double,
+            currentPrice: (ticker['trade_price'] is int)
+                ? (ticker['trade_price'] as int).toDouble()
+                : ticker['trade_price'] as double,
+            priceChange24h: (ticker['signed_change_price'] is int)
+                ? (ticker['signed_change_price'] as int).toDouble()
+                : ticker['signed_change_price'] as double,
+            priceChangePercentage24h: (ticker['signed_change_rate'] is int)
+                ? (ticker['signed_change_rate'] as int) * 100.0
+                : ticker['signed_change_rate'] * 100 as double,
+            marketCap: (ticker['acc_trade_price_24h'] is int)
+                ? (ticker['acc_trade_price_24h'] as int).toDouble()
+                : ticker['acc_trade_price_24h'] as double,
+            volume24h: (ticker['acc_trade_volume_24h'] is int)
+                ? (ticker['acc_trade_volume_24h'] as int).toDouble()
+                : ticker['acc_trade_volume_24h'] as double,
+            high24h: (ticker['high_price'] is int)
+                ? (ticker['high_price'] as int).toDouble()
+                : ticker['high_price'] as double,
+            low24h: (ticker['low_price'] is int)
+                ? (ticker['low_price'] as int).toDouble()
+                : ticker['low_price'] as double,
             lastUpdated: DateTime.fromMillisecondsSinceEpoch(
               ticker['timestamp'],
             ),
@@ -252,34 +242,27 @@ class UpbitApiService implements CryptoApiService {
         id: symbol.toLowerCase(),
         name: name,
         symbol: symbol.toUpperCase(),
-        currentPrice:
-            (ticker['trade_price'] is int)
-                ? (ticker['trade_price'] as int).toDouble()
-                : ticker['trade_price'] as double,
-        priceChange24h:
-            (ticker['signed_change_price'] is int)
-                ? (ticker['signed_change_price'] as int).toDouble()
-                : ticker['signed_change_price'] as double,
-        priceChangePercentage24h:
-            (ticker['signed_change_rate'] is int)
-                ? (ticker['signed_change_rate'] as int) * 100.0
-                : ticker['signed_change_rate'] * 100 as double,
-        marketCap:
-            (ticker['acc_trade_price_24h'] is int)
-                ? (ticker['acc_trade_price_24h'] as int).toDouble()
-                : ticker['acc_trade_price_24h'] as double,
-        volume24h:
-            (ticker['acc_trade_volume_24h'] is int)
-                ? (ticker['acc_trade_volume_24h'] as int).toDouble()
-                : ticker['acc_trade_volume_24h'] as double,
-        high24h:
-            (ticker['high_price'] is int)
-                ? (ticker['high_price'] as int).toDouble()
-                : ticker['high_price'] as double,
-        low24h:
-            (ticker['low_price'] is int)
-                ? (ticker['low_price'] as int).toDouble()
-                : ticker['low_price'] as double,
+        currentPrice: (ticker['trade_price'] is int)
+            ? (ticker['trade_price'] as int).toDouble()
+            : ticker['trade_price'] as double,
+        priceChange24h: (ticker['signed_change_price'] is int)
+            ? (ticker['signed_change_price'] as int).toDouble()
+            : ticker['signed_change_price'] as double,
+        priceChangePercentage24h: (ticker['signed_change_rate'] is int)
+            ? (ticker['signed_change_rate'] as int) * 100.0
+            : ticker['signed_change_rate'] * 100 as double,
+        marketCap: (ticker['acc_trade_price_24h'] is int)
+            ? (ticker['acc_trade_price_24h'] as int).toDouble()
+            : ticker['acc_trade_price_24h'] as double,
+        volume24h: (ticker['acc_trade_volume_24h'] is int)
+            ? (ticker['acc_trade_volume_24h'] as int).toDouble()
+            : ticker['acc_trade_volume_24h'] as double,
+        high24h: (ticker['high_price'] is int)
+            ? (ticker['high_price'] as int).toDouble()
+            : ticker['high_price'] as double,
+        low24h: (ticker['low_price'] is int)
+            ? (ticker['low_price'] as int).toDouble()
+            : ticker['low_price'] as double,
         lastUpdated: DateTime.fromMillisecondsSinceEpoch(ticker['timestamp']),
         imageUrl: 'https://static.upbit.com/logos/${symbol.toUpperCase()}.png',
       );
@@ -367,14 +350,13 @@ class BinanceApiService implements CryptoApiService {
       }
 
       // USDT 마켓 필터링
-      final usdtMarkets =
-          (response.data as List)
-              .where(
-                (ticker) =>
-                    (ticker['symbol'] as String).endsWith('USDT') &&
-                    !(ticker['symbol'] as String).contains('UPUSDT'),
-              )
-              .toList();
+      final usdtMarkets = (response.data as List)
+          .where(
+            (ticker) =>
+                (ticker['symbol'] as String).endsWith('USDT') &&
+                !(ticker['symbol'] as String).contains('UPUSDT'),
+          )
+          .toList();
 
       // 거래량 기준 정렬
       usdtMarkets.sort(
@@ -486,6 +468,7 @@ class CryptoServiceFactory {
 
     final upbitService = UpbitApiService();
     final binanceService = BinanceApiService();
+    final mockService = MockCryptoApiService(); // 모의 서비스 추가
 
     debugPrint(
       'CryptoServiceFactory: 업비트 서비스 구성됨: ${upbitService.isConfigured}',
@@ -513,6 +496,12 @@ class CryptoServiceFactory {
       debugPrint('CryptoServiceFactory: 바이낸스 서비스 추가됨');
     }
 
+    // API 키가 설정되지 않은 경우 항상 모의 서비스 추가
+    if (services.isEmpty) {
+      services.add(mockService);
+      debugPrint('CryptoServiceFactory: API 키가 없어 모의 서비스 추가됨');
+    }
+
     debugPrint('CryptoServiceFactory: 총 ${services.length}개 서비스 사용 가능');
     return services;
   }
@@ -535,5 +524,205 @@ class CryptoServiceFactory {
 
     debugPrint('CryptoServiceFactory: ${services.first.exchangeName} 서비스 선택됨');
     return services.first;
+  }
+}
+
+// 모의 암호화폐 API 서비스
+class MockCryptoApiService implements CryptoApiService {
+  @override
+  String get exchangeName => '모의 데이터';
+
+  @override
+  bool get isConfigured => true; // 항상 구성됨
+
+  @override
+  Future<List<Coin>> getTopCoins({int limit = 10}) async {
+    debugPrint('MockCryptoApiService: 모의 코인 데이터 생성 (limit: $limit)');
+
+    // 지연 시간 추가 (실제 API 호출처럼 보이게)
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final now = DateTime.now();
+    final coins = [
+      Coin(
+        id: 'bitcoin',
+        name: '비트코인',
+        symbol: 'BTC',
+        currentPrice: 67500.0 + _randomVariation(500),
+        priceChange24h: 1200.0 + _randomVariation(100),
+        priceChangePercentage24h: 1.8 + _randomVariation(0.2),
+        marketCap: 1300000000000,
+        volume24h: 25000000000,
+        high24h: 68000.0 + _randomVariation(200),
+        low24h: 66800.0 + _randomVariation(200),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
+      ),
+      Coin(
+        id: 'ethereum',
+        name: '이더리움',
+        symbol: 'ETH',
+        currentPrice: 3450.0 + _randomVariation(50),
+        priceChange24h: 120.0 + _randomVariation(20),
+        priceChangePercentage24h: 3.5 + _randomVariation(0.5),
+        marketCap: 415000000000,
+        volume24h: 18000000000,
+        high24h: 3500.0 + _randomVariation(30),
+        low24h: 3400.0 + _randomVariation(30),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/279/large/ethereum.png',
+      ),
+      Coin(
+        id: 'binancecoin',
+        name: '바이낸스 코인',
+        symbol: 'BNB',
+        currentPrice: 570.0 + _randomVariation(10),
+        priceChange24h: 15.0 + _randomVariation(5),
+        priceChangePercentage24h: 2.7 + _randomVariation(0.3),
+        marketCap: 87000000000,
+        volume24h: 2500000000,
+        high24h: 580.0 + _randomVariation(5),
+        low24h: 560.0 + _randomVariation(5),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png',
+      ),
+      Coin(
+        id: 'solana',
+        name: '솔라나',
+        symbol: 'SOL',
+        currentPrice: 142.0 + _randomVariation(5),
+        priceChange24h: 8.0 + _randomVariation(2),
+        priceChangePercentage24h: 6.0 + _randomVariation(1),
+        marketCap: 65000000000,
+        volume24h: 3200000000,
+        high24h: 145.0 + _randomVariation(3),
+        low24h: 135.0 + _randomVariation(3),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/4128/large/solana.png',
+      ),
+      Coin(
+        id: 'ripple',
+        name: '리플',
+        symbol: 'XRP',
+        currentPrice: 0.52 + _randomVariation(0.01),
+        priceChange24h: 0.02 + _randomVariation(0.005),
+        priceChangePercentage24h: 4.0 + _randomVariation(0.5),
+        marketCap: 28000000000,
+        volume24h: 1500000000,
+        high24h: 0.53 + _randomVariation(0.005),
+        low24h: 0.50 + _randomVariation(0.005),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png',
+      ),
+      Coin(
+        id: 'dogecoin',
+        name: '도지코인',
+        symbol: 'DOGE',
+        currentPrice: 0.12 + _randomVariation(0.005),
+        priceChange24h: 0.01 + _randomVariation(0.002),
+        priceChangePercentage24h: 8.5 + _randomVariation(1),
+        marketCap: 17000000000,
+        volume24h: 1200000000,
+        high24h: 0.125 + _randomVariation(0.002),
+        low24h: 0.115 + _randomVariation(0.002),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/5/large/dogecoin.png',
+      ),
+      Coin(
+        id: 'cardano',
+        name: '에이다',
+        symbol: 'ADA',
+        currentPrice: 0.45 + _randomVariation(0.01),
+        priceChange24h: 0.02 + _randomVariation(0.005),
+        priceChangePercentage24h: 4.7 + _randomVariation(0.5),
+        marketCap: 16000000000,
+        volume24h: 800000000,
+        high24h: 0.46 + _randomVariation(0.005),
+        low24h: 0.44 + _randomVariation(0.005),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/975/large/cardano.png',
+      ),
+      Coin(
+        id: 'polkadot',
+        name: '폴카닷',
+        symbol: 'DOT',
+        currentPrice: 6.8 + _randomVariation(0.2),
+        priceChange24h: 0.3 + _randomVariation(0.05),
+        priceChangePercentage24h: 4.6 + _randomVariation(0.5),
+        marketCap: 9500000000,
+        volume24h: 350000000,
+        high24h: 6.9 + _randomVariation(0.1),
+        low24h: 6.5 + _randomVariation(0.1),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/12171/large/polkadot.png',
+      ),
+      Coin(
+        id: 'matic-network',
+        name: '폴리곤',
+        symbol: 'MATIC',
+        currentPrice: 0.58 + _randomVariation(0.01),
+        priceChange24h: 0.03 + _randomVariation(0.005),
+        priceChangePercentage24h: 5.5 + _randomVariation(0.5),
+        marketCap: 5800000000,
+        volume24h: 450000000,
+        high24h: 0.59 + _randomVariation(0.005),
+        low24h: 0.56 + _randomVariation(0.005),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png',
+      ),
+      Coin(
+        id: 'shiba-inu',
+        name: '시바이누',
+        symbol: 'SHIB',
+        currentPrice: 0.000018 + _randomVariation(0.000001),
+        priceChange24h: 0.000002 + _randomVariation(0.0000005),
+        priceChangePercentage24h: 12.5 + _randomVariation(1.5),
+        marketCap: 10500000000,
+        volume24h: 850000000,
+        high24h: 0.000019 + _randomVariation(0.0000005),
+        low24h: 0.000017 + _randomVariation(0.0000005),
+        lastUpdated: now,
+        imageUrl:
+            'https://assets.coingecko.com/coins/images/11939/large/shiba.png',
+      ),
+    ];
+
+    // limit이 0이면 모든 코인 반환, 아니면 limit 수만큼 반환
+    final result = limit > 0 ? coins.take(limit).toList() : coins;
+    debugPrint('MockCryptoApiService: ${result.length}개 모의 코인 데이터 반환');
+
+    return result;
+  }
+
+  @override
+  Future<Coin?> getCoinBySymbol(String symbol) async {
+    debugPrint('MockCryptoApiService: 모의 코인 데이터 조회 - $symbol');
+
+    // 지연 시간 추가 (실제 API 호출처럼 보이게)
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    final coins = await getTopCoins(limit: 0);
+    final coin = coins.firstWhere(
+      (coin) => coin.symbol.toUpperCase() == symbol.toUpperCase(),
+      orElse: () => coins.first,
+    );
+
+    return coin;
+  }
+
+  // 약간의 무작위 변동을 추가하는 도우미 함수
+  double _randomVariation(double maxVariation) {
+    final random = Random();
+    return (random.nextDouble() * 2 - 1) *
+        maxVariation; // -maxVariation ~ +maxVariation
   }
 }
