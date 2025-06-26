@@ -88,10 +88,12 @@ class NewsViewModel extends ChangeNotifier {
   // 필터링된 뉴스 목록 (검색어와 코인 필터 모두 적용)
   List<News> get filteredNewsList {
     if (_searchQuery.isEmpty && (_coinFilter == null || _coinFilter!.isEmpty)) {
-      return _pagedNewsList; // 필터 없음, 원본 반환
+      return _pagedNewsList.isNotEmpty
+          ? _pagedNewsList
+          : _newsList; // 필터 없음, 페이징 데이터 또는 기본 데이터 반환
     }
 
-    var filtered = _pagedNewsList;
+    var filtered = _pagedNewsList.isNotEmpty ? _pagedNewsList : _newsList;
 
     // 코인 필터 적용
     if (_coinFilter != null && _coinFilter!.isNotEmpty && _coinFilter != '전체') {

@@ -13,9 +13,14 @@ import 'package:workmanager/workmanager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
-
+import 'dart:io';
+import 'dart:isolate';
+import 'core/constants.dart';
 import 'core/theme.dart';
+import 'model/news_model.dart';
+import 'services/auth_service.dart';
 import 'services/settings_service.dart';
+
 import 'viewmodel/auth_viewmodel.dart';
 import 'viewmodel/coin_viewmodel.dart';
 import 'viewmodel/news_viewmodel.dart';
@@ -30,12 +35,11 @@ import 'model/chart_data_model.dart';
 import 'model/price_alert_model.dart';
 import 'services/price_alert_service.dart';
 import 'model/coin_model.dart';
-import 'model/news_model.dart';
 import 'viewmodel/theme_viewmodel.dart';
 import 'services/firebase_service.dart';
-import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'firebase_options.dart';
+import 'view/screens/news_detail_screen.dart';
 
 // 백그라운드에서 사용할 코인 가격 fetch 함수 (Upbit API 연동)
 Future<List<Coin>> fetchCoinPricesForBackground() async {
@@ -448,6 +452,11 @@ class _MyAppState extends State<MyApp> {
                 return const SplashScreen();
               },
             ),
+            routes: {
+              '/news_detail': (context) => NewsDetailScreen(
+                news: ModalRoute.of(context)!.settings.arguments as News,
+              ),
+            },
           );
         },
       ),
