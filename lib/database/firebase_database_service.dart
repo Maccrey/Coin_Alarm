@@ -33,6 +33,31 @@ class FirebaseDatabaseService {
     }
   }
 
+  /// Firebase 경로에서 유효하지 않은 문자를 인코딩하는 헬퍼 함수
+  String _sanitizePathSegment(String segment) {
+    if (segment.isEmpty) return segment;
+
+    // Firebase 경로에서 사용할 수 없는 문자를 대체
+    return segment
+        .replaceAll('.', '_dot_')
+        .replaceAll('\$', '_dollar_')
+        .replaceAll('#', '_hash_')
+        .replaceAll('[', '_lbracket_')
+        .replaceAll(']', '_rbracket_')
+        .replaceAll('/', '_slash_');
+  }
+
+  /// 안전한 데이터베이스 참조 생성
+  DatabaseReference _safeRef(String path) {
+    // 경로를 '/'로 분리하고 각 세그먼트를 정리한 후 다시 결합
+    final segments = path.split('/');
+    final sanitizedSegments = segments.map(_sanitizePathSegment).toList();
+    final sanitizedPath = sanitizedSegments.join('/');
+
+    debugPrint('FirebaseDatabaseService: 경로 정리: $path -> $sanitizedPath');
+    return _database.ref(sanitizedPath);
+  }
+
   /// 데이터 저장
   /// [path] 데이터를 저장할 경로
   /// [data] 저장할 데이터
@@ -46,7 +71,7 @@ class FirebaseDatabaseService {
     }
 
     try {
-      await _database.ref(path).set(data);
+      await _safeRef(path).set(data);
       return true;
     } catch (e) {
       debugPrint('데이터 저장 실패: $e');
@@ -67,7 +92,7 @@ class FirebaseDatabaseService {
     }
 
     try {
-      await _database.ref(path).update(data);
+      await _safeRef(path).update(data);
       return true;
     } catch (e) {
       debugPrint('데이터 업데이트 실패: $e');
@@ -87,7 +112,7 @@ class FirebaseDatabaseService {
     }
 
     try {
-      final snapshot = await _database.ref(path).get();
+      final snapshot = await _safeRef(path).get();
       if (snapshot.exists) {
         return snapshot.value as Map<String, dynamic>;
       }
@@ -110,7 +135,7 @@ class FirebaseDatabaseService {
     }
 
     try {
-      await _database.ref(path).remove();
+      await _safeRef(path).remove();
       return true;
     } catch (e) {
       debugPrint('데이터 삭제 실패: $e');
@@ -130,6 +155,6 @@ class FirebaseDatabaseService {
       return Stream.empty();
     }
 
-    return _database.ref(path).onValue;
+    return _safeRef(path).onValue;
   }
 }

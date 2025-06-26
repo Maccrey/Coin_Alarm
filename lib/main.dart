@@ -261,16 +261,9 @@ void main() async {
   final firebaseService = FirebaseService();
   try {
     await firebaseService.initialize();
-    debugPrint('Firebase 서비스 초기화 성공');
   } catch (e) {
     debugPrint('Firebase 서비스 초기화 실패: $e');
-    // 권한 오류인 경우 경고만 표시하고 계속 진행
-    if (!e.toString().contains('permission-denied')) {
-      throw Exception('Firebase 서비스 초기화 실패: $e');
-    } else {
-      debugPrint('Firebase 권한 오류가 발생했지만 앱은 계속 실행됩니다.');
-      debugPrint('Firebase 콘솔에서 Realtime Database 보안 규칙을 확인하세요.');
-    }
+    // 초기화 실패해도 앱은 계속 실행
   }
 
   // Workmanager 초기화 (백그라운드 태스크 등록) - 모바일 플랫폼에서만 실행

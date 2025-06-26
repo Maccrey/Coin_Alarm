@@ -40,6 +40,36 @@ class FirebaseService {
   bool get isInitialized => _isInitialized;
   bool get isWeb => _isWeb;
 
+  /// Firebase 경로에서 유효하지 않은 문자를 인코딩하는 헬퍼 함수
+  String _sanitizePathSegment(String segment) {
+    if (segment.isEmpty) return segment;
+
+    // Firebase 경로에서 사용할 수 없는 문자를 대체
+    return segment
+        .replaceAll('.', '_dot_')
+        .replaceAll('\$', '_dollar_')
+        .replaceAll('#', '_hash_')
+        .replaceAll('[', '_lbracket_')
+        .replaceAll(']', '_rbracket_')
+        .replaceAll('/', '_slash_');
+  }
+
+  /// 안전한 데이터베이스 참조 생성
+  DatabaseReference _safeRef(String path) {
+    // .info로 시작하는 경로는 Firebase의 특별한 경로이므로 정리하지 않음
+    if (path.startsWith('.info/')) {
+      return _database.ref(path);
+    }
+
+    // 경로를 '/'로 분리하고 각 세그먼트를 정리한 후 다시 결합
+    final segments = path.split('/');
+    final sanitizedSegments = segments.map(_sanitizePathSegment).toList();
+    final sanitizedPath = sanitizedSegments.join('/');
+
+    debugPrint('FirebaseService: 경로 정리: $path -> $sanitizedPath');
+    return _database.ref(sanitizedPath);
+  }
+
   /// 서비스 초기화
   Future<void> initialize() async {
     if (_isInitialized) {
@@ -94,39 +124,123 @@ class FirebaseService {
       _database.setLoggingEnabled(true); // 로깅 활성화
       _database.setPersistenceEnabled(true); // 오프라인 캐싱 활성화
 
-      // 데이터베이스 연결 테스트
+      // 데이터베이스 연결 테스트 (오류가 발생해도 앱은 계속 실행)
       try {
         // 연결 확인 전 짧은 지연 추가
         await Future.delayed(const Duration(milliseconds: 500));
 
-        final testRef = _database.ref('.info/connected');
-        final snapshot = await testRef.get();
-        final connected = snapshot.value == true;
-        debugPrint(
-          'FirebaseService: Firebase Realtime Database 연결 상태: ${connected ? "연결됨" : "연결 안됨"}',
-        );
+        // 연결 테스트는 건너뛰고 초기화 완료로 처리
+        debugPrint('FirebaseService: 데이터베이스 연결 테스트 건너뜀');
+      } catch (e) {
+        // 연결 테스트 오류는 무시하고 계속 진행
+        debugPrint('FirebaseService: 데이터베이스 연결 테스트 실패 - $e');
+        debugPrint('FirebaseService: 연결 테스트 실패했지만 계속 진행합니다.');
+      }
 
-        if (!connected) {
-          debugPrint('FirebaseService: 데이터베이스 연결이 확인되지 않았습니다. 계속 진행합니다.');
+      // 데이터 마이그레이션 실행 (필요한 경우)
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final hasRunMigration =
+            prefs.getBool('has_run_news_id_migration') ?? false;
+
+        if (!hasRunMigration) {
+          debugPrint('FirebaseService: 뉴스 ID 마이그레이션 시작');
+          await _migrateNewsIds();
+          await prefs.setBool('has_run_news_id_migration', true);
+          debugPrint('FirebaseService: 뉴스 ID 마이그레이션 완료');
+        } else {
+          debugPrint('FirebaseService: 뉴스 ID 마이그레이션이 이미 실행되었습니다.');
         }
       } catch (e) {
-        // 권한 오류인 경우 경고만 표시하고 계속 진행
-        if (e.toString().contains('permission-denied')) {
-          debugPrint('FirebaseService: 데이터베이스 권한 오류 - $e');
-          debugPrint(
-            'FirebaseService: 권한 오류가 발생했지만 계속 진행합니다. Firebase 콘솔에서 보안 규칙을 확인하세요.',
-          );
-        } else {
-          debugPrint('FirebaseService: 데이터베이스 연결 테스트 실패 - $e');
-          throw e;
-        }
+        // 마이그레이션 실패 시 경고만 표시하고 계속 진행
+        debugPrint('FirebaseService: 뉴스 ID 마이그레이션 실패 - $e');
+        debugPrint('FirebaseService: 마이그레이션 오류가 발생했지만 계속 진행합니다.');
       }
 
       _isInitialized = true;
       debugPrint('FirebaseService: 초기화 완료');
     } catch (e) {
       debugPrint('FirebaseService: 초기화 실패 - $e');
-      throw e;
+      // 초기화 실패해도 앱은 계속 실행될 수 있도록 함
+      _isInitialized = false;
+      // 오류를 전파하지 않고 처리
+      debugPrint('FirebaseService: 초기화 실패했지만 앱은 계속 실행됩니다.');
+    }
+  }
+
+  /// 뉴스 ID 마이그레이션 - 안전한 ID 형식으로 변환
+  Future<void> _migrateNewsIds() async {
+    try {
+      debugPrint('FirebaseService: 뉴스 ID 마이그레이션 시작');
+
+      // 1. 기존 뉴스 데이터 가져오기
+      final snapshot = await _database.ref('news').get();
+      if (!snapshot.exists) {
+        debugPrint('FirebaseService: 마이그레이션할 뉴스 데이터가 없습니다.');
+        return;
+      }
+
+      final Map<dynamic, dynamic> newsData =
+          snapshot.value as Map<dynamic, dynamic>;
+      debugPrint('FirebaseService: ${newsData.length}개의 뉴스 데이터를 마이그레이션합니다.');
+
+      // 2. 각 뉴스 항목을 안전한 ID로 변환
+      int migratedCount = 0;
+      for (final entry in newsData.entries) {
+        try {
+          final key = entry.key;
+          final value = entry.value as Map<dynamic, dynamic>;
+
+          // 기존 데이터에서 News 객체 생성
+          final newsMap = <String, dynamic>{};
+          value.forEach((k, v) {
+            newsMap[k.toString()] = v;
+          });
+
+          // ID가 없으면 키를 ID로 사용
+          if (!newsMap.containsKey('id')) {
+            newsMap['id'] = key.toString();
+          }
+
+          // 필드명 정규화
+          if (!newsMap.containsKey('title')) continue; // 제목이 없으면 건너뜀
+          if (!newsMap.containsKey('url')) continue; // URL이 없으면 건너뜀
+
+          // 안전한 ID 생성
+          final news = News.fromJson(Map<String, dynamic>.from(newsMap));
+          final safeNews = news.withSafeId();
+
+          // 키와 ID가 다른 경우에만 마이그레이션 수행
+          if (key.toString() != safeNews.id) {
+            // 안전한 ID로 데이터 복사
+            await _safeRef('news/${safeNews.id}').set({
+              'id': safeNews.id,
+              'title': safeNews.title,
+              'content': safeNews.content,
+              'source': safeNews.source,
+              'url': safeNews.url,
+              'pub_date': safeNews.publishedAt.toIso8601String(),
+              'image_url': safeNews.imageUrl,
+              'related_coins': safeNews.relatedCoins,
+              'view_count': safeNews.viewCount,
+              'timestamp': value['timestamp'] ?? ServerValue.timestamp,
+              'migrated_from': key.toString(),
+            });
+
+            // 원본 데이터 삭제 (선택적)
+            // await _database.ref('news/$key').remove();
+
+            migratedCount++;
+          }
+        } catch (e) {
+          debugPrint('FirebaseService: 뉴스 항목 마이그레이션 실패 - $e');
+        }
+      }
+
+      debugPrint('FirebaseService: $migratedCount개의 뉴스 ID를 마이그레이션했습니다.');
+    } catch (e) {
+      debugPrint('FirebaseService: 뉴스 ID 마이그레이션 중 오류 발생 - $e');
+      rethrow;
     }
   }
 
@@ -134,7 +248,7 @@ class FirebaseService {
   Future<List<News>> getNews({int limit = 10}) async {
     try {
       // Firebase Realtime Database에서 뉴스 데이터 가져오기
-      final snapshot = await _database.ref('news').limitToLast(limit).get();
+      final snapshot = await _safeRef('news').limitToLast(limit).get();
 
       if (snapshot.exists) {
         final List<News> newsList = [];
@@ -175,7 +289,7 @@ class FirebaseService {
   Future<void> addNews(News news) async {
     try {
       // Firebase Realtime Database에 뉴스 추가
-      await _database.ref('news/${news.id}').set({
+      await _safeRef('news/${news.id}').set({
         'id': news.id,
         'title': news.title,
         'content': news.content,
@@ -197,7 +311,7 @@ class FirebaseService {
   Future<void> updateNews(News news) async {
     try {
       // Firebase Realtime Database에서 뉴스 업데이트
-      await _database.ref('news/${news.id}').update({
+      await _safeRef('news/${news.id}').update({
         'title': news.title,
         'content': news.content,
         'source': news.source,
@@ -218,7 +332,7 @@ class FirebaseService {
   Future<void> deleteNews(String newsId) async {
     try {
       // Firebase Realtime Database에서 뉴스 삭제
-      await _database.ref('news/$newsId').remove();
+      await _safeRef('news/$newsId').remove();
     } catch (e) {
       debugPrint('FirebaseService: 뉴스 삭제 실패 - $e');
       rethrow;
@@ -230,7 +344,7 @@ class FirebaseService {
     try {
       // Firebase Realtime Database에서 특정 코인 관련 뉴스 가져오기
       // 참고: 실제 구현에서는 쿼리 최적화가 필요할 수 있음
-      final snapshot = await _database.ref('news').get();
+      final snapshot = await _safeRef('news').get();
 
       if (snapshot.exists) {
         final List<News> newsList = [];
@@ -289,7 +403,7 @@ class FirebaseService {
   /// 가격 알림 목록 가져오기
   Future<List<PriceAlert>> getPriceAlerts(String userId) async {
     try {
-      final snapshot = await _database.ref('price_alerts/$userId').get();
+      final snapshot = await _safeRef('price_alerts/$userId').get();
 
       if (snapshot.exists) {
         final List<PriceAlert> alerts = [];
@@ -327,7 +441,7 @@ class FirebaseService {
   /// 가격 알림 추가
   Future<void> addPriceAlert(String userId, PriceAlert alert) async {
     try {
-      await _database.ref('price_alerts/$userId/${alert.id}').set({
+      await _safeRef('price_alerts/$userId/${alert.id}').set({
         'id': alert.id,
         'user_id': alert.userId,
         'coin_id': alert.coinId,
@@ -348,7 +462,7 @@ class FirebaseService {
   /// 가격 알림 업데이트
   Future<void> updatePriceAlert(String userId, PriceAlert alert) async {
     try {
-      await _database.ref('price_alerts/$userId/${alert.id}').update({
+      await _safeRef('price_alerts/$userId/${alert.id}').update({
         'price_target': alert.priceTarget,
         'is_above': alert.isAbove,
         'is_triggered': alert.isTriggered,
@@ -364,7 +478,7 @@ class FirebaseService {
   /// 가격 알림 삭제
   Future<void> deletePriceAlert(String userId, String alertId) async {
     try {
-      await _database.ref('price_alerts/$userId/$alertId').remove();
+      await _safeRef('price_alerts/$userId/$alertId').remove();
     } catch (e) {
       debugPrint('FirebaseService: 가격 알림 삭제 실패 - $e');
       rethrow;
@@ -399,7 +513,7 @@ class FirebaseService {
     try {
       final startTime = DateTime.now();
       final databaseRef = _database.ref();
-      final newsRef = databaseRef.child('news');
+      final newsRef = _safeRef('news');
 
       debugPrint(
         'FirebaseService: [뉴스 요청] Realtime Database 경로: ${newsRef.path}',

@@ -1,6 +1,8 @@
 // 뉴스 모델 클래스
 
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 
 class News {
   final String id;
@@ -14,16 +16,44 @@ class News {
   final int viewCount;
 
   News({
-    required this.id,
+    String? id,
     required this.title,
     required this.content,
     required this.source,
     required this.url,
     required this.publishedAt,
-    required this.relatedCoins,
     this.imageUrl,
+    List<String>? relatedCoins,
     this.viewCount = 0,
-  });
+  }) : id = id ?? _generateSafeId(title, url),
+       relatedCoins = relatedCoins ?? [];
+
+  /// Firebase 경로에 안전한 ID 생성
+  static String _generateSafeId(String title, String url) {
+    // 1. URL과 제목을 합쳐서 해시 생성
+    final String input = '$url-$title';
+    final bytes = utf8.encode(input);
+    final hash = md5.convert(bytes).toString();
+
+    // 2. 특수 문자가 없는 안전한 ID 반환
+    return hash;
+  }
+
+  /// 새로운 안전한 ID로 뉴스 객체 복제
+  News withSafeId() {
+    final safeId = _generateSafeId(title, url);
+    return News(
+      id: safeId,
+      title: title,
+      content: content,
+      source: source,
+      url: url,
+      publishedAt: publishedAt,
+      imageUrl: imageUrl,
+      relatedCoins: List.from(relatedCoins),
+      viewCount: viewCount,
+    );
+  }
 
   // JSON에서 변환
   factory News.fromJson(Map<String, dynamic> json) {

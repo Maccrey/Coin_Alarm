@@ -580,9 +580,8 @@ class NewsViewModel extends ChangeNotifier {
 
   /// 최초 진입 시 캐시가 있으면 캐시, 없으면 Firestore에서 첫 페이지만 가져오기
   Future<void> fetchInitialNewsPage({int pageSize = 20}) async {
-    // 이미 로딩 중이면 중복 요청 방지
     if (_isLoading) {
-      debugPrint('NewsViewModel: 이미 로딩 중이므로 요청 무시');
+      debugPrint('NewsViewModel: 이미 로딩 중입니다.');
       return;
     }
 
@@ -590,66 +589,52 @@ class NewsViewModel extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
-    try {
-      debugPrint('NewsViewModel: 초기 뉴스 페이지 로딩 시작');
+    debugPrint('NewsViewModel: 뉴스 초기 페이지 로드 시작');
 
-      // 1. 즉시 모의 데이터 생성 (빠른 UI 표시를 위해)
-      if (_pagedNewsList.isEmpty) {
-        debugPrint('NewsViewModel: 빠른 표시를 위한 모의 데이터 생성');
-        final mockNews = _generateMockNewsWithImages();
-        _pagedNewsList = mockNews;
-        _newsList = List.from(mockNews);
-        debugPrint('NewsViewModel: [데이터 상태] 모의 데이터 ${mockNews.length}개 생성');
-        notifyListeners(); // 즉시 UI 업데이트
+    try {
+      // 1. 캐시된 데이터 확인
+      final cachedNews = await _getCachedPagedNews();
+      if (cachedNews.isNotEmpty) {
+        debugPrint('NewsViewModel: 캐시된 뉴스 데이터 ${cachedNews.length}개 로드됨');
+        _pagedNewsList = cachedNews;
+        _newsList = List.from(cachedNews);
+        _hasMore = true; // 더 데이터가 있다고 가정
       }
 
-      // 2. Hive 캐시 확인 (백그라운드에서)
-      final cached = await _getCachedPagedNews();
-      debugPrint('NewsViewModel: [데이터 상태] Hive 캐시에서 ${cached.length}개 뉴스 발견');
-      if (cached.isNotEmpty) {
-        debugPrint('NewsViewModel: 캐시된 페이징 뉴스 ${cached.length}개 로드됨');
-        if (cached.isNotEmpty) {
-          debugPrint('NewsViewModel: [캐시 데이터] 첫 번째 뉴스: ${cached.first.title}');
-          debugPrint('NewsViewModel: [캐시 데이터] 마지막 뉴스: ${cached.last.title}');
+      // 2. 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시 데이터만 사용
+      if (_isOfflineMode || !_isConnected) {
+        debugPrint('NewsViewModel: 오프라인 모드 또는 네트워크 연결 없음');
+        if (_pagedNewsList.isEmpty) {
+          debugPrint('NewsViewModel: 캐시된 데이터 없음, 모의 데이터 사용');
+          final mockNews = _generateMockNewsWithImages();
+          _pagedNewsList = mockNews;
+          _newsList = List.from(mockNews);
+          _hasMore = false;
         }
-
-        // 캐시된 데이터가 현재 데이터보다 많으면 업데이트
-        if (cached.length > _pagedNewsList.length) {
-          _pagedNewsList = cached;
-          _newsList = List.from(cached);
-          _hasMore = true;
-          debugPrint(
-            'NewsViewModel: [데이터 상태] 캐시 데이터로 업데이트 (${cached.length}개)',
-          );
-          notifyListeners();
-          debugPrint('NewsViewModel: 캐시 데이터로 UI 업데이트 완료');
-        }
-
-        // 캐시된 데이터가 충분히 많으면(10개 이상) Firebase 요청을 건너뜀
-        if (cached.length >= 10) {
-          debugPrint('NewsViewModel: 캐시된 뉴스가 충분히 있어 Firebase 요청 건너뜀');
-          _isLoading = false;
-          notifyListeners();
-          return;
-        }
+        _isLoading = false;
+        notifyListeners();
+        return;
       }
 
       // 3. Firebase 서비스 초기화 확인
-      debugPrint(
-        'NewsViewModel: [Firebase] 초기화 상태: ${_firebaseService.isInitialized}, 웹환경: ${_firebaseService.isWeb}',
-      );
       if (!_firebaseService.isInitialized) {
-        try {
-          debugPrint('NewsViewModel: [Firebase] 초기화 시도');
-          await _firebaseService.initialize();
-          debugPrint('NewsViewModel: [Firebase] 초기화 완료');
-        } catch (e) {
-          debugPrint('NewsViewModel: Firebase 서비스 초기화 실패 - $e');
-          _errorMessage = 'Firebase 서비스 초기화 실패';
-          _isLoading = false;
-          notifyListeners();
-          return;
+        debugPrint('NewsViewModel: Firebase 서비스가 초기화되지 않음');
+
+        // Firebase 서비스가 초기화되지 않았을 때 모의 데이터 사용
+        if (_pagedNewsList.isEmpty) {
+          debugPrint('NewsViewModel: Firebase 초기화 안됨, 모의 데이터 사용');
+          final mockNews = _generateMockNewsWithImages();
+          _pagedNewsList = mockNews;
+          _newsList = List.from(mockNews);
+          _hasMore = false;
+
+          // 캐시에 모의 데이터 저장
+          await _cachePagedNewsData(_pagedNewsList);
         }
+
+        _isLoading = false;
+        notifyListeners();
+        return;
       }
 
       // 4. Firebase에서 데이터 요청

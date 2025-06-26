@@ -43,7 +43,7 @@ dependencies:
   http: ^0.13.5
   dio: ^5.4.0
   shared_preferences: ^2.2.0
-  crypto: ^3.0.3
+  crypto: ^3.0.6
   internet_connection_checker: ^1.0.0
 
   # 유틸리티
