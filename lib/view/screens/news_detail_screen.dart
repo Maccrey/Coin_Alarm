@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart'; // Clipboard 기능을 위해 추가
 import '../../model/news_model.dart';
 import '../../core/theme.dart';
 import '../../viewmodel/news_viewmodel.dart';
+import 'package:flutter/services.dart'; // Clipboard 기능을 위해 추가
 
 class NewsDetailScreen extends StatefulWidget {
   final News news;
@@ -197,14 +199,82 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   // 뉴스 URL 열기
   Future<void> _openNewsUrl(String url) async {
     try {
+      // URL이 유효한지 확인
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        debugPrint('유효하지 않은 URL 형식: $url');
+        url = 'https://$url'; // URL에 https:// 접두사 추가 시도
+      }
+
+      debugPrint('뉴스 URL 열기 시도: $url');
       final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        debugPrint('뉴스 URL을 열 수 없습니다: $url');
+
+      // 방법 1: 외부 애플리케이션으로 열기 시도
+      bool launched = false;
+      try {
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        debugPrint('외부 애플리케이션으로 URL 열기 시도 결과: $launched');
+      } catch (e) {
+        debugPrint('외부 애플리케이션으로 URL 열기 실패: $e');
+      }
+
+      // 첫 번째 방법이 실패하면 다른 방법 시도
+      if (!launched) {
+        debugPrint('다른 방법으로 URL 열기 시도...');
+        try {
+          // 방법 2: 인앱 브라우저로 열기 시도
+          launched = await launchUrl(
+            uri,
+            mode: LaunchMode.inAppWebView,
+            webViewConfiguration: const WebViewConfiguration(
+              enableJavaScript: true,
+              enableDomStorage: true,
+            ),
+          );
+          debugPrint('인앱 브라우저로 URL 열기 시도 결과: $launched');
+        } catch (e) {
+          debugPrint('인앱 브라우저로 URL 열기 실패: $e');
+        }
+      }
+
+      // 여전히 실패하면 플랫폼 기본 방식으로 시도
+      if (!launched) {
+        debugPrint('플랫폼 기본 방식으로 URL 열기 시도...');
+        try {
+          launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+          debugPrint('플랫폼 기본 방식으로 URL 열기 시도 결과: $launched');
+        } catch (e) {
+          debugPrint('플랫폼 기본 방식으로 URL 열기 실패: $e');
+        }
+      }
+
+      // 모든 방법이 실패하면 사용자에게 알림
+      if (!launched) {
+        debugPrint('모든 URL 열기 방법 실패');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('이 링크를 열 수 없습니다: $url'),
+              action: SnackBarAction(
+                label: 'URL 복사',
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: url)).then((_) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('URL이 클립보드에 복사되었습니다')),
+                    );
+                  });
+                },
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
-      debugPrint('뉴스 URL 열기 오류: $e');
+      debugPrint('URL 처리 중 예외 발생: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('링크를 처리하는 중 오류가 발생했습니다: ${e.toString()}')),
+        );
+      }
     }
   }
 
