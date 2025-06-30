@@ -681,15 +681,44 @@ class NewsViewModel extends ChangeNotifier {
             'NewsViewModel: [데이터 비교] 공통 ID: ${commonIds.length}개, 기존에만 있음: ${onlyInExisting.length}개, 새로 추가됨: ${onlyInNew.length}개',
           );
 
-          // 새로운 데이터가 있거나 기존 데이터보다 많은 경우 업데이트
+          // 기존 데이터와 새 데이터 병합
+          final Map<String, News> mergedNewsMap = {};
+
+          // 1. 기존 데이터 먼저 맵에 추가
+          for (final news in _pagedNewsList) {
+            mergedNewsMap[news.id] = news;
+          }
+
+          // 2. 새 데이터로 업데이트 또는 추가 (조회수 보존)
+          for (final news in result.news) {
+            // 이미 존재하는 뉴스인 경우 조회수 보존
+            if (mergedNewsMap.containsKey(news.id)) {
+              final existingNews = mergedNewsMap[news.id]!;
+              // 조회수만 기존 값으로 유지하고 나머지는 새 데이터로 업데이트
+              mergedNewsMap[news.id] = news.copyWith(
+                viewCount: existingNews.viewCount,
+              );
+            } else {
+              // 새로운 뉴스는 그대로 추가
+              mergedNewsMap[news.id] = news;
+            }
+          }
+
+          // 3. 맵을 리스트로 변환하고 최신순으로 정렬
+          final mergedNewsList = mergedNewsMap.values.toList()
+            ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+
+          // 데이터가 변경된 경우에만 업데이트
           if (onlyInNew.isNotEmpty ||
-              result.news.length > _pagedNewsList.length) {
-            _pagedNewsList = result.news;
-            _newsList = List.from(result.news);
+              onlyInExisting.isNotEmpty ||
+              _hasNewsContentChanged(_pagedNewsList, result.news)) {
+            _pagedNewsList = mergedNewsList;
+            _newsList = List.from(mergedNewsList);
             _lastDoc = result.lastDoc;
             _hasMore = result.hasMore;
+
             debugPrint(
-              'NewsViewModel: [데이터 상태] Firebase 데이터로 업데이트 (${result.news.length}개)',
+              'NewsViewModel: [데이터 상태] 병합된 데이터로 업데이트 (${mergedNewsList.length}개)',
             );
 
             // Hive에 저장
@@ -698,7 +727,7 @@ class NewsViewModel extends ChangeNotifier {
               'NewsViewModel: [캐시 저장] ${_pagedNewsList.length}개 뉴스 캐시 저장 완료',
             );
           } else {
-            debugPrint('NewsViewModel: [데이터 상태] 기존 데이터와 동일하여 업데이트 건너뜀');
+            debugPrint('NewsViewModel: [데이터 상태] 실질적인 변경사항 없어 업데이트 건너뜀');
           }
         } else {
           debugPrint('NewsViewModel: [Firebase] 로드된 뉴스 없음');
@@ -753,6 +782,39 @@ class NewsViewModel extends ChangeNotifier {
         'NewsViewModel: [데이터 상태] 최종 - ${_pagedNewsList.length}개 뉴스, 에러: ${_errorMessage != null}, 더 있음: $_hasMore',
       );
     }
+  }
+
+  // 뉴스 내용이 변경되었는지 확인
+  bool _hasNewsContentChanged(List<News> oldList, List<News> newList) {
+    final oldMap = {for (var news in oldList) news.id: news};
+    final newMap = {for (var news in newList) news.id: news};
+
+    // 공통 ID를 가진 뉴스들에 대해 내용 비교
+    for (final id in oldMap.keys.where((id) => newMap.containsKey(id))) {
+      final oldNews = oldMap[id]!;
+      final newNews = newMap[id]!;
+
+      // 조회수를 제외한 내용 비교
+      if (oldNews.title != newNews.title ||
+          oldNews.content != newNews.content ||
+          oldNews.source != newNews.source ||
+          oldNews.url != newNews.url ||
+          oldNews.imageUrl != newNews.imageUrl ||
+          !_areListsEqual(oldNews.relatedCoins, newNews.relatedCoins)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // 두 리스트가 같은지 비교
+  bool _areListsEqual<T>(List<T> list1, List<T> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+      if (list1[i] != list2[i]) return false;
+    }
+    return true;
   }
 
   /// Hive에 페이징된 뉴스 데이터 저장
@@ -1028,24 +1090,66 @@ class NewsViewModel extends ChangeNotifier {
       if (result.news.isNotEmpty) {
         debugPrint('NewsViewModel: 다음 페이지 로드 성공 - ${result.news.length}개 뉴스');
 
-        // 중복 제거
+        // 중복 제거 및 조회수 보존을 위한 병합 로직
         final existingIds = _pagedNewsList.map((news) => news.id).toSet();
-        final newsList = result.news
-            .where((news) => !existingIds.contains(news.id))
-            .toList();
+        final Map<String, News> existingNewsMap = {
+          for (var news in _pagedNewsList) news.id: news,
+        };
 
-        if (newsList.isNotEmpty) {
-          debugPrint('NewsViewModel: 중복 제거 후 ${newsList.length}개 뉴스 추가');
-          _pagedNewsList.addAll(newsList);
+        final List<News> newUniqueNews = [];
+
+        // 새로운 뉴스만 필터링하면서 조회수 보존
+        for (final news in result.news) {
+          if (!existingIds.contains(news.id)) {
+            // 새로운 뉴스는 그대로 추가
+            newUniqueNews.add(news);
+          } else {
+            // 이미 있는 뉴스는 조회수만 보존하고 내용 업데이트
+            final existingNews = existingNewsMap[news.id]!;
+            if (news.title != existingNews.title ||
+                news.content != existingNews.content ||
+                news.source != existingNews.source ||
+                news.url != existingNews.url ||
+                news.imageUrl != existingNews.imageUrl ||
+                !_areListsEqual(news.relatedCoins, existingNews.relatedCoins)) {
+              // 내용이 변경된 경우 조회수만 유지하고 업데이트
+              final updatedNews = news.copyWith(
+                viewCount: existingNews.viewCount,
+              );
+              // 기존 뉴스 교체
+              final index = _pagedNewsList.indexWhere((n) => n.id == news.id);
+              if (index >= 0) {
+                _pagedNewsList[index] = updatedNews;
+              }
+            }
+          }
+        }
+
+        if (newUniqueNews.isNotEmpty) {
+          debugPrint('NewsViewModel: 중복 제거 후 ${newUniqueNews.length}개 뉴스 추가');
+          _pagedNewsList.addAll(newUniqueNews);
           _newsList = List.from(_pagedNewsList);
           _lastDoc = result.lastDoc;
           _hasMore = result.hasMore;
 
+          // 최신순으로 정렬
+          _pagedNewsList.sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+          _newsList.sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+
           // 캐시 업데이트
           await _cachePagedNewsData(_pagedNewsList);
         } else {
-          debugPrint('NewsViewModel: 모든 뉴스가 중복, 더 이상 로드하지 않음');
-          _hasMore = false;
+          debugPrint('NewsViewModel: 모든 뉴스가 중복, 다음 페이지 요청');
+          // 모든 뉴스가 중복인 경우 다음 페이지 요청
+          _lastDoc = result.lastDoc;
+          _hasMore = result.hasMore;
+
+          // 중복이 많은 경우 무한 루프 방지
+          _loadCount++;
+          if (_loadCount > 3) {
+            debugPrint('NewsViewModel: 연속 중복 데이터 3회 초과, 더 이상 로드하지 않음');
+            _hasMore = false;
+          }
         }
       } else {
         debugPrint('NewsViewModel: 더 이상 로드할 뉴스 없음');
@@ -1055,7 +1159,6 @@ class NewsViewModel extends ChangeNotifier {
       debugPrint('NewsViewModel: 다음 페이지 로드 실패 - $e');
     } finally {
       _isLoadingMore = false;
-      _loadCount++;
       notifyListeners();
     }
   }
@@ -1146,8 +1249,34 @@ class NewsViewModel extends ChangeNotifier {
       'ada': 'cardano',
     };
 
+    final symbolMap = {
+      'bitcoin': 'btc',
+      'ethereum': 'eth',
+      'binancecoin': 'bnb',
+      'solana': 'sol',
+      'ripple': 'xrp',
+      'dogecoin': 'doge',
+      'cardano': 'ada',
+    };
+
     final lowerCaseId = coinIdOrSymbol.toLowerCase();
-    return idMap[lowerCaseId] ?? lowerCaseId;
+
+    // 매핑 정보 로깅
+    debugPrint(
+      'NewsViewModel: 코인 ID 정규화 - 입력: $coinIdOrSymbol, 소문자: $lowerCaseId',
+    );
+    if (idMap.containsKey(lowerCaseId)) {
+      debugPrint(
+        'NewsViewModel: 심볼->ID 매핑 적용 - $lowerCaseId -> ${idMap[lowerCaseId]}',
+      );
+      return idMap[lowerCaseId]!;
+    } else if (symbolMap.containsKey(lowerCaseId)) {
+      debugPrint('NewsViewModel: ID->심볼 매핑 확인 - $lowerCaseId는 이미 ID 형태');
+      return lowerCaseId;
+    }
+
+    debugPrint('NewsViewModel: 매핑 없음, 원본 반환 - $lowerCaseId');
+    return lowerCaseId;
   }
 
   // 뉴스 검색
@@ -1237,8 +1366,15 @@ class NewsViewModel extends ChangeNotifier {
   void setFilter(String? coinId) {
     if (coinId == '전체') {
       _coinFilter = null;
+      _rawCoinFilter = null;
+      _normalizedCoinFilter = null;
     } else {
       _coinFilter = coinId;
+      _rawCoinFilter = coinId;
+      _normalizedCoinFilter = _normalizeCoinId(coinId ?? '');
+      debugPrint(
+        'NewsViewModel: 필터 설정 - 원본: $_rawCoinFilter, 정규화: $_normalizedCoinFilter',
+      );
     }
     notifyListeners();
   }
@@ -1254,5 +1390,79 @@ class NewsViewModel extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  // 뉴스 조회수 증가
+  Future<void> incrementViewCount(News news) async {
+    try {
+      debugPrint(
+        'NewsViewModel: 뉴스 조회수 증가 시작 - ID: ${news.id}, 제목: ${news.title}',
+      );
+
+      // 현재 조회수 확인 및 증가
+      final updatedCount = news.viewCount + 1;
+      final updatedNews = news.copyWith(viewCount: updatedCount);
+
+      // 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시만 업데이트
+      if (_isOfflineMode || !_isConnected) {
+        debugPrint('NewsViewModel: 오프라인 모드 또는 네트워크 연결 없음 - 캐시만 업데이트');
+        _updateNewsInLists(updatedNews);
+        await _cacheNewsData(_newsList);
+        return;
+      }
+
+      // Firebase에 조회수 업데이트
+      if (_firebaseService.isInitialized) {
+        await _firebaseService.updateNewsViewCount(news.id, updatedCount);
+        debugPrint(
+          'NewsViewModel: Firebase에 조회수 업데이트 완료 - 새 조회수: $updatedCount',
+        );
+      } else {
+        debugPrint('NewsViewModel: Firebase 초기화 안됨 - 조회수 업데이트 건너뜀');
+      }
+
+      // 로컬 리스트에서 해당 뉴스 업데이트
+      _updateNewsInLists(updatedNews);
+
+      // 캐시 업데이트
+      await _cacheNewsData(_newsList);
+
+      // 인기 뉴스 재정렬
+      _popularNews = List.from(_newsList)
+        ..sort((a, b) => b.viewCount.compareTo(a.viewCount));
+      _popularNews = _popularNews.take(5).toList();
+
+      notifyListeners();
+      debugPrint(
+        'NewsViewModel: 뉴스 조회수 증가 완료 - ID: ${news.id}, 새 조회수: $updatedCount',
+      );
+    } catch (e) {
+      debugPrint('NewsViewModel: 뉴스 조회수 증가 실패 - $e');
+    }
+  }
+
+  // 로컬 리스트에서 뉴스 업데이트
+  void _updateNewsInLists(News updatedNews) {
+    // _newsList 업데이트
+    final newsIndex = _newsList.indexWhere((item) => item.id == updatedNews.id);
+    if (newsIndex >= 0) {
+      _newsList[newsIndex] = updatedNews;
+    }
+
+    // _pagedNewsList 업데이트
+    final pagedNewsIndex = _pagedNewsList.indexWhere(
+      (item) => item.id == updatedNews.id,
+    );
+    if (pagedNewsIndex >= 0) {
+      _pagedNewsList[pagedNewsIndex] = updatedNews;
+    }
+
+    // _popularNews 업데이트
+    final popularNewsIndex = _popularNews.indexWhere(
+      (item) => item.id == updatedNews.id,
+    );
+    if (popularNewsIndex >= 0) {
+      _popularNews[popularNewsIndex] = updatedNews;
+    }
   }
 }

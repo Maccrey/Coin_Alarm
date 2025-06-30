@@ -122,13 +122,60 @@ void callbackDispatcher() {
     await Hive.initFlutter();
     await PriceAlertService().initialize();
     debugPrint('[백그라운드] PriceAlertService 초기화 완료');
+
+    // 알림 서비스 초기화
+    final notificationService = NotificationService();
+    await notificationService.initialize();
+    debugPrint('[백그라운드] NotificationService 초기화 완료');
+
     // 코인 가격 fetch 및 알림 체크
     final coinList = await fetchCoinPricesForBackground();
     final triggeredAlerts = await PriceAlertService().checkAndUpdateAlerts(
       coinList,
       'local-user', // 실제 사용자 ID로 대체
     );
+
     debugPrint('[백그라운드] 알림 체크 완료. 트리거된 알림 개수: ${triggeredAlerts.length}');
+
+    // 트리거된 알림이 있으면 사용자에게 알림 표시
+    if (triggeredAlerts.isNotEmpty) {
+      for (int i = 0; i < triggeredAlerts.length; i++) {
+        final alert = triggeredAlerts[i];
+        final coin = coinList.firstWhere(
+          (c) => c.id == alert.coinId,
+          orElse: () => Coin(
+            id: '',
+            symbol: alert.coinSymbol,
+            name: alert.coinSymbol,
+            currentPrice: 0,
+            priceChangePercentage24h: 0,
+            lastUpdated: DateTime.now(),
+          ),
+        );
+
+        // 알림 발생 시간 포맷팅
+        final now = alert.triggeredAt ?? DateTime.now();
+        final timeStr = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+        final dateStr = '${now.year}-${now.month}-${now.day}';
+
+        // 알림 제목 및 내용 구성
+        final title = '${alert.coinSymbol} 가격 알림';
+        final condition = alert.isAbove ? '이상' : '이하';
+        final body =
+            '[발생됨] $dateStr $timeStr\n${alert.coinSymbol} 현재가: ₩${coin.currentPrice}\n조건: ₩${alert.priceTarget} $condition';
+
+        // 알림 표시
+        await notificationService.showNotification(
+          id: 1000 + i, // 고유한 알림 ID 생성
+          title: title,
+          body: body,
+          payload: json.encode(alert.toJson()),
+        );
+
+        debugPrint('[백그라운드] 알림 표시: $title - $body');
+      }
+    }
+
     return Future.value(true);
   });
 }

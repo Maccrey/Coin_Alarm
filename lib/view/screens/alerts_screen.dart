@@ -436,9 +436,9 @@ class _AlertsScreenState extends State<AlertsScreen>
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    if (coin != null)
+                                    if (alert.triggeredPrice != null)
                                       Text(
-                                        '₩${_formatPrice(coin.currentPrice)}',
+                                        '₩${_formatPrice(alert.triggeredPrice!)}',
                                         style: const TextStyle(
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold,
@@ -960,6 +960,15 @@ class _AlertsScreenState extends State<AlertsScreen>
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Text(_formatDateTime(alert.triggeredAt!, detailed: true)),
+
+              if (alert.triggeredPrice != null) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  '발생 당시 가격:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text('₩${_formatPrice(alert.triggeredPrice!)}'),
+              ],
             ],
           ],
         ),

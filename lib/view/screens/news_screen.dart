@@ -17,9 +17,6 @@ class NewsScreen extends StatefulWidget {
 }
 
 class _NewsScreenState extends State<NewsScreen> {
-  // 선택된 필터
-  String _selectedFilter = '전체';
-
   // 검색 컨트롤러
   final TextEditingController _searchController = TextEditingController();
 
@@ -84,17 +81,6 @@ class _NewsScreenState extends State<NewsScreen> {
         );
       }
     }
-  }
-
-  // 필터 적용
-  void _applyFilter(String filter) async {
-    setState(() {
-      _selectedFilter = filter;
-      _searchController.clear(); // 필터 선택 시 검색어도 초기화
-    });
-
-    final newsViewModel = Provider.of<NewsViewModel>(context, listen: false);
-    await newsViewModel.loadNewsByCoinId(filter);
   }
 
   // 검색어 처리
@@ -169,7 +155,7 @@ class _NewsScreenState extends State<NewsScreen> {
             children: [
               // 메인 콘텐츠
               hasNewsData
-                  ? _searchController.text.isNotEmpty || _selectedFilter != '전체'
+                  ? _searchController.text.isNotEmpty
                         ? _buildNewsList(newsViewModel)
                         : _buildNewsPageWithSections(newsViewModel)
                   : _buildEmptyView(newsViewModel),
@@ -322,11 +308,19 @@ class _NewsScreenState extends State<NewsScreen> {
       'NewsScreen: 섹션별 뉴스 페이지 빌드 - ${viewModel.filteredNewsList.length}개 뉴스',
     );
 
+    // 조회수가 있는 뉴스만 필터링하고 조회수에 따라 정렬
+    final popularNews =
+        viewModel.filteredNewsList.where((news) => news.viewCount > 0).toList()
+          ..sort((a, b) => b.viewCount.compareTo(a.viewCount));
+
+    // 조회수가 있는 뉴스와 없는 뉴스를 분리
+    final remainingNews =
+        viewModel.filteredNewsList.where((news) => news.viewCount <= 0).toList()
+          // 최신 뉴스는 업데이트 시간이 가까운 순서대로 정렬
+          ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+
     return Column(
       children: [
-        // 필터 버튼 목록
-        _buildFilterButtons(),
-
         // 뉴스 목록 (섹션별)
         Expanded(
           child: RefreshIndicator(
@@ -338,21 +332,17 @@ class _NewsScreenState extends State<NewsScreen> {
               controller: _scrollController,
               padding: const EdgeInsets.only(top: 8, bottom: 16),
               children: [
-                // 주요 뉴스 섹션
-                if (viewModel.filteredNewsList.isNotEmpty) ...[
-                  _buildNewsSection(
-                    '주요 뉴스',
-                    viewModel.filteredNewsList.take(1).toList(),
-                    isMainNews: true,
-                  ),
+                // 주요 뉴스 섹션 (조회수 있는 뉴스만)
+                if (popularNews.isNotEmpty) ...[
+                  _buildNewsSection('주요 뉴스', popularNews, isMainNews: true),
                   const SizedBox(height: 16),
                 ],
 
-                // 최신 뉴스 섹션
-                if (viewModel.filteredNewsList.length > 1) ...[
+                // 최신 뉴스 섹션 (나머지 뉴스)
+                if (remainingNews.isNotEmpty) ...[
                   _buildNewsSection(
                     '최신 뉴스',
-                    viewModel.filteredNewsList.skip(1).toList(),
+                    remainingNews,
                     isHorizontal: false,
                   ),
                 ],
@@ -374,113 +364,11 @@ class _NewsScreenState extends State<NewsScreen> {
     );
   }
 
-  // 인기 뉴스 아이템 (가로 스크롤용)
-  Widget _buildFeaturedNewsItem(News news) {
-    return Container(
-      width: 300,
-      margin: const EdgeInsets.only(right: 16, left: 2, bottom: 2),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: InkWell(
-          onTap: () {
-            Navigator.pushNamed(context, '/news_detail', arguments: news);
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 뉴스 이미지
-              if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
-                SizedBox(
-                  height: 120,
-                  width: double.infinity,
-                  child: Image.network(
-                    news.imageUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(
-                          Icons.image_not_supported,
-                          color: Colors.grey,
-                          size: 48,
-                        ),
-                      );
-                    },
-                  ),
-                )
-              else
-                Container(
-                  height: 130,
-                  width: double.infinity,
-                  color: Colors.grey.shade200,
-                  child: const Icon(
-                    Icons.article,
-                    color: Colors.grey,
-                    size: 48,
-                  ),
-                ),
-
-              // 뉴스 정보
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      news.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      news.content,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade700,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          news.source,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
-                          _formatDate(news.publishedAt),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   // 뉴스 목록 위젯 (페이징 적용)
   Widget _buildNewsList(NewsViewModel viewModel) {
-    final newsList = viewModel.filteredNewsList;
+    // 검색 결과를 최신순으로 정렬
+    final newsList = List.from(viewModel.filteredNewsList)
+      ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
 
     debugPrint(
       'NewsScreen: 뉴스 목록 빌드 - ${newsList.length}개 뉴스, 필터링됨: ${viewModel.filteredNewsList.isNotEmpty}',
@@ -488,9 +376,6 @@ class _NewsScreenState extends State<NewsScreen> {
 
     return Column(
       children: [
-        // 필터 버튼 목록
-        _buildFilterButtons(),
-
         // 뉴스 목록
         Expanded(
           child: RefreshIndicator(
@@ -613,12 +498,33 @@ class _NewsScreenState extends State<NewsScreen> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        Text(
-                          _formatDate(news.publishedAt),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
+                        Row(
+                          children: [
+                            // 조회수 표시
+                            if (news.viewCount > 0) ...[
+                              Icon(
+                                Icons.visibility,
+                                size: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${news.viewCount}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Text(
+                              _formatDate(news.publishedAt),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -632,37 +538,217 @@ class _NewsScreenState extends State<NewsScreen> {
     );
   }
 
-  // 필터 버튼 목록
-  Widget _buildFilterButtons() {
-    final filters = ['전체', 'BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'BNB'];
+  // 뉴스 섹션 위젯
+  Widget _buildNewsSection(
+    String title,
+    List<News> newsList, {
+    bool isMainNews = false,
+    bool isHorizontal = true,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 섹션 제목
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              if (title == '주요 뉴스')
+                Text(
+                  '조회수 높은 순',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                )
+              else if (title == '최신 뉴스')
+                Text(
+                  '최신순',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
 
+        // 뉴스 목록
+        isHorizontal
+            ? SizedBox(
+                height: isMainNews ? 260 : 200,
+                child: newsList.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.trending_up,
+                              size: 48,
+                              color: Theme.of(context).disabledColor,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              '아직 인기 뉴스가 없습니다',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Theme.of(context).disabledColor,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '뉴스를 읽으면 인기 뉴스에 표시됩니다',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Theme.of(context).disabledColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: newsList.length,
+                        itemBuilder: (context, index) {
+                          return _buildFeaturedNewsItem(newsList[index]);
+                        },
+                      ),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: newsList.length,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: _buildNewsItem(newsList[index]),
+                  );
+                },
+              ),
+      ],
+    );
+  }
+
+  // 인기 뉴스 아이템 (가로 스크롤용)
+  Widget _buildFeaturedNewsItem(News news) {
     return Container(
-      height: 40,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: filters.length,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemBuilder: (context, index) {
-          final filter = filters[index];
-          final isSelected = _selectedFilter == filter;
+      width: 300,
+      margin: const EdgeInsets.only(right: 16, left: 2, bottom: 2),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: InkWell(
+          onTap: () {
+            Navigator.pushNamed(context, '/news_detail', arguments: news);
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 뉴스 이미지
+              if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
+                SizedBox(
+                  height: 120,
+                  width: double.infinity,
+                  child: Image.network(
+                    news.imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey.shade200,
+                        child: const Icon(
+                          Icons.image_not_supported,
+                          color: Colors.grey,
+                          size: 48,
+                        ),
+                      );
+                    },
+                  ),
+                )
+              else
+                Container(
+                  height: 130,
+                  width: double.infinity,
+                  color: Colors.grey.shade200,
+                  child: const Icon(
+                    Icons.article,
+                    color: Colors.grey,
+                    size: 48,
+                  ),
+                ),
 
-          return Container(
-            margin: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              label: Text(filter),
-              selected: isSelected,
-              onSelected: (selected) {
-                if (selected) {
-                  _applyFilter(filter);
-                }
-              },
-              backgroundColor: Theme.of(context).colorScheme.surface,
-              selectedColor: Theme.of(context).colorScheme.primaryContainer,
-              checkmarkColor: Theme.of(context).colorScheme.primary,
-            ),
-          );
-        },
+              // 뉴스 정보
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      news.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      news.summary,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          news.source,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            // 조회수 표시
+                            if (news.viewCount > 0) ...[
+                              Icon(
+                                Icons.visibility,
+                                size: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '${news.viewCount}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Text(
+                              _formatDate(news.publishedAt),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -702,107 +788,5 @@ class _NewsScreenState extends State<NewsScreen> {
     } catch (e) {
       debugPrint('뉴스 URL 열기 오류: $e');
     }
-  }
-
-  // 뉴스 섹션 위젯
-  Widget _buildNewsSection(
-    String title,
-    List<News> newsList, {
-    bool isMainNews = false,
-    bool isHorizontal = true,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 섹션 제목
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(title, style: Theme.of(context).textTheme.titleLarge),
-        ),
-        const SizedBox(height: 8),
-
-        // 뉴스 목록
-        isHorizontal
-            ? SizedBox(
-                height: isMainNews ? 260 : 200,
-                child: newsList.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.trending_up,
-                              size: 48,
-                              color: Theme.of(context).disabledColor,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              '아직 인기 뉴스가 없습니다',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Theme.of(context).disabledColor,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '뉴스를 읽으면 인기 뉴스에 표시됩니다',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Theme.of(context).hintColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.only(left: 16),
-                        itemCount: newsList.length,
-                        itemBuilder: (context, index) {
-                          final news = newsList[index];
-                          return _buildFeaturedNewsItem(news);
-                        },
-                      ),
-              )
-            : Column(
-                children: newsList.isEmpty
-                    ? [
-                        const SizedBox(height: 40),
-                        Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.article_outlined,
-                                size: 48,
-                                color: Theme.of(context).disabledColor,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                '뉴스가 없습니다',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Theme.of(context).disabledColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ]
-                    : newsList
-                          .map(
-                            (news) => Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 6,
-                              ),
-                              child: _buildNewsItem(news),
-                            ),
-                          )
-                          .toList(),
-              ),
-        const SizedBox(height: 24),
-      ],
-    );
   }
 }

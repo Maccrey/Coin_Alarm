@@ -328,6 +328,86 @@ class FirebaseService {
     }
   }
 
+  /// 뉴스 조회수만 업데이트
+  Future<void> updateNewsViewCount(String newsId, int viewCount) async {
+    try {
+      debugPrint('FirebaseService: 뉴스 조회수 업데이트 - ID: $newsId, 조회수: $viewCount');
+      await _safeRef('news/$newsId').update({'view_count': viewCount});
+    } catch (e) {
+      debugPrint('FirebaseService: 뉴스 조회수 업데이트 실패 - $e');
+      rethrow;
+    }
+  }
+
+  /// 뉴스 데이터가 변경된 경우에만 업데이트
+  Future<bool> updateNewsIfChanged(News news, News? existingNews) async {
+    try {
+      // 기존 뉴스가 없으면 새로 추가
+      if (existingNews == null) {
+        await addNews(news);
+        return true;
+      }
+
+      // 변경 사항이 있는지 확인
+      bool hasChanges = false;
+      final updates = <String, dynamic>{};
+
+      if (news.title != existingNews.title) {
+        updates['title'] = news.title;
+        hasChanges = true;
+      }
+      if (news.content != existingNews.content) {
+        updates['content'] = news.content;
+        hasChanges = true;
+      }
+      if (news.source != existingNews.source) {
+        updates['source'] = news.source;
+        hasChanges = true;
+      }
+      if (news.url != existingNews.url) {
+        updates['url'] = news.url;
+        hasChanges = true;
+      }
+      if (news.imageUrl != existingNews.imageUrl) {
+        updates['image_url'] = news.imageUrl;
+        hasChanges = true;
+      }
+      if (!_areListsEqual(news.relatedCoins, existingNews.relatedCoins)) {
+        updates['related_coins'] = news.relatedCoins;
+        hasChanges = true;
+      }
+      if (news.viewCount != existingNews.viewCount) {
+        updates['view_count'] = news.viewCount;
+        hasChanges = true;
+      }
+
+      // 변경 사항이 있는 경우에만 업데이트
+      if (hasChanges) {
+        updates['timestamp'] = ServerValue.timestamp;
+        await _safeRef('news/${news.id}').update(updates);
+        debugPrint(
+          'FirebaseService: 뉴스 업데이트 완료 - ID: ${news.id}, 변경된 필드: ${updates.keys.join(", ")}',
+        );
+        return true;
+      }
+
+      debugPrint('FirebaseService: 뉴스 변경 사항 없음 - ID: ${news.id}');
+      return false;
+    } catch (e) {
+      debugPrint('FirebaseService: 뉴스 조건부 업데이트 실패 - $e');
+      rethrow;
+    }
+  }
+
+  /// 두 리스트가 같은지 비교
+  bool _areListsEqual<T>(List<T> list1, List<T> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+      if (list1[i] != list2[i]) return false;
+    }
+    return true;
+  }
+
   /// 뉴스 삭제
   Future<void> deleteNews(String newsId) async {
     try {

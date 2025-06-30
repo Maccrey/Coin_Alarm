@@ -196,13 +196,14 @@ class PriceAlertService {
         final updatedAlert = alert.copyWith(
           isTriggered: true,
           triggeredAt: DateTime.now(),
+          triggeredPrice: coin.currentPrice,
         );
 
         await _alertBox.put(alert.id, updatedAlert);
         triggeredAlerts.add(updatedAlert);
 
         debugPrint(
-          'PriceAlertService: 알림 발생 - ${alert.coinSymbol} (${alert.isAbove ? '이상' : '이하'} ${alert.priceTarget})',
+          'PriceAlertService: 알림 발생 - ${alert.coinSymbol} (${alert.isAbove ? '이상' : '이하'} ${alert.priceTarget}, 현재가: ${coin.currentPrice})',
         );
       }
     }

@@ -162,10 +162,18 @@ class News {
 
   // 콘텐츠 요약 (최대 100자)
   String get summary {
+    String contentSummary;
     if (content.length <= 100) {
-      return content;
+      contentSummary = content;
+    } else {
+      contentSummary = '${content.substring(0, 97)}...';
     }
-    return '${content.substring(0, 97)}...';
+
+    // 조회수가 있는 경우 표시
+    if (viewCount > 0) {
+      return '$contentSummary (조회수: $viewCount)';
+    }
+    return contentSummary;
   }
 
   // 시간 경과 표시

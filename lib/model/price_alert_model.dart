@@ -36,6 +36,9 @@ class PriceAlert {
   @HiveField(9)
   final String? notes; // 사용자 메모
 
+  @HiveField(10)
+  final double? triggeredPrice; // 알림 발생 시 현재 가격
+
   PriceAlert({
     required this.id,
     required this.userId,
@@ -47,6 +50,7 @@ class PriceAlert {
     required this.createdAt,
     this.triggeredAt,
     this.notes,
+    this.triggeredPrice,
   });
 
   // JSON에서 변환
@@ -66,6 +70,9 @@ class PriceAlert {
           ? DateTime.parse(json['triggered_at'])
           : null,
       notes: json['notes'],
+      triggeredPrice: json['triggered_price'] != null
+          ? (json['triggered_price'] as num).toDouble()
+          : null,
     );
   }
 
@@ -82,6 +89,7 @@ class PriceAlert {
       'created_at': createdAt.toIso8601String(),
       'triggered_at': triggeredAt?.toIso8601String(),
       'notes': notes,
+      'triggered_price': triggeredPrice,
     };
   }
 
@@ -118,6 +126,7 @@ class PriceAlert {
     DateTime? createdAt,
     DateTime? triggeredAt,
     String? notes,
+    double? triggeredPrice,
   }) {
     return PriceAlert(
       id: id ?? this.id,
@@ -130,6 +139,7 @@ class PriceAlert {
       createdAt: createdAt ?? this.createdAt,
       triggeredAt: triggeredAt ?? this.triggeredAt,
       notes: notes ?? this.notes,
+      triggeredPrice: triggeredPrice ?? this.triggeredPrice,
     );
   }
 }

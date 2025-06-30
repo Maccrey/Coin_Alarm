@@ -1,12 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../../model/news_model.dart';
 import '../../core/theme.dart';
+import '../../viewmodel/news_viewmodel.dart';
 
-class NewsDetailScreen extends StatelessWidget {
+class NewsDetailScreen extends StatefulWidget {
   final News news;
 
   const NewsDetailScreen({super.key, required this.news});
+
+  @override
+  State<NewsDetailScreen> createState() => _NewsDetailScreenState();
+}
+
+class _NewsDetailScreenState extends State<NewsDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+
+    // 화면이 로드된 후 조회수 증가
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _incrementViewCount();
+    });
+  }
+
+  // 조회수 증가 메서드
+  void _incrementViewCount() {
+    final newsViewModel = Provider.of<NewsViewModel>(context, listen: false);
+    newsViewModel.incrementViewCount(widget.news);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,12 +53,13 @@ class NewsDetailScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 뉴스 이미지
-            if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
+            if (widget.news.imageUrl != null &&
+                widget.news.imageUrl!.isNotEmpty)
               SizedBox(
                 width: double.infinity,
                 height: 200,
                 child: Image.network(
-                  news.imageUrl!,
+                  widget.news.imageUrl!,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
@@ -60,7 +84,7 @@ class NewsDetailScreen extends StatelessWidget {
                 children: [
                   // 제목
                   Text(
-                    news.title,
+                    widget.news.title,
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -72,7 +96,7 @@ class NewsDetailScreen extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        news.source,
+                        widget.news.source,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -81,22 +105,41 @@ class NewsDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _formatDate(news.publishedAt),
+                        _formatDate(widget.news.publishedAt),
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey.shade600,
                         ),
+                      ),
+                      const Spacer(),
+                      // 조회수 표시
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.visibility,
+                            size: 16,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${widget.news.viewCount}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
 
                   // 관련 코인 태그
-                  if (news.relatedCoins.isNotEmpty)
+                  if (widget.news.relatedCoins.isNotEmpty)
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: news.relatedCoins.map((coin) {
+                      children: widget.news.relatedCoins.map((coin) {
                         return Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -123,7 +166,7 @@ class NewsDetailScreen extends StatelessWidget {
 
                   // 본문
                   Text(
-                    news.content,
+                    widget.news.content,
                     style: const TextStyle(fontSize: 16, height: 1.6),
                   ),
                   const SizedBox(height: 32),
@@ -131,7 +174,7 @@ class NewsDetailScreen extends StatelessWidget {
                   // 원문 보기 버튼
                   Center(
                     child: ElevatedButton.icon(
-                      onPressed: () => _openNewsUrl(news.url),
+                      onPressed: () => _openNewsUrl(widget.news.url),
                       icon: const Icon(Icons.open_in_new),
                       label: const Text('원문 보기'),
                       style: ElevatedButton.styleFrom(
