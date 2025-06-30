@@ -457,6 +457,246 @@ class BinanceApiService implements CryptoApiService {
   }
 }
 
+// CoinGecko API 서비스 (API 키 없이 사용 가능)
+class CoinGeckoApiService implements CryptoApiService {
+  final Dio _dio = Dio();
+  static const String _baseUrl = 'https://api.coingecko.com/api/v3';
+
+  // 속도 제한 관련 변수
+  static DateTime _lastRequestTime = DateTime.now().subtract(
+    const Duration(seconds: 30),
+  );
+  static const Duration _minRequestInterval = Duration(
+    seconds: 10,
+  ); // 최소 10초 간격으로 요청
+  static int _consecutiveFailures = 0;
+  static const int _maxRetries = 3;
+
+  @override
+  String get exchangeName => 'CoinGecko';
+
+  @override
+  bool get isConfigured => true; // API 키가 필요 없으므로 항상 구성됨
+
+  // 요청 간격 제어 메서드
+  Future<void> _throttleRequest() async {
+    final now = DateTime.now();
+    final timeSinceLastRequest = now.difference(_lastRequestTime);
+
+    // 마지막 요청 이후 최소 간격이 지나지 않았다면 대기
+    if (timeSinceLastRequest < _minRequestInterval) {
+      final waitTime = _minRequestInterval - timeSinceLastRequest;
+      debugPrint(
+        'CoinGeckoApiService: 속도 제한 - ${waitTime.inMilliseconds}ms 대기',
+      );
+      await Future.delayed(waitTime);
+    }
+
+    // 연속 실패 횟수에 따라 추가 대기 시간 설정
+    if (_consecutiveFailures > 0) {
+      final backoffTime = Duration(
+        seconds: pow(2, _consecutiveFailures).toInt(),
+      );
+      debugPrint(
+        'CoinGeckoApiService: 연속 실패 $_consecutiveFailures회 - ${backoffTime.inSeconds}초 추가 대기',
+      );
+      await Future.delayed(backoffTime);
+    }
+
+    _lastRequestTime = DateTime.now();
+  }
+
+  @override
+  Future<List<Coin>> getTopCoins({int limit = 10}) async {
+    debugPrint('CoinGeckoApiService: getTopCoins 호출 (limit: $limit)');
+
+    for (int attempt = 0; attempt <= _maxRetries; attempt++) {
+      try {
+        // 요청 간격 제어
+        if (attempt > 0) {
+          debugPrint('CoinGeckoApiService: 재시도 $attempt/$_maxRetries');
+        }
+        await _throttleRequest();
+
+        // 시장 데이터 가져오기 (원화 기준)
+        final response = await _dio.get(
+          '$_baseUrl/coins/markets',
+          queryParameters: {
+            'vs_currency': 'krw',
+            'order': 'market_cap_desc',
+            'per_page': limit > 0 ? limit : 100,
+            'page': 1,
+            'sparkline': false,
+            'price_change_percentage': '24h',
+          },
+        );
+
+        if (response.statusCode != 200) {
+          throw Exception('CoinGecko API 응답 오류: ${response.statusCode}');
+        }
+
+        debugPrint(
+          'CoinGeckoApiService: API 응답 성공, ${(response.data as List).length}개 코인 데이터 수신',
+        );
+
+        // 연속 실패 카운터 초기화
+        _consecutiveFailures = 0;
+
+        // 코인 모델 변환
+        final List<Coin> coins = [];
+        for (final data in response.data) {
+          coins.add(
+            Coin(
+              id: data['id'],
+              name: _getKoreanName(data['id'], data['name']),
+              symbol: data['symbol'].toUpperCase(),
+              currentPrice: data['current_price'].toDouble(),
+              priceChange24h: data['price_change_24h']?.toDouble(),
+              priceChangePercentage24h: data['price_change_percentage_24h']
+                  ?.toDouble(),
+              marketCap: data['market_cap']?.toDouble(),
+              volume24h: data['total_volume']?.toDouble(),
+              high24h: data['high_24h']?.toDouble(),
+              low24h: data['low_24h']?.toDouble(),
+              lastUpdated: DateTime.parse(data['last_updated']),
+              imageUrl: data['image'],
+            ),
+          );
+        }
+
+        debugPrint('CoinGeckoApiService: ${coins.length}개 코인 데이터 변환 완료');
+        return coins;
+      } catch (e) {
+        debugPrint('CoinGeckoApiService: API 오류 발생!');
+        debugPrint('CoinGeckoApiService 오류 상세: $e');
+
+        if (e is DioException) {
+          debugPrint('CoinGeckoApiService Dio 오류: ${e.message}');
+          debugPrint('CoinGeckoApiService Dio 응답: ${e.response?.data}');
+
+          // 속도 제한(429) 오류인 경우 연속 실패 카운터 증가
+          if (e.response?.statusCode == 429) {
+            _consecutiveFailures++;
+            if (attempt < _maxRetries) {
+              continue; // 재시도
+            }
+          }
+        }
+
+        // 모든 재시도 실패 또는 다른 오류인 경우 빈 목록 반환
+        debugPrint('CoinGeckoApiService: API 호출 실패, 빈 목록 반환');
+        return [];
+      }
+    }
+
+    // 이 코드는 실행되지 않지만 컴파일러 오류를 방지하기 위해 필요
+    throw Exception('예상치 못한 오류');
+  }
+
+  @override
+  Future<Coin?> getCoinBySymbol(String symbol) async {
+    try {
+      debugPrint('CoinGeckoApiService: getCoinBySymbol 호출 - $symbol');
+
+      // 요청 간격 제어
+      await _throttleRequest();
+
+      // 심볼로 코인 ID 찾기
+      final idResponse = await _dio.get('$_baseUrl/coins/list');
+
+      if (idResponse.statusCode != 200) {
+        throw Exception('CoinGecko API 응답 오류: ${idResponse.statusCode}');
+      }
+
+      final coinData = (idResponse.data as List).firstWhere(
+        (coin) =>
+            coin['symbol'].toString().toLowerCase() == symbol.toLowerCase(),
+        orElse: () => <String, dynamic>{},
+      );
+
+      if (coinData.isEmpty) {
+        debugPrint('CoinGeckoApiService: 해당 심볼의 코인을 찾을 수 없음 - $symbol');
+        return null;
+      }
+
+      final coinId = coinData['id'];
+
+      // 요청 간격 제어 (두 번째 요청을 위해)
+      await _throttleRequest();
+
+      // 코인 상세 정보 가져오기
+      final response = await _dio.get(
+        '$_baseUrl/coins/$coinId',
+        queryParameters: {
+          'localization': false,
+          'tickers': false,
+          'market_data': true,
+          'community_data': false,
+          'developer_data': false,
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('CoinGecko API 응답 오류: ${response.statusCode}');
+      }
+
+      // 연속 실패 카운터 초기화
+      _consecutiveFailures = 0;
+
+      final data = response.data;
+      final marketData = data['market_data'];
+
+      return Coin(
+        id: data['id'],
+        name: _getKoreanName(data['id'], data['name']),
+        symbol: data['symbol'].toUpperCase(),
+        currentPrice: marketData['current_price']['krw'].toDouble(),
+        priceChange24h: marketData['price_change_24h_in_currency']['krw']
+            ?.toDouble(),
+        priceChangePercentage24h: marketData['price_change_percentage_24h']
+            ?.toDouble(),
+        marketCap: marketData['market_cap']['krw']?.toDouble(),
+        volume24h: marketData['total_volume']['krw']?.toDouble(),
+        high24h: marketData['high_24h']['krw']?.toDouble(),
+        low24h: marketData['low_24h']['krw']?.toDouble(),
+        lastUpdated: DateTime.parse(data['last_updated']),
+        imageUrl: data['image']['large'],
+      );
+    } catch (e) {
+      debugPrint('CoinGeckoApiService: API 오류 발생!');
+      debugPrint('CoinGeckoApiService 오류 상세: $e');
+
+      if (e is DioException && e.response?.statusCode == 429) {
+        _consecutiveFailures++;
+      }
+
+      // API 호출 실패 시 null 반환
+      debugPrint('CoinGeckoApiService: API 호출 실패, null 반환');
+      return null;
+    }
+  }
+
+  // 코인 이름을 한국어로 변환
+  String _getKoreanName(String id, String name) {
+    final Map<String, String> nameMap = {
+      'bitcoin': '비트코인',
+      'ethereum': '이더리움',
+      'ripple': '리플',
+      'dogecoin': '도지코인',
+      'solana': '솔라나',
+      'cardano': '에이다',
+      'polkadot': '폴카닷',
+      'avalanche-2': '아발란체',
+      'polygon': '폴리곤',
+      'chainlink': '체인링크',
+      'binancecoin': '바이낸스 코인',
+      'shiba-inu': '시바이누',
+    };
+
+    return nameMap[id] ?? name;
+  }
+}
+
 // 암호화폐 서비스 팩토리
 class CryptoServiceFactory {
   final SettingsService _settingsService = SettingsService();
@@ -468,13 +708,16 @@ class CryptoServiceFactory {
 
     final upbitService = UpbitApiService();
     final binanceService = BinanceApiService();
-    final mockService = MockCryptoApiService(); // 모의 서비스 추가
+    final coinGeckoService = CoinGeckoApiService(); // CoinGecko 서비스 추가
 
     debugPrint(
       'CryptoServiceFactory: 업비트 서비스 구성됨: ${upbitService.isConfigured}',
     );
     debugPrint(
       'CryptoServiceFactory: 바이낸스 서비스 구성됨: ${binanceService.isConfigured}',
+    );
+    debugPrint(
+      'CryptoServiceFactory: CoinGecko 서비스 구성됨: ${coinGeckoService.isConfigured}',
     );
 
     final upbitAccessKey = _settingsService.getUpbitAccessKey();
@@ -496,33 +739,41 @@ class CryptoServiceFactory {
       debugPrint('CryptoServiceFactory: 바이낸스 서비스 추가됨');
     }
 
-    // API 키가 설정되지 않은 경우 항상 모의 서비스 추가
+    // API 키가 설정되지 않은 경우 CoinGecko 서비스 추가
     if (services.isEmpty) {
-      services.add(mockService);
-      debugPrint('CryptoServiceFactory: API 키가 없어 모의 서비스 추가됨');
+      services.add(coinGeckoService);
+      debugPrint('CryptoServiceFactory: API 키가 없어 CoinGecko 서비스 추가됨');
     }
 
-    debugPrint('CryptoServiceFactory: 총 ${services.length}개 서비스 사용 가능');
     return services;
   }
 
-  // 우선순위에 따른 서비스 선택
-  CryptoApiService? getPreferredService() {
+  // 기본 서비스 가져오기
+  CryptoApiService getDefaultService() {
+    debugPrint('CryptoServiceFactory: 기본 서비스 가져오기');
     final services = getAvailableServices();
+
     if (services.isEmpty) {
-      debugPrint('CryptoServiceFactory: 사용 가능한 서비스가 없음');
-      return null;
+      debugPrint('CryptoServiceFactory: 사용 가능한 서비스가 없어 CoinGecko 서비스 반환');
+      return CoinGeckoApiService();
     }
 
-    // 만약 둘 다 사용 가능하면 업비트 우선
+    // 우선순위: 업비트 > 바이낸스 > CoinGecko
     for (final service in services) {
       if (service is UpbitApiService) {
-        debugPrint('CryptoServiceFactory: 업비트 서비스 선택됨');
+        debugPrint('CryptoServiceFactory: 업비트 서비스 반환');
         return service;
       }
     }
 
-    debugPrint('CryptoServiceFactory: ${services.first.exchangeName} 서비스 선택됨');
+    for (final service in services) {
+      if (service is BinanceApiService) {
+        debugPrint('CryptoServiceFactory: 바이낸스 서비스 반환');
+        return service;
+      }
+    }
+
+    debugPrint('CryptoServiceFactory: ${services.first.exchangeName} 서비스 반환');
     return services.first;
   }
 }
@@ -542,19 +793,22 @@ class MockCryptoApiService implements CryptoApiService {
     // 지연 시간 추가 (실제 API 호출처럼 보이게)
     await Future.delayed(const Duration(milliseconds: 500));
 
+    // 원화 환율 적용 (대략 1달러 = 1300원)
+    const double krwRate = 1300.0;
+
     final now = DateTime.now();
     final coins = [
       Coin(
         id: 'bitcoin',
         name: '비트코인',
         symbol: 'BTC',
-        currentPrice: 67500.0 + _randomVariation(500),
-        priceChange24h: 1200.0 + _randomVariation(100),
+        currentPrice: (67500.0 + _randomVariation(500)) * krwRate,
+        priceChange24h: (1200.0 + _randomVariation(100)) * krwRate,
         priceChangePercentage24h: 1.8 + _randomVariation(0.2),
-        marketCap: 1300000000000,
-        volume24h: 25000000000,
-        high24h: 68000.0 + _randomVariation(200),
-        low24h: 66800.0 + _randomVariation(200),
+        marketCap: 1300000000000 * krwRate,
+        volume24h: 25000000000 * krwRate,
+        high24h: (68000.0 + _randomVariation(200)) * krwRate,
+        low24h: (66800.0 + _randomVariation(200)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
@@ -563,13 +817,13 @@ class MockCryptoApiService implements CryptoApiService {
         id: 'ethereum',
         name: '이더리움',
         symbol: 'ETH',
-        currentPrice: 3450.0 + _randomVariation(50),
-        priceChange24h: 120.0 + _randomVariation(20),
+        currentPrice: (3450.0 + _randomVariation(50)) * krwRate,
+        priceChange24h: (120.0 + _randomVariation(20)) * krwRate,
         priceChangePercentage24h: 3.5 + _randomVariation(0.5),
-        marketCap: 415000000000,
-        volume24h: 18000000000,
-        high24h: 3500.0 + _randomVariation(30),
-        low24h: 3400.0 + _randomVariation(30),
+        marketCap: 415000000000 * krwRate,
+        volume24h: 18000000000 * krwRate,
+        high24h: (3500.0 + _randomVariation(30)) * krwRate,
+        low24h: (3400.0 + _randomVariation(30)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/279/large/ethereum.png',
@@ -578,13 +832,13 @@ class MockCryptoApiService implements CryptoApiService {
         id: 'binancecoin',
         name: '바이낸스 코인',
         symbol: 'BNB',
-        currentPrice: 570.0 + _randomVariation(10),
-        priceChange24h: 15.0 + _randomVariation(5),
+        currentPrice: (570.0 + _randomVariation(10)) * krwRate,
+        priceChange24h: (15.0 + _randomVariation(5)) * krwRate,
         priceChangePercentage24h: 2.7 + _randomVariation(0.3),
-        marketCap: 87000000000,
-        volume24h: 2500000000,
-        high24h: 580.0 + _randomVariation(5),
-        low24h: 560.0 + _randomVariation(5),
+        marketCap: 87000000000 * krwRate,
+        volume24h: 2500000000 * krwRate,
+        high24h: (580.0 + _randomVariation(5)) * krwRate,
+        low24h: (560.0 + _randomVariation(5)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png',
@@ -593,13 +847,13 @@ class MockCryptoApiService implements CryptoApiService {
         id: 'solana',
         name: '솔라나',
         symbol: 'SOL',
-        currentPrice: 142.0 + _randomVariation(5),
-        priceChange24h: 8.0 + _randomVariation(2),
+        currentPrice: (142.0 + _randomVariation(5)) * krwRate,
+        priceChange24h: (8.0 + _randomVariation(2)) * krwRate,
         priceChangePercentage24h: 6.0 + _randomVariation(1),
-        marketCap: 65000000000,
-        volume24h: 3200000000,
-        high24h: 145.0 + _randomVariation(3),
-        low24h: 135.0 + _randomVariation(3),
+        marketCap: 65000000000 * krwRate,
+        volume24h: 3200000000 * krwRate,
+        high24h: (145.0 + _randomVariation(3)) * krwRate,
+        low24h: (135.0 + _randomVariation(3)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/4128/large/solana.png',
@@ -608,13 +862,13 @@ class MockCryptoApiService implements CryptoApiService {
         id: 'ripple',
         name: '리플',
         symbol: 'XRP',
-        currentPrice: 0.52 + _randomVariation(0.01),
-        priceChange24h: 0.02 + _randomVariation(0.005),
+        currentPrice: (0.52 + _randomVariation(0.01)) * krwRate,
+        priceChange24h: (0.02 + _randomVariation(0.005)) * krwRate,
         priceChangePercentage24h: 4.0 + _randomVariation(0.5),
-        marketCap: 28000000000,
-        volume24h: 1500000000,
-        high24h: 0.53 + _randomVariation(0.005),
-        low24h: 0.50 + _randomVariation(0.005),
+        marketCap: 28000000000 * krwRate,
+        volume24h: 1500000000 * krwRate,
+        high24h: (0.53 + _randomVariation(0.005)) * krwRate,
+        low24h: (0.50 + _randomVariation(0.005)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png',
@@ -623,13 +877,13 @@ class MockCryptoApiService implements CryptoApiService {
         id: 'dogecoin',
         name: '도지코인',
         symbol: 'DOGE',
-        currentPrice: 0.12 + _randomVariation(0.005),
-        priceChange24h: 0.01 + _randomVariation(0.002),
+        currentPrice: (0.12 + _randomVariation(0.005)) * krwRate,
+        priceChange24h: (0.01 + _randomVariation(0.002)) * krwRate,
         priceChangePercentage24h: 8.5 + _randomVariation(1),
-        marketCap: 17000000000,
-        volume24h: 1200000000,
-        high24h: 0.125 + _randomVariation(0.002),
-        low24h: 0.115 + _randomVariation(0.002),
+        marketCap: 17000000000 * krwRate,
+        volume24h: 1200000000 * krwRate,
+        high24h: (0.125 + _randomVariation(0.002)) * krwRate,
+        low24h: (0.115 + _randomVariation(0.002)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/5/large/dogecoin.png',
@@ -638,13 +892,13 @@ class MockCryptoApiService implements CryptoApiService {
         id: 'cardano',
         name: '에이다',
         symbol: 'ADA',
-        currentPrice: 0.45 + _randomVariation(0.01),
-        priceChange24h: 0.02 + _randomVariation(0.005),
+        currentPrice: (0.45 + _randomVariation(0.01)) * krwRate,
+        priceChange24h: (0.02 + _randomVariation(0.005)) * krwRate,
         priceChangePercentage24h: 4.7 + _randomVariation(0.5),
-        marketCap: 16000000000,
-        volume24h: 800000000,
-        high24h: 0.46 + _randomVariation(0.005),
-        low24h: 0.44 + _randomVariation(0.005),
+        marketCap: 16000000000 * krwRate,
+        volume24h: 800000000 * krwRate,
+        high24h: (0.46 + _randomVariation(0.005)) * krwRate,
+        low24h: (0.44 + _randomVariation(0.005)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/975/large/cardano.png',
@@ -653,13 +907,13 @@ class MockCryptoApiService implements CryptoApiService {
         id: 'polkadot',
         name: '폴카닷',
         symbol: 'DOT',
-        currentPrice: 6.8 + _randomVariation(0.2),
-        priceChange24h: 0.3 + _randomVariation(0.05),
+        currentPrice: (6.8 + _randomVariation(0.2)) * krwRate,
+        priceChange24h: (0.3 + _randomVariation(0.05)) * krwRate,
         priceChangePercentage24h: 4.6 + _randomVariation(0.5),
-        marketCap: 9500000000,
-        volume24h: 350000000,
-        high24h: 6.9 + _randomVariation(0.1),
-        low24h: 6.5 + _randomVariation(0.1),
+        marketCap: 9500000000 * krwRate,
+        volume24h: 350000000 * krwRate,
+        high24h: (6.9 + _randomVariation(0.1)) * krwRate,
+        low24h: (6.5 + _randomVariation(0.1)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/12171/large/polkadot.png',
@@ -668,13 +922,13 @@ class MockCryptoApiService implements CryptoApiService {
         id: 'matic-network',
         name: '폴리곤',
         symbol: 'MATIC',
-        currentPrice: 0.58 + _randomVariation(0.01),
-        priceChange24h: 0.03 + _randomVariation(0.005),
+        currentPrice: (0.58 + _randomVariation(0.01)) * krwRate,
+        priceChange24h: (0.03 + _randomVariation(0.005)) * krwRate,
         priceChangePercentage24h: 5.5 + _randomVariation(0.5),
-        marketCap: 5800000000,
-        volume24h: 450000000,
-        high24h: 0.59 + _randomVariation(0.005),
-        low24h: 0.56 + _randomVariation(0.005),
+        marketCap: 5800000000 * krwRate,
+        volume24h: 450000000 * krwRate,
+        high24h: (0.59 + _randomVariation(0.005)) * krwRate,
+        low24h: (0.56 + _randomVariation(0.005)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png',
@@ -683,13 +937,13 @@ class MockCryptoApiService implements CryptoApiService {
         id: 'shiba-inu',
         name: '시바이누',
         symbol: 'SHIB',
-        currentPrice: 0.000018 + _randomVariation(0.000001),
-        priceChange24h: 0.000002 + _randomVariation(0.0000005),
+        currentPrice: (0.000018 + _randomVariation(0.000001)) * krwRate,
+        priceChange24h: (0.000002 + _randomVariation(0.0000005)) * krwRate,
         priceChangePercentage24h: 12.5 + _randomVariation(1.5),
-        marketCap: 10500000000,
-        volume24h: 850000000,
-        high24h: 0.000019 + _randomVariation(0.0000005),
-        low24h: 0.000017 + _randomVariation(0.0000005),
+        marketCap: 10500000000 * krwRate,
+        volume24h: 850000000 * krwRate,
+        high24h: (0.000019 + _randomVariation(0.0000005)) * krwRate,
+        low24h: (0.000017 + _randomVariation(0.0000005)) * krwRate,
         lastUpdated: now,
         imageUrl:
             'https://assets.coingecko.com/coins/images/11939/large/shiba.png',
@@ -709,6 +963,9 @@ class MockCryptoApiService implements CryptoApiService {
 
     // 지연 시간 추가 (실제 API 호출처럼 보이게)
     await Future.delayed(const Duration(milliseconds: 300));
+
+    // 원화 환율 적용 (대략 1달러 = 1300원)
+    const double krwRate = 1300.0;
 
     final coins = await getTopCoins(limit: 0);
     final coin = coins.firstWhere(

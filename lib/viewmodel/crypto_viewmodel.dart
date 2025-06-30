@@ -53,44 +53,29 @@ class CryptoViewModel extends ChangeNotifier {
     debugPrint('CryptoViewModel: 초기화 완료');
   }
 
-  // 사용 가능한 API 서비스 확인
+  // 사용 가능한 서비스 확인
   void _checkAvailableServices() {
-    debugPrint('CryptoViewModel: 사용 가능한 서비스 확인 중');
-    _availableServices = _serviceFactory.getAvailableServices();
-    _activeService = _serviceFactory.getPreferredService();
+    debugPrint('CryptoViewModel: 사용 가능한 서비스 확인');
+    try {
+      final serviceFactory = CryptoServiceFactory();
+      final services = serviceFactory.getAvailableServices();
 
-    // 각 API 서비스 유형별 상태 확인
-    final upbitService =
-        _availableServices
-            .where((service) => service is UpbitApiService)
-            .isEmpty
-        ? null
-        : _availableServices.firstWhere(
-            (service) => service is UpbitApiService,
-          );
+      debugPrint('CryptoViewModel: ${services.length}개 서비스 사용 가능');
 
-    final binanceService =
-        _availableServices
-            .where((service) => service is BinanceApiService)
-            .isEmpty
-        ? null
-        : _availableServices.firstWhere(
-            (service) => service is BinanceApiService,
-          );
-
-    debugPrint(
-      'CryptoViewModel: API 서비스 상태 - 업비트: ${upbitService != null ? "구성됨" : "없음"}, 바이낸스: ${binanceService != null ? "구성됨" : "없음"}',
-    );
-
-    if (_availableServices.isEmpty) {
-      debugPrint('CryptoViewModel: 사용 가능한 API 서비스가 없습니다');
-    } else {
-      debugPrint(
-        'CryptoViewModel: 사용 가능한 API 서비스 - ${_availableServices.map((s) => s.exchangeName).join(', ')}',
-      );
+      if (services.isNotEmpty) {
+        // 기본 서비스 가져오기
+        _activeService = serviceFactory.getDefaultService();
+        debugPrint(
+          'CryptoViewModel: ${_activeService?.exchangeName} 서비스가 활성화되었습니다.',
+        );
+      } else {
+        _activeService = null;
+        debugPrint('CryptoViewModel: 사용 가능한 서비스가 없습니다.');
+      }
+    } catch (e) {
+      _activeService = null;
+      debugPrint('CryptoViewModel: 서비스 확인 중 오류 발생 - $e');
     }
-
-    notifyListeners();
   }
 
   // 코인 데이터 새로고침 (알림 트리거 체크 포함)
@@ -121,10 +106,10 @@ class CryptoViewModel extends ChangeNotifier {
         'CryptoViewModel: ${_activeService!.exchangeName} 서비스를 통해 데이터를 요청합니다.',
       );
 
-      // 모의 데이터 서비스인 경우 사용자에게 알림
-      if (_activeService is MockCryptoApiService) {
-        _error = '모의 데이터를 표시 중입니다. 실제 데이터를 보려면 설정에서 API 키를 구성해주세요.';
-        debugPrint('CryptoViewModel: 모의 데이터 서비스 사용 중');
+      // CoinGecko 서비스인 경우 사용자에게 알림
+      if (_activeService is CoinGeckoApiService) {
+        _error = 'CoinGecko 데이터를 표시 중입니다. 실제 거래소 데이터를 보려면 설정에서 API 키를 구성해주세요.';
+        debugPrint('CryptoViewModel: CoinGecko 데이터 서비스 사용 중');
       }
 
       final coins = await _activeService!.getTopCoins(limit: 0);
