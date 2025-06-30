@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/firebase_service.dart';
 import '../model/news_model.dart';
@@ -41,10 +42,14 @@ class NewsViewModel extends ChangeNotifier {
 
   // 페이징 관련 상태 변수
   List<News> _pagedNewsList = []; // 화면에 표시할 뉴스(페이징 누적)
-  dynamic _lastDoc; // Firestore에서 마지막으로 가져온 문서(페이징용)
+  dynamic _lastDoc; // Firestore: DocumentSnapshot, RealtimeDB: key
   bool _hasMore = true; // 더 불러올 뉴스가 있는지 여부
   bool _isLoadingMore = false; // 추가 로딩 중 여부
   int _loadCount = 0; // 데이터 로드 횟수 추적
+
+  // 오프라인 조회수 동기화 관련
+  List<Map<String, dynamic>> _pendingViewCounts = [];
+  bool _isSyncingViewCounts = false;
 
   // 생성자
   NewsViewModel(this._firebaseService) {
@@ -65,6 +70,7 @@ class NewsViewModel extends ChangeNotifier {
     // 네트워크, 타이머 등 기존 초기화는 그대로 비동기 처리
     _initConnectivity();
     _setupConnectivityMonitoring();
+    _loadPendingViewCounts(); // 저장된 조회수 로드
     refreshNews();
     _setupAutoRefresh();
   }
@@ -254,9 +260,8 @@ class NewsViewModel extends ChangeNotifier {
     }
   }
 
-  // 네트워크 연결 상태 모니터링
+  // 네트워크 연결 모니터링 설정
   void _setupConnectivityMonitoring() {
-    // 웹 플랫폼에서는 연결 모니터링을 건너뜁니다
     if (kIsWeb) {
       debugPrint('NewsViewModel: 웹 플랫폼에서는 연결 모니터링을 건너뜁니다.');
       return;
@@ -266,23 +271,11 @@ class NewsViewModel extends ChangeNotifier {
       final checker = InternetConnectionChecker.createInstance();
       _connectivitySubscription = checker.onStatusChange.listen((status) {
         final isConnected = status == InternetConnectionStatus.connected;
-
-        if (_isConnected != isConnected) {
-          _isConnected = isConnected;
-          debugPrint(
-            'NewsViewModel: 네트워크 상태 변경 - ${_isConnected ? "연결됨" : "연결 끊김"}',
-          );
-
-          // 오프라인 모드가 아니고 연결이 복구된 경우 데이터 새로고침
-          if (_isConnected && !_isOfflineMode) {
-            refreshNews();
-          }
-
-          notifyListeners();
-        }
+        _onConnectivityChanged(isConnected);
       });
+      debugPrint('NewsViewModel: 네트워크 연결 모니터링 설정 완료');
     } catch (e) {
-      debugPrint('NewsViewModel: 연결 모니터링 설정 오류 - $e');
+      debugPrint('NewsViewModel: 네트워크 연결 모니터링 설정 실패 - $e');
     }
   }
 
@@ -1403,29 +1396,44 @@ class NewsViewModel extends ChangeNotifier {
       final updatedCount = news.viewCount + 1;
       final updatedNews = news.copyWith(viewCount: updatedCount);
 
-      // 오프라인 모드이거나 네트워크 연결이 없는 경우 캐시만 업데이트
+      // 로컬 리스트에서 해당 뉴스 업데이트 (항상 수행)
+      _updateNewsInLists(updatedNews);
+
+      // 캐시 업데이트 (항상 수행)
+      await _cacheNewsData(_newsList);
+
+      // 오프라인 모드이거나 네트워크 연결이 없는 경우 조회수를 저장했다가 나중에 동기화
       if (_isOfflineMode || !_isConnected) {
-        debugPrint('NewsViewModel: 오프라인 모드 또는 네트워크 연결 없음 - 캐시만 업데이트');
-        _updateNewsInLists(updatedNews);
-        await _cacheNewsData(_newsList);
+        debugPrint('NewsViewModel: 오프라인 모드 또는 네트워크 연결 없음 - 조회수 저장');
+        await _savePendingViewCount(news.id, updatedCount);
         return;
       }
 
+      // Firebase 서비스가 초기화되지 않았으면 초기화 시도
+      if (!_firebaseService.isInitialized) {
+        debugPrint('NewsViewModel: Firebase 초기화 안됨 - 초기화 시도');
+        try {
+          await _firebaseService.initialize();
+          debugPrint('NewsViewModel: Firebase 초기화 성공');
+        } catch (e) {
+          debugPrint('NewsViewModel: Firebase 초기화 실패 - $e');
+          // 초기화 실패 시 조회수를 저장했다가 나중에 동기화
+          await _savePendingViewCount(news.id, updatedCount);
+          return;
+        }
+      }
+
       // Firebase에 조회수 업데이트
-      if (_firebaseService.isInitialized) {
+      try {
         await _firebaseService.updateNewsViewCount(news.id, updatedCount);
         debugPrint(
           'NewsViewModel: Firebase에 조회수 업데이트 완료 - 새 조회수: $updatedCount',
         );
-      } else {
-        debugPrint('NewsViewModel: Firebase 초기화 안됨 - 조회수 업데이트 건너뜀');
+      } catch (e) {
+        debugPrint('NewsViewModel: Firebase 조회수 업데이트 실패 - $e');
+        // 업데이트 실패 시 조회수를 저장했다가 나중에 동기화
+        await _savePendingViewCount(news.id, updatedCount);
       }
-
-      // 로컬 리스트에서 해당 뉴스 업데이트
-      _updateNewsInLists(updatedNews);
-
-      // 캐시 업데이트
-      await _cacheNewsData(_newsList);
 
       // 인기 뉴스 재정렬
       _popularNews = List.from(_newsList)
@@ -1438,6 +1446,160 @@ class NewsViewModel extends ChangeNotifier {
       );
     } catch (e) {
       debugPrint('NewsViewModel: 뉴스 조회수 증가 실패 - $e');
+    }
+  }
+
+  // 오프라인 상태에서 조회수 저장
+  Future<void> _savePendingViewCount(String newsId, int viewCount) async {
+    try {
+      // 기존 보류 중인 조회수 로드
+      await _loadPendingViewCounts();
+
+      // 이미 같은 뉴스 ID가 있는지 확인
+      final existingIndex = _pendingViewCounts.indexWhere(
+        (item) => item['id'] == newsId,
+      );
+      if (existingIndex >= 0) {
+        // 기존 항목 업데이트
+        _pendingViewCounts[existingIndex]['viewCount'] = viewCount;
+      } else {
+        // 새 항목 추가
+        _pendingViewCounts.add({
+          'id': newsId,
+          'viewCount': viewCount,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        });
+      }
+
+      // SharedPreferences에 저장
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'pending_view_counts',
+        jsonEncode(_pendingViewCounts),
+      );
+
+      debugPrint(
+        'NewsViewModel: 보류 중인 조회수 저장 완료 - ${_pendingViewCounts.length}개 항목',
+      );
+
+      // 네트워크 연결이 있으면 동기화 시도
+      if (_isConnected && !_isOfflineMode) {
+        _syncPendingViewCounts();
+      }
+    } catch (e) {
+      debugPrint('NewsViewModel: 보류 중인 조회수 저장 실패 - $e');
+    }
+  }
+
+  // 저장된 조회수 로드
+  Future<void> _loadPendingViewCounts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingViewCountsJson = prefs.getString('pending_view_counts');
+
+      if (pendingViewCountsJson != null) {
+        final List<dynamic> decoded = jsonDecode(pendingViewCountsJson);
+        _pendingViewCounts = decoded
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        debugPrint(
+          'NewsViewModel: 보류 중인 조회수 ${_pendingViewCounts.length}개 로드됨',
+        );
+      } else {
+        _pendingViewCounts = [];
+      }
+    } catch (e) {
+      debugPrint('NewsViewModel: 보류 중인 조회수 로드 실패 - $e');
+      _pendingViewCounts = [];
+    }
+  }
+
+  // 저장된 조회수 동기화
+  Future<void> _syncPendingViewCounts() async {
+    // 이미 동기화 중이면 무시
+    if (_isSyncingViewCounts || _pendingViewCounts.isEmpty) {
+      return;
+    }
+
+    _isSyncingViewCounts = true;
+    debugPrint(
+      'NewsViewModel: 보류 중인 조회수 동기화 시작 - ${_pendingViewCounts.length}개 항목',
+    );
+
+    try {
+      // Firebase 서비스가 초기화되지 않았으면 초기화 시도
+      if (!_firebaseService.isInitialized) {
+        try {
+          await _firebaseService.initialize();
+          debugPrint('NewsViewModel: 동기화를 위한 Firebase 초기화 성공');
+        } catch (e) {
+          debugPrint('NewsViewModel: 동기화를 위한 Firebase 초기화 실패 - $e');
+          _isSyncingViewCounts = false;
+          return;
+        }
+      }
+
+      // 성공적으로 동기화된 항목의 인덱스를 저장
+      final List<int> syncedIndices = [];
+
+      // 각 항목을 Firebase에 동기화
+      for (int i = 0; i < _pendingViewCounts.length; i++) {
+        final item = _pendingViewCounts[i];
+        try {
+          await _firebaseService.updateNewsViewCount(
+            item['id'],
+            item['viewCount'],
+          );
+          syncedIndices.add(i);
+          debugPrint(
+            'NewsViewModel: 조회수 동기화 성공 - ID: ${item['id']}, 조회수: ${item['viewCount']}',
+          );
+        } catch (e) {
+          debugPrint('NewsViewModel: 조회수 동기화 실패 - ID: ${item['id']}, 오류: $e');
+        }
+      }
+
+      // 성공적으로 동기화된 항목 제거 (역순으로 제거해야 인덱스가 변하지 않음)
+      syncedIndices.sort((a, b) => b.compareTo(a));
+      for (final index in syncedIndices) {
+        _pendingViewCounts.removeAt(index);
+      }
+
+      // 남은 항목 저장
+      final prefs = await SharedPreferences.getInstance();
+      if (_pendingViewCounts.isEmpty) {
+        await prefs.remove('pending_view_counts');
+        debugPrint('NewsViewModel: 모든 조회수 동기화 완료, 저장된 데이터 삭제');
+      } else {
+        await prefs.setString(
+          'pending_view_counts',
+          jsonEncode(_pendingViewCounts),
+        );
+        debugPrint(
+          'NewsViewModel: ${syncedIndices.length}개 동기화 완료, ${_pendingViewCounts.length}개 항목 남음',
+        );
+      }
+    } catch (e) {
+      debugPrint('NewsViewModel: 조회수 동기화 중 오류 발생 - $e');
+    } finally {
+      _isSyncingViewCounts = false;
+    }
+  }
+
+  // 네트워크 연결 상태 변경 시 호출되는 메서드에 동기화 로직 추가
+  void _onConnectivityChanged(bool isConnected) {
+    if (_isConnected != isConnected) {
+      _isConnected = isConnected;
+      debugPrint(
+        'NewsViewModel: 네트워크 상태 변경 - ${isConnected ? "연결됨" : "연결 끊김"}',
+      );
+
+      // 연결이 복원되면 보류 중인 조회수 동기화 시도
+      if (isConnected && !_isOfflineMode) {
+        _syncPendingViewCounts();
+      }
+
+      notifyListeners();
     }
   }
 
