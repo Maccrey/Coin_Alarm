@@ -200,6 +200,10 @@ void main() async {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
       statusBarBrightness: Brightness.light,
+      // 네비게이션 바 관련 설정 (Flutter 버전에 따라 지원)
+      systemNavigationBarColor: Colors.white, // 네비게이션 바 배경색
+      systemNavigationBarIconBrightness: Brightness.dark, // 네비게이션 바 아이콘 색상
+      systemNavigationBarDividerColor: Colors.transparent, // 네비게이션 바 구분선 색상
     ),
   );
 
