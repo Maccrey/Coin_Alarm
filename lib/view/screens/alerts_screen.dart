@@ -41,6 +41,8 @@ class _AlertsScreenState extends State<AlertsScreen>
       priceAlertVM.loadUserAlerts(userId);
       // 코인 데이터 새로고침 시 알림 트리거 체크도 함께 실행
       cryptoVM.refreshCoins(priceAlertVM: priceAlertVM);
+      // 알림 페이지 로드 시 최신 코인 데이터 로드
+      cryptoVM.refresh();
     });
   }
 
@@ -290,9 +292,18 @@ class _AlertsScreenState extends State<AlertsScreen>
   ) {
     Coin? coin;
     try {
+      // 먼저 coinId로 매칭 시도
       coin = cryptoVM.coins.firstWhere((c) => c.id == alert.coinId);
     } catch (e) {
-      coin = null;
+      try {
+        // coinId로 매칭 실패 시 coinSymbol로 매칭 시도
+        coin = cryptoVM.coins.firstWhere(
+          (c) => c.symbol.toLowerCase() == alert.coinSymbol.toLowerCase(),
+        );
+      } catch (e) {
+        debugPrint('코인 정보를 찾을 수 없음: ${alert.coinSymbol} (${alert.coinId})');
+        coin = null;
+      }
     }
     final isTriggered = alert.isTriggered;
     return Dismissible(
