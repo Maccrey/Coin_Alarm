@@ -41,6 +41,16 @@ import 'services/notification_service.dart';
 import 'firebase_options.dart';
 import 'view/screens/news_detail_screen.dart';
 
+// 알림 액션 처리를 위한 전역 메서드
+@pragma('vm:entry-point')
+Future<void> onNotificationAction(ReceivedAction receivedAction) async {
+  // 알림 탭 처리 로직
+  debugPrint('알림 탭: ${receivedAction.payload}');
+
+  // 필요한 경우 특정 화면으로 이동
+  // MyApp.navigatorKey.currentState?.pushNamed('/notification-details', arguments: receivedAction);
+}
+
 // 백그라운드에서 사용할 코인 가격 fetch 함수 (Upbit API 연동)
 Future<List<Coin>> fetchCoinPricesForBackground() async {
   try {
@@ -160,9 +170,8 @@ void callbackDispatcher() {
 
         // 알림 제목 및 내용 구성
         final title = '${alert.coinSymbol} 가격 알림';
-        final condition = alert.isAbove ? '이상' : '이하';
         final body =
-            '[발생됨] $dateStr $timeStr\n${alert.coinSymbol} 현재가: ₩${coin.currentPrice}\n조건: ₩${alert.priceTarget} $condition';
+            '코인 : ${alert.coinSymbol}\n시간 : ${dateStr.replaceAll('-', '')} ${timeStr}\n내용 : ${alert.priceTarget}원에 도달했습니다.\n      ${alert.notes ?? ''}';
 
         // 알림 표시
         await notificationService.showNotification(
@@ -407,17 +416,8 @@ class _MyAppState extends State<MyApp> {
 
     // 알림 리스너 설정
     NotificationService().setListeners(
-      onActionReceivedMethod: _onNotificationAction,
+      onActionReceivedMethod: onNotificationAction,
     );
-  }
-
-  // 알림 탭 이벤트 처리
-  void _onNotificationAction(ReceivedAction receivedAction) {
-    // 알림 탭 처리 로직
-    debugPrint('알림 탭: ${receivedAction.payload}');
-
-    // 필요한 경우 특정 화면으로 이동
-    // MyApp.navigatorKey.currentState?.pushNamed('/notification-details', arguments: receivedAction);
   }
 
   @override

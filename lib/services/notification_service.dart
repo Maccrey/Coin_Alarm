@@ -31,6 +31,10 @@ class NotificationService {
           importance: NotificationImportance.High,
           channelShowBadge: true,
           vibrationPattern: highVibrationPattern,
+          playSound: true,
+          defaultRingtoneType: DefaultRingtoneType.Notification,
+          enableVibration: true,
+          soundSource: null, // 기본 시스템 알림음 사용
         ),
         NotificationChannel(
           channelKey: 'coin_alarm_schedule_channel',
@@ -41,6 +45,10 @@ class NotificationService {
           importance: NotificationImportance.High,
           channelShowBadge: true,
           vibrationPattern: highVibrationPattern,
+          playSound: true,
+          defaultRingtoneType: DefaultRingtoneType.Notification,
+          enableVibration: true,
+          soundSource: null, // 기본 시스템 알림음 사용
         ),
       ],
       channelGroups: [
@@ -131,13 +139,13 @@ class NotificationService {
 
   /// 알림 탭 이벤트 리스너 설정
   Future<void> setListeners({
-    required void Function(ReceivedAction) onActionReceivedMethod,
+    required Function(ReceivedAction) onActionReceivedMethod,
   }) async {
     if (kIsWeb) return;
 
     // 알림 탭 이벤트 리스너
     await AwesomeNotifications().setListeners(
-      onActionReceivedMethod: (ReceivedAction receivedAction) async {
+      onActionReceivedMethod: (receivedAction) async {
         onActionReceivedMethod(receivedAction);
       },
     );

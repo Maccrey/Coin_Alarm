@@ -27,13 +27,14 @@ class PriceAlertAdapter extends TypeAdapter<PriceAlert> {
       createdAt: fields[7] as DateTime,
       triggeredAt: fields[8] as DateTime?,
       notes: fields[9] as String?,
+      triggeredPrice: fields[10] as double?,
     );
   }
 
   @override
   void write(BinaryWriter writer, PriceAlert obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -53,7 +54,9 @@ class PriceAlertAdapter extends TypeAdapter<PriceAlert> {
       ..writeByte(8)
       ..write(obj.triggeredAt)
       ..writeByte(9)
-      ..write(obj.notes);
+      ..write(obj.notes)
+      ..writeByte(10)
+      ..write(obj.triggeredPrice);
   }
 
   @override
