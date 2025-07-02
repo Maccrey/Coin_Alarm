@@ -102,32 +102,72 @@ class SettingsViewModel extends ChangeNotifier {
   /// 생체 인증 사용 토글 및 실제 인증 시도
   Future<void> toggleBiometrics(bool value) async {
     _biometricErrorMessage = null;
+
     if (value) {
-      // 실제 생체 인증 시도
-      final canCheck = await _localAuth.canCheckBiometrics;
-      if (!canCheck) {
-        _biometricErrorMessage = '이 기기에서는 생체 인증을 지원하지 않습니다.';
-        notifyListeners();
-        return;
-      }
-      final available = await _localAuth.getAvailableBiometrics();
-      if (available.isEmpty) {
-        _biometricErrorMessage = '생체 인증(지문/Face ID)이 등록되어 있지 않습니다.';
-        notifyListeners();
-        return;
-      }
-      final didAuth = await _localAuth.authenticate(
-        localizedReason: '생체 인증을 사용하여 인증하세요',
-        options: const AuthenticationOptions(biometricOnly: true),
-      );
-      if (!didAuth) {
-        _biometricErrorMessage = '생체 인증에 실패했습니다.';
+      try {
+        debugPrint('SettingsViewModel: 생체 인증 활성화 시도');
+
+        // 1. 디바이스 지원 여부 확인
+        final isDeviceSupported = await _localAuth.isDeviceSupported();
+        if (!isDeviceSupported) {
+          _biometricErrorMessage = '이 기기에서는 생체 인증을 지원하지 않습니다.';
+          debugPrint('SettingsViewModel: 디바이스가 생체 인증을 지원하지 않음');
+          notifyListeners();
+          return;
+        }
+
+        // 2. 생체 인증 하드웨어 사용 가능 여부 확인
+        final canCheckBiometrics = await _localAuth.canCheckBiometrics;
+        if (!canCheckBiometrics) {
+          _biometricErrorMessage = '생체 인증 하드웨어를 사용할 수 없습니다.';
+          debugPrint('SettingsViewModel: 생체 인증 하드웨어 사용 불가');
+          notifyListeners();
+          return;
+        }
+
+        // 3. 등록된 생체 인증 확인
+        final availableBiometrics = await _localAuth.getAvailableBiometrics();
+        debugPrint('SettingsViewModel: 사용 가능한 생체 인증: $availableBiometrics');
+
+        if (availableBiometrics.isEmpty) {
+          _biometricErrorMessage =
+              '생체 인증(지문/Face ID)이 등록되어 있지 않습니다.\n기기 설정에서 생체 인증을 등록해주세요.';
+          debugPrint('SettingsViewModel: 등록된 생체 인증 없음');
+          notifyListeners();
+          return;
+        }
+
+        // 4. 실제 생체 인증 시도
+        debugPrint('SettingsViewModel: 생체 인증 시도 시작');
+        final didAuthenticate = await _localAuth.authenticate(
+          localizedReason: '생체 인증을 사용하여 설정을 활성화하세요',
+          options: const AuthenticationOptions(
+            biometricOnly: true,
+            useErrorDialogs: true,
+            stickyAuth: true,
+          ),
+        );
+
+        if (!didAuthenticate) {
+          _biometricErrorMessage = '생체 인증에 실패했습니다. 다시 시도해주세요.';
+          debugPrint('SettingsViewModel: 생체 인증 실패');
+          notifyListeners();
+          return;
+        }
+
+        debugPrint('SettingsViewModel: 생체 인증 성공');
+      } catch (e) {
+        debugPrint('SettingsViewModel: 생체 인증 오류 - $e');
+        _biometricErrorMessage = '생체 인증 중 오류가 발생했습니다: ${e.toString()}';
         notifyListeners();
         return;
       }
     }
+
+    // 설정 저장
     _useBiometrics = value;
     await _settingsService.setUseBiometrics(value);
+    debugPrint('SettingsViewModel: 생체 인증 설정 저장 완료 - $value');
     notifyListeners();
   }
 
