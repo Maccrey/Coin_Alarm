@@ -126,82 +126,98 @@ class UpbitApiService implements CryptoApiService {
       debugPrint('UpbitApiService: KRW 마켓 필터링 결과 - ${krwMarkets.length}개 마켓');
 
       // 업비트 API는 한 번에 최대 100개 마켓 지원 (API 제한)
-      final maxMarkets = min(100, krwMarkets.length);
-      debugPrint('UpbitApiService: 최대 $maxMarkets개 마켓 데이터 요청');
+      // 따라서 여러 번 호출하여 모든 코인 데이터를 가져옴
+      final List<Coin> allCoins = [];
 
-      final marketsToFetch = krwMarkets.take(maxMarkets).join(',');
-      final queryString = 'markets=$marketsToFetch';
+      // 100개씩 나누어 API 호출
+      for (int i = 0; i < krwMarkets.length; i += 100) {
+        final int endIdx = (i + 100 < krwMarkets.length)
+            ? i + 100
+            : krwMarkets.length;
+        final List<String> marketsBatch = krwMarkets.sublist(i, endIdx);
 
-      // 토큰 생성
-      debugPrint('UpbitApiService: JWT 토큰 생성 중...');
-      final token = _generateToken(queryString);
-      debugPrint('UpbitApiService: JWT 토큰 생성 완료');
-
-      // 시세 정보 가져오기
-      debugPrint('UpbitApiService: 시세 정보 요청 중...');
-      final tickerResponse = await _dio.get(
-        '$_baseUrl/ticker',
-        queryParameters: {'markets': marketsToFetch},
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
-      );
-
-      if (tickerResponse.statusCode != 200) {
         debugPrint(
-          'UpbitApiService: API 응답 오류 - 상태 코드: ${tickerResponse.statusCode}',
+          'UpbitApiService: ${i + 1}~${endIdx}번째 마켓 데이터 요청 (${marketsBatch.length}개)',
         );
-        throw Exception('업비트 시세 정보 조회 실패: ${tickerResponse.statusCode}');
-      }
 
-      debugPrint(
-        'UpbitApiService: 시세 정보 응답 성공, ${(tickerResponse.data as List).length}개 코인 데이터 수신',
-      );
+        final marketsToFetch = marketsBatch.join(',');
+        final queryString = 'markets=$marketsToFetch';
 
-      // 코인 모델 변환
-      final List<Coin> coins = [];
-      for (final ticker in tickerResponse.data) {
-        final marketCode = ticker['market'] as String; // KRW-BTC
-        final symbol = marketCode.split('-')[1]; // BTC
-        final name = _getCoinName(symbol);
+        // 토큰 생성
+        debugPrint('UpbitApiService: JWT 토큰 생성 중...');
+        final token = _generateToken(queryString);
+        debugPrint('UpbitApiService: JWT 토큰 생성 완료');
 
-        coins.add(
-          Coin(
-            id: symbol.toLowerCase(),
-            name: name,
-            symbol: symbol,
-            currentPrice: (ticker['trade_price'] is int)
-                ? (ticker['trade_price'] as int).toDouble()
-                : ticker['trade_price'] as double,
-            priceChange24h: (ticker['signed_change_price'] is int)
-                ? (ticker['signed_change_price'] as int).toDouble()
-                : ticker['signed_change_price'] as double,
-            priceChangePercentage24h: (ticker['signed_change_rate'] is int)
-                ? (ticker['signed_change_rate'] as int) * 100.0
-                : ticker['signed_change_rate'] * 100 as double,
-            marketCap: (ticker['acc_trade_price_24h'] is int)
-                ? (ticker['acc_trade_price_24h'] as int).toDouble()
-                : ticker['acc_trade_price_24h'] as double,
-            volume24h: (ticker['acc_trade_volume_24h'] is int)
-                ? (ticker['acc_trade_volume_24h'] as int).toDouble()
-                : ticker['acc_trade_volume_24h'] as double,
-            high24h: (ticker['high_price'] is int)
-                ? (ticker['high_price'] as int).toDouble()
-                : ticker['high_price'] as double,
-            low24h: (ticker['low_price'] is int)
-                ? (ticker['low_price'] as int).toDouble()
-                : ticker['low_price'] as double,
-            lastUpdated: DateTime.fromMillisecondsSinceEpoch(
-              ticker['timestamp'],
+        // 시세 정보 가져오기
+        debugPrint('UpbitApiService: 시세 정보 요청 중...');
+        final tickerResponse = await _dio.get(
+          '$_baseUrl/ticker',
+          queryParameters: {'markets': marketsToFetch},
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+
+        if (tickerResponse.statusCode != 200) {
+          debugPrint(
+            'UpbitApiService: API 응답 오류 - 상태 코드: ${tickerResponse.statusCode}',
+          );
+          continue; // 오류 발생시 다음 배치로 진행
+        }
+
+        debugPrint(
+          'UpbitApiService: 시세 정보 응답 성공, ${(tickerResponse.data as List).length}개 코인 데이터 수신',
+        );
+
+        // 코인 모델 변환
+        for (final ticker in tickerResponse.data) {
+          final marketCode = ticker['market'] as String; // KRW-BTC
+          final symbol = marketCode.split('-')[1]; // BTC
+          final name = _getCoinName(symbol);
+
+          allCoins.add(
+            Coin(
+              id: symbol.toLowerCase(),
+              name: name,
+              symbol: symbol,
+              currentPrice: (ticker['trade_price'] is int)
+                  ? (ticker['trade_price'] as int).toDouble()
+                  : ticker['trade_price'] as double,
+              priceChange24h: (ticker['signed_change_price'] is int)
+                  ? (ticker['signed_change_price'] as int).toDouble()
+                  : ticker['signed_change_price'] as double,
+              priceChangePercentage24h: (ticker['signed_change_rate'] is int)
+                  ? (ticker['signed_change_rate'] as int) * 100.0
+                  : ticker['signed_change_rate'] * 100 as double,
+              marketCap: (ticker['acc_trade_price_24h'] is int)
+                  ? (ticker['acc_trade_price_24h'] as int).toDouble()
+                  : ticker['acc_trade_price_24h'] as double,
+              volume24h: (ticker['acc_trade_volume_24h'] is int)
+                  ? (ticker['acc_trade_volume_24h'] as int).toDouble()
+                  : ticker['acc_trade_volume_24h'] as double,
+              high24h: (ticker['high_price'] is int)
+                  ? (ticker['high_price'] as int).toDouble()
+                  : ticker['high_price'] as double,
+              low24h: (ticker['low_price'] is int)
+                  ? (ticker['low_price'] as int).toDouble()
+                  : ticker['low_price'] as double,
+              lastUpdated: DateTime.fromMillisecondsSinceEpoch(
+                ticker['timestamp'],
+              ),
+              imageUrl: 'https://static.upbit.com/logos/$symbol.png',
             ),
-            imageUrl: 'https://static.upbit.com/logos/$symbol.png',
-          ),
-        );
+          );
+        }
+
+        // API 호출 간격 조절 (업비트 API 제한 고려)
+        if (i + 100 < krwMarkets.length) {
+          await Future.delayed(const Duration(milliseconds: 200));
+        }
       }
 
       // 거래량 기준 정렬
-      coins.sort((a, b) => (b.volume24h ?? 0).compareTo(a.volume24h ?? 0));
+      allCoins.sort((a, b) => (b.volume24h ?? 0).compareTo(a.volume24h ?? 0));
 
       // limit이 0이면 모든 코인 반환, 아니면 limit 수만큼 반환
-      final result = limit > 0 ? coins.take(limit).toList() : coins;
+      final result = limit > 0 ? allCoins.take(limit).toList() : allCoins;
       debugPrint('UpbitApiService: 최종 반환 데이터 - ${result.length}개 코인');
 
       return result;
