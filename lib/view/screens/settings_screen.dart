@@ -12,6 +12,7 @@ import 'login_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 import 'biometric_login_screen.dart';
+import 'api_guide_screen.dart';
 
 // 설정 화면
 class SettingsScreen extends StatefulWidget {
@@ -268,13 +269,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ) async {
     debugPrint('SettingsScreen: $exchange API 키 입력 다이얼로그 표시');
 
+    // 거래소 코드 설정
+    final String exchangeCode = exchange == '업비트' ? 'upbit' : 'binance';
+
     // 기존 저장된 API 키 가져오기
-    String initialApiKey = viewModel.hasUpbitApiKeys
-        ? viewModel.upbitAccessKey!
-        : '';
-    String initialSecretKey = viewModel.hasUpbitApiKeys
-        ? viewModel.upbitSecretKey!
-        : '';
+    String initialApiKey = exchange == '업비트'
+        ? (viewModel.upbitAccessKey ?? '')
+        : (viewModel.binanceApiKey ?? '');
+    String initialSecretKey = exchange == '업비트'
+        ? (viewModel.upbitSecretKey ?? '')
+        : (viewModel.binanceSecretKey ?? '');
 
     // 다이얼로그에서 사용할 임시 값들 (초기값 설정)
     String apiKey = initialApiKey.trim();
@@ -296,6 +300,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   // 안내 메시지
                   Text(
                     '${exchange}에서 발급받은 API 키를 입력하세요.\n해당 키는 로컬에만 저장되며, 서버로 전송되지 않습니다.',
+                  ),
+                  const SizedBox(height: 8),
+                  // API 발급 방법 안내 버튼
+                  TextButton.icon(
+                    onPressed: () {
+                      // 현재 다이얼로그 닫기
+                      Navigator.of(context).pop(false);
+
+                      // API 발급 안내 페이지로 이동
+                      Navigator.of(context)
+                          .push(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  ApiGuideScreen(exchange: exchangeCode),
+                            ),
+                          )
+                          .then((_) {
+                            // 안내 페이지에서 돌아오면 다시 API 키 입력 다이얼로그 표시
+                            _showApiKeyDialog(context, exchange, viewModel);
+                          });
+                    },
+                    icon: const Icon(Icons.help_outline),
+                    label: Text('$exchange API 발급 방법 보기'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   // API 키 입력 - 초기값 설정

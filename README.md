@@ -54,6 +54,7 @@
 - **햅틱 피드백**: 네이티브 수준의 진동 피드백 시스템
 - **새로고침 간격**: 1초~5분 자유 설정
 - **API 키 관리**: Upbit, Binance API 키 개별 설정
+- **API 발급 안내**: 거래소별 API 키 발급 단계별 안내 제공
 - **알림 설정**: 푸시 알림 및 진동 설정
 
 ## 🏗️ 프로젝트 구조
@@ -104,6 +105,7 @@ lib/
         ├── news_screen.dart         # 뉴스 화면
         ├── news_detail_screen.dart  # 뉴스 상세 화면
         ├── settings_screen.dart     # 설정 화면
+        ├── api_guide_screen.dart    # API 발급 안내 화면
         ├── terms_of_service_screen.dart    # 서비스 약관
         └── privacy_policy_screen.dart      # 개인정보 처리방침
 ```
