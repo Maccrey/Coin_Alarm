@@ -6,6 +6,7 @@ import '../../core/constants.dart';
 import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/settings_viewmodel.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
+import '../../viewmodel/theme_viewmodel.dart';
 import 'login_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
@@ -90,8 +91,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         automaticallyImplyLeading: false,
         title: const Align(alignment: Alignment.centerLeft, child: Text('설정')),
       ),
-      body: Consumer2<AuthViewModel, SettingsViewModel>(
-        builder: (context, authViewModel, settingsViewModel, child) {
+      body: Consumer3<AuthViewModel, SettingsViewModel, ThemeViewModel>(
+        builder: (context, authViewModel, settingsViewModel, themeViewModel, child) {
           return ListView(
             children: [
               // 계정 섹션
@@ -112,7 +113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildSectionHeader('앱 설정'),
               Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: _buildThemeSettings(settingsViewModel),
+                child: _buildThemeSettings(themeViewModel),
               ),
               Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -611,7 +612,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // 테마 설정 위젯
-  Widget _buildThemeSettings(SettingsViewModel viewModel) {
+  Widget _buildThemeSettings(ThemeViewModel viewModel) {
     return ExpansionTile(
       title: const Text('테마'),
       leading: const Icon(Icons.palette_outlined),
@@ -628,9 +629,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '기기의 테마 설정을 따릅니다',
                 icon: Icons.settings_brightness,
                 selected: viewModel.themeMode == ThemeMode.system,
-                onTap: viewModel.isLoading
-                    ? null
-                    : () => viewModel.setThemeMode(ThemeMode.system),
+                onTap: () => viewModel.setThemeMode(ThemeMode.system),
               ),
 
               const Divider(),
@@ -641,9 +640,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '밝은 색상의 테마를 사용합니다',
                 icon: Icons.wb_sunny_outlined,
                 selected: viewModel.themeMode == ThemeMode.light,
-                onTap: viewModel.isLoading
-                    ? null
-                    : () => viewModel.setThemeMode(ThemeMode.light),
+                onTap: () => viewModel.setThemeMode(ThemeMode.light),
                 color: AppTheme.lightBackgroundColor,
                 textColor: AppTheme.lightTextColor,
               ),
@@ -656,9 +653,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: '어두운 색상의 테마를 사용합니다',
                 icon: Icons.nightlight_round,
                 selected: viewModel.themeMode == ThemeMode.dark,
-                onTap: viewModel.isLoading
-                    ? null
-                    : () => viewModel.setThemeMode(ThemeMode.dark),
+                onTap: () => viewModel.setThemeMode(ThemeMode.dark),
                 color: AppTheme.darkBackgroundColor,
                 textColor: AppTheme.darkTextColor,
               ),

@@ -1179,7 +1179,7 @@ class _ChartScreenState extends State<ChartScreen> {
     final chartViewModel = Provider.of<ChartViewModel>(context);
 
     return SizedBox(
-      width: MediaQuery.of(context).size.width * 0.8, // 화면 너비의 80%로 제한
+      width: MediaQuery.of(context).size.width * 0.7, // 화면 너비의 80%로 제한
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
