@@ -441,7 +441,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     const Text(
-                                      '발생시 현재가: ',
+                                      '발생시 가격: ',
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,

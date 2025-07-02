@@ -179,8 +179,15 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // 설정 서비스에 테마 모드 저장
       await _settingsService.setThemeMode(mode);
       _themeMode = mode;
+
+      // 다크 모드 여부도 함께 업데이트 (ThemeViewModel과 동기화)
+      final isDarkMode = (mode == ThemeMode.dark);
+      await _settingsService.setDarkMode(isDarkMode);
+
+      debugPrint('SettingsViewModel: 테마 모드 변경 - $mode');
     } catch (e) {
       debugPrint('테마 모드 설정 실패: $e');
     } finally {
