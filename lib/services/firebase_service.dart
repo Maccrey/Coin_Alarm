@@ -285,9 +285,19 @@ class FirebaseService {
     }
   }
 
-  /// 뉴스 추가
+  /// 뉴스 추가 (중복 체크 포함)
   Future<void> addNews(News news) async {
     try {
+      // 해시 중복 체크 후 추가
+      final isDuplicate = await _checkAndRemoveDuplicateNews(news);
+      if (isDuplicate) {
+        debugPrint(
+          'FirebaseService: 중복된 뉴스 발견 - ID: ${news.id}, 제목: ${news.title}',
+        );
+        // 중복된 뉴스는 이미 처리되었으므로 추가 작업 불필요
+        return;
+      }
+
       // Firebase Realtime Database에 뉴스 추가
       await _safeRef('news/${news.id}').set({
         'id': news.id,
@@ -301,9 +311,155 @@ class FirebaseService {
         'view_count': news.viewCount,
         'timestamp': ServerValue.timestamp,
       });
+
+      debugPrint('FirebaseService: 뉴스 추가 완료 - ${news.title}');
     } catch (e) {
       debugPrint('FirebaseService: 뉴스 추가 실패 - $e');
       rethrow;
+    }
+  }
+
+  /// 해시값이 동일한 중복 뉴스를 체크하고 삭제
+  Future<bool> _checkAndRemoveDuplicateNews(News newNews) async {
+    try {
+      // 뉴스의 해시값(ID) 가져오기
+      final newsHash = newNews.id;
+
+      // 동일한 해시값을 가진 다른 뉴스 검색
+      final snapshot = await _safeRef(
+        'news',
+      ).orderByChild('id').equalTo(newsHash).get();
+
+      if (snapshot.exists) {
+        final data = snapshot.value as Map<dynamic, dynamic>;
+
+        // 이미 동일한 해시값을 가진 뉴스가 있는 경우
+        if (data.isNotEmpty) {
+          int removedCount = 0;
+
+          // 모든 중복 항목 처리
+          for (final entry in data.entries) {
+            final key = entry.key;
+            final value = entry.value as Map<dynamic, dynamic>;
+
+            // 이미 존재하는 뉴스의 ID 가져오기
+            final existingId = value['id'] ?? key.toString();
+
+            // 조회수가 더 높은 뉴스 선택
+            final existingViewCount = value['view_count'] as int? ?? 0;
+
+            if (existingId != newNews.id) {
+              // 새 뉴스의 조회수가 더 높으면 기존 뉴스 삭제
+              if (newNews.viewCount > existingViewCount) {
+                await _safeRef('news/$key').remove();
+                removedCount++;
+                debugPrint(
+                  'FirebaseService: 중복 뉴스 삭제 (조회수 낮음) - 키: $key, ID: $existingId',
+                );
+              }
+              // 기존 뉴스의 조회수가 더 높으면 새 뉴스 추가하지 않음
+              else {
+                debugPrint(
+                  'FirebaseService: 중복 뉴스 발견 (기존 조회수 높음) - 키: $key, ID: $existingId',
+                );
+                return true; // 중복 발견, 새 뉴스 추가하지 않음
+              }
+            }
+          }
+
+          if (removedCount > 0) {
+            debugPrint('FirebaseService: $removedCount개의 중복 뉴스 삭제됨');
+          }
+
+          // 모든 중복 항목이 삭제되었으면 새 뉴스 추가 가능
+          return false;
+        }
+      }
+
+      // 중복 없음, 새 뉴스 추가 가능
+      return false;
+    } catch (e) {
+      debugPrint('FirebaseService: 중복 뉴스 체크 중 오류 발생 - $e');
+      // 오류 발생 시 안전하게 추가 진행
+      return false;
+    }
+  }
+
+  /// 전체 뉴스에서 중복 항목 정리 (관리자용)
+  Future<int> cleanupDuplicateNews() async {
+    try {
+      debugPrint('FirebaseService: 중복 뉴스 정리 시작');
+
+      // 1. 모든 뉴스 데이터 가져오기
+      final snapshot = await _safeRef('news').get();
+      if (!snapshot.exists) {
+        debugPrint('FirebaseService: 정리할 뉴스 데이터가 없습니다.');
+        return 0;
+      }
+
+      final Map<dynamic, dynamic> newsData =
+          snapshot.value as Map<dynamic, dynamic>;
+      debugPrint('FirebaseService: ${newsData.length}개의 뉴스 데이터 검사 시작');
+
+      // 2. 해시값(ID) 기준으로 그룹화
+      final Map<String, List<MapEntry<dynamic, dynamic>>> groupedByHash = {};
+
+      for (final entry in newsData.entries) {
+        final key = entry.key;
+        final value = entry.value as Map<dynamic, dynamic>;
+
+        // ID 가져오기
+        final id = value['id'] ?? key.toString();
+
+        if (!groupedByHash.containsKey(id)) {
+          groupedByHash[id] = [];
+        }
+
+        groupedByHash[id]!.add(entry);
+      }
+
+      // 3. 중복 항목 처리
+      int removedCount = 0;
+
+      for (final hash in groupedByHash.keys) {
+        final entries = groupedByHash[hash]!;
+
+        // 중복이 있는 경우만 처리
+        if (entries.length > 1) {
+          debugPrint(
+            'FirebaseService: 해시값 "$hash"에 ${entries.length}개의 중복 항목 발견',
+          );
+
+          // 조회수가 가장 높은 항목 찾기
+          MapEntry<dynamic, dynamic>? highestViewCountEntry;
+          int maxViewCount = -1;
+
+          for (final entry in entries) {
+            final value = entry.value as Map<dynamic, dynamic>;
+            final viewCount = value['view_count'] as int? ?? 0;
+
+            if (viewCount > maxViewCount) {
+              maxViewCount = viewCount;
+              highestViewCountEntry = entry;
+            }
+          }
+
+          // 조회수가 가장 높은 항목을 제외하고 모두 삭제
+          for (final entry in entries) {
+            if (entry != highestViewCountEntry) {
+              await _safeRef('news/${entry.key}').remove();
+              removedCount++;
+              debugPrint('FirebaseService: 중복 뉴스 삭제 - 키: ${entry.key}');
+            }
+          }
+        }
+      }
+
+      debugPrint('FirebaseService: 중복 뉴스 정리 완료 - $removedCount개 삭제됨');
+      return removedCount;
+    } catch (e) {
+      debugPrint('FirebaseService: 중복 뉴스 정리 중 오류 발생 - $e');
+      return -1;
     }
   }
 
@@ -578,7 +734,7 @@ class FirebaseService {
 
   /// Firebase Realtime Database에서 페이징된 뉴스 데이터 가져오기
   Future<NewsPageResult> getNewsPaged({
-    int limit = 20,
+    int limit = 50, // 한 번에 가져오는 뉴스 개수를 20개에서 50개로 증가
     dynamic startAfter,
   }) async {
     debugPrint(
@@ -601,6 +757,32 @@ class FirebaseService {
 
       // 최신 뉴스부터 가져오기 위해 orderByChild('timestamp') 사용
       Query query = newsRef.orderByChild('timestamp').limitToLast(limit);
+
+      // startAfter가 있으면 페이징 적용
+      if (startAfter != null && startAfter is String) {
+        try {
+          debugPrint('FirebaseService: [뉴스 요청] startAfter 키 사용: $startAfter');
+          // 이전 페이지의 마지막 항목의 타임스탬프 값을 가져와서 endBefore로 사용
+          final lastItemRef = _safeRef('news/$startAfter');
+          final lastItemSnapshot = await lastItemRef.get();
+          if (lastItemSnapshot.exists && lastItemSnapshot.value != null) {
+            final lastItemData = Map<String, dynamic>.from(
+              lastItemSnapshot.value as Map,
+            );
+            final timestamp = lastItemData['timestamp'];
+            if (timestamp != null) {
+              debugPrint('FirebaseService: [뉴스 요청] 마지막 항목 타임스탬프: $timestamp');
+              query = newsRef
+                  .orderByChild('timestamp')
+                  .endBefore(timestamp)
+                  .limitToLast(limit);
+            }
+          }
+        } catch (e) {
+          debugPrint('FirebaseService: [뉴스 요청] startAfter 적용 실패 - $e');
+          // 오류 발생 시 원래 쿼리 사용
+        }
+      }
 
       debugPrint('FirebaseService: [뉴스 요청] 쿼리 실행 중...');
       final snapshot = await query.get();
@@ -629,6 +811,7 @@ class FirebaseService {
       int successCount = 0;
       int errorCount = 0;
       final newsList = <News>[];
+      String? lastItemId;
 
       data.forEach((key, value) {
         try {
@@ -676,6 +859,9 @@ class FirebaseService {
           final news = News.fromJson(newsData);
           newsList.add(news);
           successCount++;
+
+          // 마지막 항목의 ID 저장 (다음 페이지를 위함)
+          lastItemId = news.id;
         } catch (e) {
           errorCount++;
           debugPrint('FirebaseService: [뉴스 요청] 항목 변환 오류 - 키: $key, 오류: $e');
@@ -713,21 +899,159 @@ class FirebaseService {
       }
 
       // 더 데이터가 있는지 여부 (Realtime Database에서는 정확한 판단이 어려움)
-      // 요청한 limit보다 적은 데이터가 반환되면 더 이상 데이터가 없다고 가정
+      // 요청한 limit보다 같거나 많은 데이터가 반환되면 더 데이터가 있다고 가정
       final hasMore = newsList.length >= limit;
 
       debugPrint(
-        'FirebaseService: [뉴스 요청] 완료 - ${newsList.length}개 뉴스, 더 있음: $hasMore',
+        'FirebaseService: [뉴스 요청] 완료 - ${newsList.length}개 뉴스, 더 있음: $hasMore, 마지막 ID: $lastItemId',
       );
 
       return NewsPageResult(
         news: newsList,
-        lastDoc: null, // Realtime Database에서는 lastDoc 개념이 다름
+        lastDoc: lastItemId, // 마지막 항목 ID를 다음 페이지 요청을 위해 반환
         hasMore: hasMore,
       );
     } catch (e) {
       debugPrint('FirebaseService: [뉴스 요청] 예외 발생 - $e');
       rethrow;
+    }
+  }
+
+  /// 뉴스 데이터 실시간 스트림 (실시간 업데이트 지원)
+  Stream<List<News>> getNewsStream({int limit = 50}) {
+    if (!isInitialized) {
+      debugPrint('FirebaseService: Firebase가 초기화되지 않음 - 빈 스트림 반환');
+      return Stream.value([]);
+    }
+
+    try {
+      debugPrint('FirebaseService: 뉴스 실시간 스트림 시작 - limit: $limit');
+      final newsRef = _safeRef('news');
+
+      // 최신 뉴스부터 가져오기 위해 orderByChild('timestamp') 사용
+      final query = newsRef.orderByChild('timestamp').limitToLast(limit);
+
+      return query.onValue.map((event) {
+        final List<News> newsList = [];
+
+        if (event.snapshot.exists && event.snapshot.value != null) {
+          try {
+            final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+            debugPrint('FirebaseService: 스트림에서 ${data.length}개 뉴스 데이터 수신');
+
+            // 각 뉴스 항목을 News 객체로 변환
+            for (final entry in data.entries) {
+              try {
+                final newsData = Map<String, dynamic>.from(entry.value as Map);
+
+                // 필수 필드 확인 및 기본값 설정
+                final id = newsData['id']?.toString() ?? entry.key;
+                final title = newsData['title']?.toString() ?? '';
+                final content = newsData['content']?.toString() ?? '';
+                final source = newsData['source']?.toString() ?? 'Unknown';
+                final url = newsData['url']?.toString() ?? '';
+                final imageUrl = newsData['image_url']?.toString() ?? '';
+
+                // 날짜 처리
+                DateTime publishedAt;
+                try {
+                  if (newsData['pub_date'] != null) {
+                    publishedAt = DateTime.parse(
+                      newsData['pub_date'].toString(),
+                    );
+                  } else {
+                    publishedAt = DateTime.now();
+                  }
+                } catch (e) {
+                  debugPrint('FirebaseService: 날짜 파싱 실패, 현재 시간 사용 - $e');
+                  publishedAt = DateTime.now();
+                }
+
+                // 관련 코인 목록 처리
+                List<String> relatedCoins = [];
+                if (newsData['related_coins'] != null) {
+                  try {
+                    if (newsData['related_coins'] is List) {
+                      relatedCoins = List<String>.from(
+                        newsData['related_coins'],
+                      );
+                    } else if (newsData['related_coins'] is String) {
+                      relatedCoins = [newsData['related_coins']];
+                    }
+                  } catch (e) {
+                    debugPrint('FirebaseService: 관련 코인 파싱 실패 - $e');
+                    relatedCoins = [];
+                  }
+                }
+
+                // 조회수 처리 (중요!)
+                int viewCount = 0;
+                try {
+                  if (newsData['view_count'] != null) {
+                    viewCount = int.parse(newsData['view_count'].toString());
+                  }
+                } catch (e) {
+                  debugPrint('FirebaseService: 조회수 파싱 실패, 0으로 설정 - $e');
+                  viewCount = 0;
+                }
+
+                // 빈 제목이나 콘텐츠는 건너뛰기
+                if (title.isNotEmpty || content.isNotEmpty) {
+                  final news = News(
+                    id: id,
+                    title: title,
+                    content: content,
+                    source: source,
+                    url: url,
+                    imageUrl: imageUrl,
+                    publishedAt: publishedAt,
+                    relatedCoins: relatedCoins,
+                    viewCount: viewCount,
+                  );
+
+                  newsList.add(news);
+
+                  // 조회수가 있는 뉴스는 로그 출력
+                  if (viewCount > 0) {
+                    debugPrint(
+                      'FirebaseService: 스트림 조회수 데이터 - ID: $id, 조회수: $viewCount',
+                    );
+                  }
+                }
+              } catch (e) {
+                debugPrint(
+                  'FirebaseService: 개별 뉴스 데이터 처리 실패 - ${entry.key}: $e',
+                );
+              }
+            }
+
+            // 최신순으로 정렬 (publishedAt 기준)
+            newsList.sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+
+            debugPrint('FirebaseService: 스트림에서 최종 ${newsList.length}개 뉴스 반환');
+
+            // 조회수 통계 출력
+            final newsWithViews = newsList
+                .where((news) => news.viewCount > 0)
+                .toList();
+            if (newsWithViews.isNotEmpty) {
+              debugPrint('FirebaseService: 조회수 있는 뉴스 ${newsWithViews.length}개');
+              debugPrint(
+                'FirebaseService: 최고 조회수 - ${newsWithViews.first.viewCount}',
+              );
+            }
+          } catch (e) {
+            debugPrint('FirebaseService: 스트림 데이터 처리 실패 - $e');
+          }
+        } else {
+          debugPrint('FirebaseService: 스트림에서 데이터 없음');
+        }
+
+        return newsList;
+      });
+    } catch (e) {
+      debugPrint('FirebaseService: 뉴스 실시간 스트림 생성 실패 - $e');
+      return Stream.value([]);
     }
   }
 }
