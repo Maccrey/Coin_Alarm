@@ -7,6 +7,7 @@ import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/settings_viewmodel.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
 import '../../viewmodel/theme_viewmodel.dart';
+import '../../services/haptic_service.dart';
 import 'login_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
@@ -21,6 +22,9 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  // 햅틱 서비스 인스턴스
+  final HapticService _hapticService = HapticService();
+
   // 로그아웃
   Future<void> _logout() async {
     // 확인 다이얼로그
@@ -972,6 +976,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('생체 인증 사용'),
             value: vm.useBiometrics,
             onChanged: (value) async {
+              await _hapticService.toggle();
               await vm.toggleBiometrics(value);
             },
           ),
@@ -984,6 +989,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: const TextStyle(color: Colors.red, fontSize: 13),
             ),
           ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+        SwitchListTile(
+          title: const Text('햅틱 피드백'),
+          subtitle: const Text('버튼 터치 시 진동 피드백'),
+          value: _hapticService.isEnabled,
+          onChanged: (value) async {
+            await _hapticService.toggle();
+            _hapticService.setEnabled(value);
+            setState(() {});
+          },
+        ),
       ],
     );
   }

@@ -7,6 +7,7 @@ import '../../viewmodel/auth_viewmodel.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
 import '../../model/coin_model.dart';
 import '../../viewmodel/settings_viewmodel.dart' show SettingsViewModel;
+import '../../services/haptic_service.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
 import 'alerts_screen.dart';
@@ -34,6 +35,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 선택된 코인 심볼 목록 (대시보드에 표시할 코인)
   List<String> _selectedCoins = [];
+
+  // 햅틱 서비스 인스턴스
+  final HapticService _hapticService = HapticService();
 
   @override
   void initState() {
@@ -74,7 +78,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // 바텀 네비게이션 아이템 선택 처리
-  void _onItemTapped(int index) {
+  void _onItemTapped(int index) async {
+    // 햅틱 피드백 실행
+    await _hapticService.navigationTap();
+
     setState(() {
       _selectedIndex = index;
     });

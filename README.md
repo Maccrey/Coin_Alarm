@@ -51,6 +51,7 @@
 #### ⚙️ 개인화 설정
 
 - **테마 설정**: 라이트/다크/시스템 설정 테마 지원
+- **햅틱 피드백**: 네이티브 수준의 진동 피드백 시스템
 - **새로고침 간격**: 1초~5분 자유 설정
 - **API 키 관리**: Upbit, Binance API 키 개별 설정
 - **알림 설정**: 푸시 알림 및 진동 설정
@@ -78,6 +79,7 @@ lib/
 │   ├── chart_cache_service.dart # 차트 캐시 서비스
 │   ├── notification_service.dart # 알림 서비스
 │   ├── price_alert_service.dart  # 가격 알림 서비스
+│   ├── haptic_service.dart      # 햅틱 피드백 서비스
 │   └── settings_service.dart    # 설정 서비스
 ├── viewmodel/               # MVVM 뷰모델
 │   ├── auth_viewmodel.dart  # 인증 뷰모델
