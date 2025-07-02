@@ -140,9 +140,17 @@ void callbackDispatcher() {
 
     // 코인 가격 fetch 및 알림 체크
     final coinList = await fetchCoinPricesForBackground();
+
+    // inputData에서 userId 가져오기 (없으면 기본값 사용)
+    final userId = inputData != null && inputData.containsKey('userId')
+        ? inputData['userId'] as String
+        : 'local-user';
+
+    debugPrint('[백그라운드] 사용자 ID: $userId');
+
     final triggeredAlerts = await PriceAlertService().checkAndUpdateAlerts(
       coinList,
-      'local-user', // 실제 사용자 ID로 대체
+      userId,
     );
 
     debugPrint('[백그라운드] 알림 체크 완료. 트리거된 알림 개수: ${triggeredAlerts.length}');
@@ -337,6 +345,7 @@ void main() async {
         frequency: const Duration(minutes: 15),
         initialDelay: const Duration(seconds: 10),
         constraints: Constraints(networkType: NetworkType.connected),
+        inputData: {'userId': 'local-user'}, // 기본 입력 데이터 제공
       );
       debugPrint('Workmanager 초기화 성공');
     } catch (e) {
