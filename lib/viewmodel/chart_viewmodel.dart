@@ -202,15 +202,117 @@ class ChartViewModel extends ChangeNotifier {
   // 코인 선택
   void selectCoin(Coin coin) {
     debugPrint('ChartViewModel: 코인 선택 - ${coin.symbol}');
+
+    // 이미 선택된 코인이면 무시하지 않고 강제로 데이터 로드
+    final bool isSameCoin = _selectedSymbol == coin.symbol;
     _selectedSymbol = coin.symbol;
-    loadChartData();
+
+    // 데이터 로드 시작
+    _isLoading = true;
+    notifyListeners();
+
+    // 캐시 데이터 확인
+    bool hasCache = false;
+
+    // 캐시 데이터 확인 및 표시
+    if (_selectedChartType == ChartType.candlestick) {
+      final cached = _cacheService.getCandleChartData(
+        _selectedSymbol,
+        _selectedTimeframe,
+      );
+      if (cached != null && !cached.isExpired()) {
+        _candleChartData = cached;
+        _updateCandleChartPriceInfo(cached);
+        hasCache = true;
+        debugPrint('ChartViewModel: 캐시된 캔들 차트 데이터 즉시 표시 - $_selectedSymbol');
+      }
+    } else {
+      final cached = _cacheService.getLineChartData(
+        _selectedSymbol,
+        _selectedTimeframe,
+      );
+      if (cached != null && !cached.isExpired()) {
+        _lineChartData = cached;
+        _updateLineChartPriceInfo(cached);
+        hasCache = true;
+        debugPrint('ChartViewModel: 캐시된 라인 차트 데이터 즉시 표시 - $_selectedSymbol');
+      }
+    }
+
+    // 캐시 데이터가 있으면 로딩 상태 해제
+    if (hasCache) {
+      _isLoading = false;
+      notifyListeners();
+    }
+
+    // 데이터 로드 요청 (비동기로 처리)
+    Future.microtask(() => loadChartData());
+
+    // 같은 코인이라도 필요시 새로고침 시도
+    if (isSameCoin) {
+      debugPrint('ChartViewModel: 같은 코인 재선택 - 데이터 새로고침 시도');
+      Future.delayed(const Duration(milliseconds: 100), () {
+        refreshChartData();
+      });
+    }
   }
 
   // 코인 심볼로 선택
   void selectSymbol(String symbol) {
     debugPrint('ChartViewModel: 코인 심볼 선택 - $symbol');
+
+    // 이미 선택된 코인이면 무시하지 않고 강제로 데이터 로드
+    final bool isSameCoin = _selectedSymbol == symbol;
     _selectedSymbol = symbol;
-    loadChartData();
+
+    // 데이터 로드 시작
+    _isLoading = true;
+    notifyListeners();
+
+    // 캐시 데이터 확인
+    bool hasCache = false;
+
+    // 캐시 데이터 확인 및 표시
+    if (_selectedChartType == ChartType.candlestick) {
+      final cached = _cacheService.getCandleChartData(
+        _selectedSymbol,
+        _selectedTimeframe,
+      );
+      if (cached != null && !cached.isExpired()) {
+        _candleChartData = cached;
+        _updateCandleChartPriceInfo(cached);
+        hasCache = true;
+        debugPrint('ChartViewModel: 캐시된 캔들 차트 데이터 즉시 표시 - $_selectedSymbol');
+      }
+    } else {
+      final cached = _cacheService.getLineChartData(
+        _selectedSymbol,
+        _selectedTimeframe,
+      );
+      if (cached != null && !cached.isExpired()) {
+        _lineChartData = cached;
+        _updateLineChartPriceInfo(cached);
+        hasCache = true;
+        debugPrint('ChartViewModel: 캐시된 라인 차트 데이터 즉시 표시 - $_selectedSymbol');
+      }
+    }
+
+    // 캐시 데이터가 있으면 로딩 상태 해제
+    if (hasCache) {
+      _isLoading = false;
+      notifyListeners();
+    }
+
+    // 데이터 로드 요청 (비동기로 처리)
+    Future.microtask(() => loadChartData());
+
+    // 같은 코인이라도 필요시 새로고침 시도
+    if (isSameCoin) {
+      debugPrint('ChartViewModel: 같은 코인 재선택 - 데이터 새로고침 시도');
+      Future.delayed(const Duration(milliseconds: 100), () {
+        refreshChartData();
+      });
+    }
   }
 
   // 차트 타입 선택
@@ -246,9 +348,11 @@ class ChartViewModel extends ChangeNotifier {
       );
       if (cached != null && !cached.isExpired()) {
         _candleChartData = cached;
-        _isLoading = false;
         hasCache = true;
+        // 캐시 데이터가 있으면 즉시 로딩 상태 해제 및 UI 업데이트
+        _isLoading = false;
         notifyListeners();
+        debugPrint('ChartViewModel: 캐시된 캔들 차트 데이터 표시 - $_selectedSymbol');
       }
     } else {
       final cached = _cacheService.getLineChartData(
@@ -257,22 +361,29 @@ class ChartViewModel extends ChangeNotifier {
       );
       if (cached != null && !cached.isExpired()) {
         _lineChartData = cached;
-        _isLoading = false;
         hasCache = true;
+        // 캐시 데이터가 있으면 즉시 로딩 상태 해제 및 UI 업데이트
+        _isLoading = false;
         notifyListeners();
+        debugPrint('ChartViewModel: 캐시된 라인 차트 데이터 표시 - $_selectedSymbol');
       }
     }
 
-    // 2. 네트워크로 최신 데이터 요청 (백그라운드)
-    _isLoading = true;
-    notifyListeners();
+    // 캐시 데이터가 없는 경우에만 로딩 상태 설정
+    if (!hasCache) {
+      _isLoading = true;
+      notifyListeners();
+      debugPrint('ChartViewModel: 캐시 데이터 없음, 로딩 상태 설정 - $_selectedSymbol');
+    }
 
+    // 2. 네트워크로 최신 데이터 요청
     try {
       debugPrint(
         'ChartViewModel: 차트 데이터 네트워크 로드 시작 - $_selectedSymbol (${_selectedTimeframe.name})',
       );
       CandleChartData? newCandleData;
       ChartData? newLineData;
+
       if (_selectedChartType == ChartType.candlestick) {
         newCandleData = await _apiService!.getCandleData(
           _selectedSymbol,
@@ -281,6 +392,7 @@ class ChartViewModel extends ChangeNotifier {
         if (newCandleData != null) {
           _candleChartData = newCandleData;
           _updateCandleChartPriceInfo(newCandleData);
+          debugPrint('ChartViewModel: 새 캔들 차트 데이터 로드 완료 - $_selectedSymbol');
         }
       } else {
         newLineData = await _apiService!.getLineData(
@@ -290,12 +402,19 @@ class ChartViewModel extends ChangeNotifier {
         if (newLineData != null) {
           _lineChartData = newLineData;
           _updateLineChartPriceInfo(newLineData);
+          debugPrint('ChartViewModel: 새 라인 차트 데이터 로드 완료 - $_selectedSymbol');
         }
       }
+
+      // 데이터 로드 완료 후 로딩 상태 해제
+      _isLoading = false;
+      _error = null;
+      notifyListeners();
     } catch (e) {
       _error = '데이터 로드 오류: $e';
       debugPrint('ChartViewModel: 데이터 로드 오류 - $e');
-    } finally {
+
+      // 오류 발생 시에도 로딩 상태 해제 (캐시 데이터라도 표시)
       _isLoading = false;
       notifyListeners();
     }
@@ -347,6 +466,7 @@ class ChartViewModel extends ChangeNotifier {
 
   /// 차트 데이터 새로고침
   Future<void> refreshChartData() async {
+    // 이미 로딩 중인 경우 중복 요청 방지
     if (_isLoading) {
       debugPrint('ChartViewModel: 이미 로딩 중이므로 새로고침 무시');
       return;
@@ -370,6 +490,37 @@ class ChartViewModel extends ChangeNotifier {
 
       if (apiService == null) {
         throw Exception('사용 가능한 차트 API 서비스가 없습니다.');
+      }
+
+      // 캐시 데이터 확인 (로딩 중에도 표시할 수 있도록)
+      bool hasCache = false;
+      if (_selectedChartType == ChartType.candlestick) {
+        final cached = _cacheService.getCandleChartData(
+          _selectedSymbol,
+          _selectedTimeframe,
+        );
+        if (cached != null) {
+          _candleChartData = cached;
+          _updateCandleChartPriceInfo(cached);
+          hasCache = true;
+          debugPrint('ChartViewModel: 새로고침 중 캐시된 캔들 차트 데이터 표시');
+        }
+      } else {
+        final cached = _cacheService.getLineChartData(
+          _selectedSymbol,
+          _selectedTimeframe,
+        );
+        if (cached != null) {
+          _lineChartData = cached;
+          _updateLineChartPriceInfo(cached);
+          hasCache = true;
+          debugPrint('ChartViewModel: 새로고침 중 캐시된 라인 차트 데이터 표시');
+        }
+      }
+
+      // 캐시 데이터가 있으면 UI 업데이트
+      if (hasCache) {
+        notifyListeners();
       }
 
       // 캐시 삭제 후 데이터 다시 로드

@@ -77,6 +77,10 @@ class _ChartScreenState extends State<ChartScreen> {
     // 차트 초기화
     _initChart();
 
+    // 임시 차트 데이터 미리 생성 (로딩 중 표시용)
+    _initChartData(); // 라인 차트용 임시 데이터
+    _initCandleDataList(); // 캔들스틱 차트용 임시 데이터
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // 설정된 새로고침 간격으로 타이머 설정
       _setupRefreshTimer();
@@ -96,6 +100,14 @@ class _ChartScreenState extends State<ChartScreen> {
         } else {
           _selectedCoin = null;
         }
+      } else {
+        // 외부에서 코인이 전달된 경우
+        _selectedCoin = widget.selectedCoin;
+      }
+
+      // 선택된 코인이 있으면 차트 뷰모델에 설정
+      if (_selectedCoin != null) {
+        _updateSelectedCoin(_selectedCoin!);
       }
     });
   }
@@ -257,18 +269,51 @@ class _ChartScreenState extends State<ChartScreen> {
     super.didUpdateWidget(oldWidget);
     // 위젯이 업데이트되면서 선택된 코인이 변경되었는지 확인
     if (widget.selectedCoin != null &&
-        widget.selectedCoin != oldWidget.selectedCoin) {
+        (oldWidget.selectedCoin == null ||
+            widget.selectedCoin!.symbol != oldWidget.selectedCoin!.symbol)) {
       _updateSelectedCoin(widget.selectedCoin!);
+
+      // 코인이 변경되면 차트 데이터도 즉시 새로고침
+      // 안전하게 다음 프레임에서 실행
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final chartViewModel = Provider.of<ChartViewModel>(
+            context,
+            listen: false,
+          );
+          chartViewModel.refreshChartData();
+        }
+      });
     }
   }
 
-  // 코인 변경 시 차트 업데이트
+  // 선택된 코인 업데이트 및 차트 데이터 로드
   void _updateSelectedCoin(Coin coin) {
+    if (!mounted) return;
+
     setState(() {
       _selectedCoin = coin;
-      _initChartData();
-      _initCandleDataList();
-      _zoomLevel = 1.0;
+    });
+
+    // 차트 뷰모델에 코인 설정 및 데이터 로드 요청
+    // 안전하게 다음 프레임에서 실행
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final chartViewModel = Provider.of<ChartViewModel>(
+          context,
+          listen: false,
+        );
+
+        // 차트 데이터 로드 요청
+        chartViewModel.selectCoin(coin);
+
+        // 필요시 강제 새로고침 (약간의 지연 추가)
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            chartViewModel.refreshChartData();
+          }
+        });
+      }
     });
   }
 
@@ -324,8 +369,14 @@ class _ChartScreenState extends State<ChartScreen> {
     // 코인이 전달된 경우 해당 코인으로 차트 데이터 로드
     if (widget.selectedCoin != null &&
         widget.selectedCoin!.symbol != chartViewModel.selectedSymbol) {
+      // 빌드 중에 직접 호출하지 않고 다음 프레임에서 실행
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        chartViewModel.selectCoin(widget.selectedCoin!);
+        if (mounted) {
+          // 즉시 로드하기 위해 차트 뷰모델 업데이트
+          chartViewModel.selectCoin(widget.selectedCoin!);
+          // 필요시 강제 새로고침
+          Future.microtask(() => chartViewModel.refreshChartData());
+        }
       });
     }
 
@@ -386,26 +437,86 @@ class _ChartScreenState extends State<ChartScreen> {
       );
     }
 
-    // 2. 로딩 중이고 캐시 데이터도 없으면 안내 멘트 + 인디케이터
+    // 2. 로딩 중이고 캐시 데이터도 없으면 기본 차트 데이터 표시 (빈 화면 대신)
     if (chartViewModel.isLoading && !isChartReady) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              '차트 데이터를 업데이트 중입니다...',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      // 기본 차트 데이터가 없으면 임시 데이터 생성
+      // 이미 initState에서 생성했으므로 여기서는 확인만 함
+      bool hasLocalData = !_chartData.isEmpty && !_candleDataList.isEmpty;
+
+      // 기본 차트 데이터로 차트 표시
+      return Stack(
+        children: [
+          // 기본 차트 영역
+          Scaffold(
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
+              title: Text('${_selectedCoin?.symbol ?? 'BTC'} 차트'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () {
+                    // 안전하게 다음 프레임에서 실행
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        chartViewModel.refreshChartData();
+                      }
+                    });
+                  },
+                ),
+              ],
             ),
-            SizedBox(height: 8),
-            Text(
-              '네트워크 상태에 따라 시간이 소요될 수 있습니다.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+            body: Column(
+              children: [
+                // 차트 상단 정보 영역
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_selectedCoin?.name ?? '비트코인'} (${_selectedCoin?.symbol ?? 'BTC'})',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '현재가: ${NumberFormat.currency(symbol: '₩', decimalDigits: 0).format(_selectedCoin?.currentPrice ?? 0)}',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 임시 차트 영역
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text(
+                          '차트 데이터를 업데이트 중입니다...',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          '네트워크 상태에 따라 시간이 소요될 수 있습니다.',
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 

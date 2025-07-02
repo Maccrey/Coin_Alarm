@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../viewmodel/auth_viewmodel.dart';
+import '../../viewmodel/settings_viewmodel.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import 'biometric_login_screen.dart';
 
 // 스플래시 화면
 class SplashScreen extends StatefulWidget {
@@ -95,6 +97,12 @@ class _SplashScreenState extends State<SplashScreen>
       final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
       debugPrint('SplashScreen: AuthViewModel 가져오기 성공');
 
+      // 설정 정보 가져오기
+      final settingsViewModel = Provider.of<SettingsViewModel>(
+        context,
+        listen: false,
+      );
+
       // AuthViewModel이 초기화될 때까지 기다림 (최대 5초)
       if (!authViewModel.isInitialized) {
         debugPrint('SplashScreen: AuthViewModel 초기화 대기 시작');
@@ -152,21 +160,36 @@ class _SplashScreenState extends State<SplashScreen>
       // 타임아웃 타이머 취소
       timeoutTimer.cancel();
 
-      debugPrint(
-        'SplashScreen: 화면 전환 시도 - ${isLoggedIn ? "홈 화면" : "로그인 화면"}으로 이동',
-      );
       if (isLoggedIn) {
+        // 로그인된 상태면 홈 화면으로 이동
         debugPrint('SplashScreen: 홈 화면으로 이동 시작');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
         debugPrint('SplashScreen: 홈 화면으로 이동 완료');
       } else {
-        debugPrint('SplashScreen: 로그인 화면으로 이동 시작');
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-        );
-        debugPrint('SplashScreen: 로그인 화면으로 이동 완료');
+        // 로그인되지 않은 상태
+        // 생체인증 설정 확인
+        final useBiometrics = settingsViewModel.useBiometrics;
+        final hasSavedLoginInfo =
+            settingsViewModel.getSavedEmail() != null &&
+            settingsViewModel.getSavedPassword() != null;
+
+        if (useBiometrics && hasSavedLoginInfo) {
+          // 생체인증 설정이 활성화되어 있고 저장된 로그인 정보가 있으면 생체인증 로그인 화면으로 이동
+          debugPrint('SplashScreen: 생체인증 로그인 화면으로 이동 시작');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const BiometricLoginScreen()),
+          );
+          debugPrint('SplashScreen: 생체인증 로그인 화면으로 이동 완료');
+        } else {
+          // 그렇지 않으면 일반 로그인 화면으로 이동
+          debugPrint('SplashScreen: 로그인 화면으로 이동 시작');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+          debugPrint('SplashScreen: 로그인 화면으로 이동 완료');
+        }
       }
     } catch (e) {
       // 타임아웃 타이머 취소

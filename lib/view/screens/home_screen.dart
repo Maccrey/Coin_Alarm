@@ -12,6 +12,7 @@ import 'settings_screen.dart';
 import 'alerts_screen.dart';
 import 'news_screen.dart';
 import 'chart_screen.dart';
+import 'biometric_login_screen.dart';
 
 // 홈 화면
 class HomeScreen extends StatefulWidget {
@@ -83,12 +84,30 @@ class _HomeScreenState extends State<HomeScreen> {
   // 로그아웃
   Future<void> _logout() async {
     final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+    final settingsViewModel = Provider.of<SettingsViewModel>(
+      context,
+      listen: false,
+    );
+
     final success = await authViewModel.signOut();
 
     if (success && mounted) {
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
+      // 생체인증 설정이 활성화되어 있고 로그인 정보가 저장되어 있으면 생체인증 화면으로 이동
+      final useBiometrics = settingsViewModel.useBiometrics;
+      final saveLoginInfo = settingsViewModel.saveLoginInfo;
+      final hasSavedLoginInfo =
+          settingsViewModel.getSavedEmail() != null &&
+          settingsViewModel.getSavedPassword() != null;
+
+      if (useBiometrics && hasSavedLoginInfo && saveLoginInfo) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const BiometricLoginScreen()),
+        );
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      }
     }
   }
 

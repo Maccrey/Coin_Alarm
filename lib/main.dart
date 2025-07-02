@@ -41,9 +41,9 @@ import 'services/notification_service.dart';
 import 'firebase_options.dart';
 import 'view/screens/news_detail_screen.dart';
 
-// 알림 액션 처리를 위한 전역 메서드
+// 알림 액션 처리를 위한 전역 메서드 (백그라운드에서도 작동)
 @pragma('vm:entry-point')
-Future<void> onNotificationAction(ReceivedAction receivedAction) async {
+Future<void> onActionReceivedMethod(ReceivedAction receivedAction) async {
   // 알림 탭 처리 로직
   debugPrint('알림 탭: ${receivedAction.payload}');
 
@@ -416,7 +416,7 @@ class _MyAppState extends State<MyApp> {
 
     // 알림 리스너 설정
     NotificationService().setListeners(
-      onActionReceivedMethod: onNotificationAction,
+      onActionReceivedMethod: onActionReceivedMethod,
     );
   }
 

@@ -359,8 +359,14 @@ class SettingsViewModel extends ChangeNotifier {
   }
 
   // 로그인 정보 관련 public 메서드 (Hive 연동)
-  String? getSavedEmail() => _settingsService.getSavedEmail();
-  String? getSavedPassword() => _settingsService.getSavedPassword();
+  String? getSavedEmail() {
+    return _settingsService.getSavedEmail();
+  }
+
+  String? getSavedPassword() {
+    return _settingsService.getSavedPassword();
+  }
+
   Future<void> setSavedEmail(String email) =>
       _settingsService.setSavedEmail(email);
   Future<void> setSavedPassword(String password) =>

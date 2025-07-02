@@ -145,7 +145,7 @@ class NotificationService {
 
     // 알림 탭 이벤트 리스너
     await AwesomeNotifications().setListeners(
-      onActionReceivedMethod: (receivedAction) async {
+      onActionReceivedMethod: (ReceivedAction receivedAction) async {
         onActionReceivedMethod(receivedAction);
       },
     );

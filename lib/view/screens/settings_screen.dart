@@ -9,6 +9,7 @@ import '../../viewmodel/crypto_viewmodel.dart';
 import 'login_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
+import 'biometric_login_screen.dart';
 
 // 설정 화면
 class SettingsScreen extends StatefulWidget {
@@ -47,8 +48,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context,
       listen: false,
     );
-    if (!settingsViewModel.saveLoginInfo) {
-      // ViewModel의 메서드에는 이미 로그인 정보 삭제 로직이 포함되어 있음
+
+    // 로그인 정보 저장 설정 확인 (생체인증 관련)
+    final saveLoginInfo = settingsViewModel.saveLoginInfo;
+    final useBiometrics = settingsViewModel.useBiometrics;
+
+    if (!saveLoginInfo) {
+      // 로그인 정보 저장이 해제된 경우 저장된 정보 삭제
+      await settingsViewModel.clearLoginInfo();
     }
 
     // 로그아웃 처리
@@ -56,10 +63,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final success = await authViewModel.signOut();
 
     if (success && mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
+      // 로그아웃 후 로그인 화면으로 이동
+      // 생체인증 설정이 활성화되어 있고 로그인 정보가 저장되어 있으면 생체인증 화면으로 이동
+      final hasSavedLoginInfo =
+          settingsViewModel.getSavedEmail() != null &&
+          settingsViewModel.getSavedPassword() != null;
+
+      if (useBiometrics && hasSavedLoginInfo && saveLoginInfo) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const BiometricLoginScreen()),
+          (route) => false,
+        );
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      }
     }
   }
 
