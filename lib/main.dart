@@ -398,11 +398,20 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
 
-    // 알림 권한 확인 및 요청
-    AwesomeNotifications().isNotificationAllowed().then((isAllowed) {
-      if (!isAllowed) {
+    // 웹 환경이 아닌 경우에만 알림 설정
+    if (!kIsWeb) {
+      _setupNotifications();
+    }
+  }
+
+  /// 알림 설정 메서드
+  Future<void> _setupNotifications() async {
+    try {
+      // 알림 권한 확인 및 요청
+      final isAllowed = await AwesomeNotifications().isNotificationAllowed();
+      if (!isAllowed && mounted) {
         // 알림 권한 요청
-        NotificationService.requestUserPermissions(
+        await NotificationService.requestUserPermissions(
           context,
           permissionList: [
             NotificationPermission.Alert,
@@ -416,12 +425,16 @@ class _MyAppState extends State<MyApp> {
           ],
         );
       }
-    });
 
-    // 알림 리스너 설정
-    NotificationService().setListeners(
-      onActionReceivedMethod: onActionReceivedMethod,
-    );
+      // 알림 리스너 설정
+      await NotificationService().setListeners(
+        onActionReceivedMethod: onActionReceivedMethod,
+      );
+
+      debugPrint('알림 리스너 설정 완료');
+    } catch (e) {
+      debugPrint('알림 설정 중 오류 발생: $e');
+    }
   }
 
   @override

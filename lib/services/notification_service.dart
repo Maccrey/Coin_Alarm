@@ -139,15 +139,13 @@ class NotificationService {
 
   /// 알림 탭 이벤트 리스너 설정
   Future<void> setListeners({
-    required Function(ReceivedAction) onActionReceivedMethod,
+    required Future<void> Function(ReceivedAction) onActionReceivedMethod,
   }) async {
     if (kIsWeb) return;
 
     // 알림 탭 이벤트 리스너
-    await AwesomeNotifications().setListeners(
-      onActionReceivedMethod: (ReceivedAction receivedAction) async {
-        onActionReceivedMethod(receivedAction);
-      },
+    AwesomeNotifications().setListeners(
+      onActionReceivedMethod: onActionReceivedMethod,
     );
   }
 
