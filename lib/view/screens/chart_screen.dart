@@ -1215,7 +1215,7 @@ class _ChartScreenState extends State<ChartScreen> {
     final label = chartType == ChartType.candlestick ? '캔들' : '라인';
 
     return SizedBox(
-      width: 100, // 명시적인 너비 설정
+      width: 80, // 명시적인 너비 설정
       height: 40, // 명시적인 높이 설정
       child: ElevatedButton.icon(
         onPressed: () {
@@ -1223,7 +1223,7 @@ class _ChartScreenState extends State<ChartScreen> {
             chartViewModel.selectChartType(chartType);
           }
         },
-        icon: Icon(icon, size: 18),
+        icon: Icon(icon, size: 14),
         label: Text(label),
         style: ElevatedButton.styleFrom(
           backgroundColor: isSelected
@@ -1233,7 +1233,7 @@ class _ChartScreenState extends State<ChartScreen> {
               ? Theme.of(context).colorScheme.onPrimary
               : Theme.of(context).colorScheme.onSurface,
           elevation: isSelected ? 2 : 0,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
