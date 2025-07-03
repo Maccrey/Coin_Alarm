@@ -90,110 +90,132 @@ Future<List<Coin>> fetchCoinPricesForBackground() async {
   }
 }
 
+// 백그라운드 작업 상수 정의
+const String backgroundTaskId = 'checkPriceAlertsTaskId';
+const String backgroundTaskName = 'checkPriceAlertsTask';
+const String defaultUserId = 'local-user';
+
 // Workmanager 백그라운드 태스크 콜백
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    debugPrint('[백그라운드] Workmanager 태스크 실행됨: $task');
-
-    // Firebase 초기화
     try {
-      // 백그라운드 전용 Firebase 앱 이름 지정
-      const appName = 'coin_alarm_background';
+      debugPrint('[백그라운드] Workmanager 태스크 실행됨: $task');
 
-      // 이미 해당 이름의 앱이 초기화되었는지 확인
-      FirebaseApp app;
-      try {
-        app = Firebase.app(appName);
-        debugPrint('[백그라운드] 기존 Firebase 앱($appName) 사용');
-      } catch (e) {
-        // 해당 이름의 앱이 없으면 새로 초기화 시도
+      // 기본 초기화
+      WidgetsFlutterBinding.ensureInitialized();
+      debugPrint('[백그라운드] Flutter 엔진 초기화 완료');
+
+      // Hive 초기화 및 알림 처리 준비
+      await Hive.initFlutter();
+
+      // Hive 어댑터 등록 (이미 등록되어 있지 않은 경우)
+      if (!Hive.isAdapterRegistered(10)) {
+        Hive.registerAdapter(PriceAlertAdapter());
+        debugPrint('[백그라운드] Hive 어댑터 등록 완료');
+      }
+
+      await PriceAlertService().initialize();
+      debugPrint('[백그라운드] PriceAlertService 초기화 완료');
+
+      // 알림 서비스 초기화
+      NotificationService notificationService = NotificationService();
+      await notificationService.initialize();
+      debugPrint('[백그라운드] NotificationService 초기화 완료');
+
+      // 코인 가격 fetch
+      final coinList = await fetchCoinPricesForBackground();
+      if (coinList.isEmpty) {
+        debugPrint('[백그라운드] 코인 데이터를 가져오지 못했습니다.');
+        return Future.value(true); // 작업 성공으로 처리하여 재시도 방지
+      }
+
+      // inputData에서 userId 가져오기 (없으면 기본값 사용)
+      // inputData가 null이거나 필요한 키가 없는 경우 안전하게 처리
+      String userId = defaultUserId;
+      if (inputData != null) {
         try {
-          app = await Firebase.initializeApp(
-            name: appName,
-            options: DefaultFirebaseOptions.currentPlatform,
-          );
-          debugPrint('[백그라운드] 새 Firebase 앱($appName) 초기화 성공');
-        } catch (e) {
-          if (e.toString().contains('duplicate-app')) {
-            // 중복 앱 오류인 경우 기존 앱 사용
-            app = Firebase.app(appName);
-            debugPrint('[백그라운드] 중복 앱 오류 해결: 기존 Firebase 앱($appName) 사용');
-          } else {
-            debugPrint('[백그라운드] Firebase 초기화 실패: $e');
+          if (inputData.containsKey('userId')) {
+            final userIdValue = inputData['userId'];
+            if (userIdValue is String) {
+              userId = userIdValue;
+            }
           }
+        } catch (e) {
+          debugPrint('[백그라운드] inputData 처리 중 오류: $e');
+          // 오류가 발생해도 기본값 사용하여 계속 진행
         }
       }
-    } catch (e) {
-      debugPrint('[백그라운드] Firebase 초기화 오류: $e');
-    }
 
-    // Hive 초기화 및 알림 처리는 계속 진행
-    await Hive.initFlutter();
-    await PriceAlertService().initialize();
-    debugPrint('[백그라운드] PriceAlertService 초기화 완료');
+      debugPrint('[백그라운드] 사용자 ID: $userId');
 
-    // 알림 서비스 초기화
-    final notificationService = NotificationService();
-    await notificationService.initialize();
-    debugPrint('[백그라운드] NotificationService 초기화 완료');
+      // 알림 체크
+      final triggeredAlerts = await PriceAlertService().checkAndUpdateAlerts(
+        coinList,
+        userId,
+      );
 
-    // 코인 가격 fetch 및 알림 체크
-    final coinList = await fetchCoinPricesForBackground();
+      debugPrint('[백그라운드] 알림 체크 완료. 트리거된 알림 개수: ${triggeredAlerts.length}');
 
-    // inputData에서 userId 가져오기 (없으면 기본값 사용)
-    final userId = inputData != null && inputData.containsKey('userId')
-        ? inputData['userId'] as String
-        : 'local-user';
+      // 트리거된 알림이 있으면 사용자에게 알림 표시
+      if (triggeredAlerts.isNotEmpty) {
+        for (int i = 0; i < triggeredAlerts.length; i++) {
+          final alert = triggeredAlerts[i];
+          final coin = coinList.firstWhere(
+            (c) => c.id == alert.coinId,
+            orElse: () => Coin(
+              id: '',
+              symbol: alert.coinSymbol,
+              name: alert.coinSymbol,
+              currentPrice: 0,
+              priceChangePercentage24h: 0,
+              lastUpdated: DateTime.now(),
+            ),
+          );
 
-    debugPrint('[백그라운드] 사용자 ID: $userId');
+          // 알림 발생 시간 포맷팅
+          final now = alert.triggeredAt ?? DateTime.now();
+          final timeStr =
+              '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+          final dateStr = '${now.year}-${now.month}-${now.day}';
 
-    final triggeredAlerts = await PriceAlertService().checkAndUpdateAlerts(
-      coinList,
-      userId,
-    );
+          // 알림 제목 및 내용 구성
+          final title = '${alert.coinSymbol} 가격 알림';
+          final body =
+              '코인 : ${alert.coinSymbol}\n시간 : ${dateStr.replaceAll('-', '')} ${timeStr}\n내용 : ${alert.priceTarget}원에 도달했습니다.\n      ${alert.notes ?? ''}';
 
-    debugPrint('[백그라운드] 알림 체크 완료. 트리거된 알림 개수: ${triggeredAlerts.length}');
-
-    // 트리거된 알림이 있으면 사용자에게 알림 표시
-    if (triggeredAlerts.isNotEmpty) {
-      for (int i = 0; i < triggeredAlerts.length; i++) {
-        final alert = triggeredAlerts[i];
-        final coin = coinList.firstWhere(
-          (c) => c.id == alert.coinId,
-          orElse: () => Coin(
-            id: '',
-            symbol: alert.coinSymbol,
-            name: alert.coinSymbol,
-            currentPrice: 0,
-            priceChangePercentage24h: 0,
-            lastUpdated: DateTime.now(),
-          ),
-        );
-
-        // 알림 발생 시간 포맷팅
-        final now = alert.triggeredAt ?? DateTime.now();
-        final timeStr = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
-        final dateStr = '${now.year}-${now.month}-${now.day}';
-
-        // 알림 제목 및 내용 구성
-        final title = '${alert.coinSymbol} 가격 알림';
-        final body =
-            '코인 : ${alert.coinSymbol}\n시간 : ${dateStr.replaceAll('-', '')} ${timeStr}\n내용 : ${alert.priceTarget}원에 도달했습니다.\n      ${alert.notes ?? ''}';
-
-        // 알림 표시
-        await notificationService.showNotification(
-          id: 1000 + i, // 고유한 알림 ID 생성
-          title: title,
-          body: body,
-          payload: json.encode(alert.toJson()),
-        );
-
-        debugPrint('[백그라운드] 알림 표시: $title - $body');
+          try {
+            // 알림 표시 - 직접 AwesomeNotifications API 사용
+            await AwesomeNotifications().createNotification(
+              content: NotificationContent(
+                id: 1000 + i, // 고유한 알림 ID 생성
+                channelKey: NotificationService.mainChannelKey,
+                title: title,
+                body: body,
+                payload: {'data': json.encode(alert.toJson())},
+                notificationLayout: NotificationLayout.Default,
+                category: NotificationCategory.Alarm,
+              ),
+            );
+            debugPrint('[백그라운드] 알림 표시 성공: $title');
+          } catch (e) {
+            debugPrint('[백그라운드] 알림 표시 오류: $e');
+          }
+        }
+      } else {
+        // 트리거된 알림이 없는 경우 디버깅 메시지만 출력
+        debugPrint('[백그라운드] 트리거된 알림이 없습니다.');
       }
-    }
 
-    return Future.value(true);
+      return Future.value(true);
+    } catch (e, stackTrace) {
+      // 백그라운드 작업 중 오류가 발생해도 사용자에게 오류 알림을 표시하지 않음
+      debugPrint('[백그라운드] 작업 처리 중 오류 발생: $e');
+      debugPrint('[백그라운드] 스택 트레이스: $stackTrace');
+
+      // 작업을 성공으로 반환하여 Workmanager가 재시도하지 않도록 함
+      return Future.value(true);
+    }
   });
 }
 
@@ -337,16 +359,26 @@ void main() async {
   // Workmanager 초기화 (백그라운드 태스크 등록) - 모바일 플랫폼에서만 실행
   if (!kIsWeb) {
     try {
-      await Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
+      await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+
+      // 백그라운드 작업 등록 - 문자열 형태의 inputData만 사용
+      final Map<String, String> inputData = {'userId': defaultUserId};
+
       // 15분마다 반복 태스크 등록
-      Workmanager().registerPeriodicTask(
-        'checkPriceAlertsTaskId',
-        'checkPriceAlertsTask',
+      await Workmanager().registerPeriodicTask(
+        backgroundTaskId,
+        backgroundTaskName,
         frequency: const Duration(minutes: 15),
         initialDelay: const Duration(seconds: 10),
-        constraints: Constraints(networkType: NetworkType.connected),
-        inputData: {'userId': 'local-user'}, // 기본 입력 데이터 제공
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+          requiresBatteryNotLow: false,
+        ),
+        existingWorkPolicy: ExistingWorkPolicy.replace,
+        backoffPolicy: BackoffPolicy.linear,
+        inputData: inputData,
       );
+
       debugPrint('Workmanager 초기화 성공');
     } catch (e) {
       debugPrint('Workmanager 초기화 실패: $e');
