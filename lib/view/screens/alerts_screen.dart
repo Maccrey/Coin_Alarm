@@ -5,6 +5,9 @@ import '../../model/price_alert_model.dart';
 import '../../model/coin_model.dart';
 import '../../viewmodel/price_alert_viewmodel.dart';
 import '../../viewmodel/crypto_viewmodel.dart';
+import 'dart:async';
+import 'package:collection/collection.dart';
+import 'package:flutter/services.dart';
 
 // 알림 화면
 class AlertsScreen extends StatefulWidget {
@@ -24,6 +27,11 @@ class _AlertsScreenState extends State<AlertsScreen>
   String? _selectedFilter;
   String _selectedFilterName = '전체';
 
+  Timer? _alertMonitorTimer;
+  final Duration _monitorInterval = const Duration(seconds: 10);
+  final String _userId = 'local-user';
+  final Set<String> _alreadyNotified = <String>{};
+
   @override
   void initState() {
     super.initState();
@@ -36,13 +44,11 @@ class _AlertsScreenState extends State<AlertsScreen>
       );
       final cryptoVM = Provider.of<CryptoViewModel>(context, listen: false);
 
-      // 임시 사용자 ID 사용 (실제로는 인증된 사용자 ID 사용)
-      const userId = 'local-user';
-      priceAlertVM.loadUserAlerts(userId);
-      // 코인 데이터 새로고침 시 알림 트리거 체크도 함께 실행
+      priceAlertVM.loadUserAlerts(_userId);
       cryptoVM.refreshCoins(priceAlertVM: priceAlertVM);
-      // 알림 페이지 로드 시 최신 코인 데이터 로드
       cryptoVM.refresh();
+
+      _startForegroundAlertMonitor();
     });
   }
 
@@ -51,7 +57,56 @@ class _AlertsScreenState extends State<AlertsScreen>
     _tabController.dispose();
     _priceController.dispose();
     _notesController.dispose();
+    _alertMonitorTimer?.cancel();
     super.dispose();
+  }
+
+  void _startForegroundAlertMonitor() {
+    _alertMonitorTimer?.cancel();
+    _alertMonitorTimer = Timer.periodic(_monitorInterval, (_) async {
+      if (!mounted) return;
+      final priceAlertVM = Provider.of<PriceAlertViewModel>(
+        context,
+        listen: false,
+      );
+      final cryptoVM = Provider.of<CryptoViewModel>(context, listen: false);
+      final pendingAlerts = priceAlertVM.alerts
+          .where((a) => !a.isTriggered)
+          .toList();
+      if (pendingAlerts.isEmpty) return;
+      final coins = cryptoVM.coins;
+      for (final alert in pendingAlerts) {
+        final coin = coins.firstWhereOrNull((c) => c.id == alert.coinId);
+        if (coin == null) continue;
+        final bool shouldTrigger = alert.isAbove
+            ? coin.currentPrice >= alert.priceTarget
+            : coin.currentPrice <= alert.priceTarget;
+        if (shouldTrigger && !_alreadyNotified.contains(alert.id)) {
+          // 진동(햅틱) 알림 추가
+          HapticFeedback.mediumImpact();
+          // 스낵바 알림
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '${alert.coinSymbol} 가격 알림!\n실시간: ₩${_formatPrice(coin.currentPrice)}\n설정: ₩${_formatPrice(alert.priceTarget)}',
+                ),
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+          // 상태를 발생됨으로 변경
+          final updatedAlert = alert.copyWith(
+            isTriggered: true,
+            triggeredAt: DateTime.now(),
+            triggeredPrice: coin.currentPrice,
+          );
+          await priceAlertVM.updateAlert(updatedAlert);
+          await priceAlertVM.loadUserAlerts(_userId);
+          _alreadyNotified.add(alert.id);
+        }
+      }
+    });
   }
 
   // 필터 적용

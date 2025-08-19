@@ -153,4 +153,29 @@ class PriceAlertViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  // 가격 알림 업데이트 (외부에서 호출 가능)
+  Future<bool> updateAlert(PriceAlert alert) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final success = await _alertService.updateAlert(alert);
+      if (success) {
+        final index = _alerts.indexWhere((a) => a.id == alert.id);
+        if (index >= 0) {
+          _alerts[index] = alert;
+        }
+        _errorMessage = null;
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      _errorMessage = '가격 알림 업데이트 실패: $e';
+      debugPrint(_errorMessage);
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

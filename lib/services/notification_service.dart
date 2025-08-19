@@ -5,10 +5,16 @@ import 'package:timezone/data/latest_all.dart' as tz;
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
-  factory NotificationService() => _instance;
+  factory NotificationService({AwesomeNotifications? notifications}) {
+    if (notifications != null) {
+      _instance._notifications = notifications;
+    }
+    return _instance;
+  }
   NotificationService._internal();
 
   bool _isInitialized = false;
+  AwesomeNotifications _notifications = AwesomeNotifications();
 
   // 알림 채널 키 상수
   static const String mainChannelKey = 'coin_alarm_channel';
@@ -34,7 +40,7 @@ class NotificationService {
 
     try {
       // 알림 채널 설정
-      final result = await AwesomeNotifications().initialize(
+      final result = await _notifications.initialize(
         null, // 앱 아이콘 (null이면 앱 아이콘 사용)
         [
           NotificationChannel(
@@ -117,8 +123,7 @@ class NotificationService {
     if (kIsWeb) return false;
 
     try {
-      return await AwesomeNotifications()
-          .requestPermissionToSendNotifications();
+      return await _notifications.requestPermissionToSendNotifications();
     } catch (e) {
       debugPrint('알림 권한 요청 오류: $e');
       return false;
@@ -136,9 +141,8 @@ class NotificationService {
       debugPrint('웹 환경에서는 알림을 표시할 수 없습니다.');
       return false;
     }
-
     try {
-      return await AwesomeNotifications().createNotification(
+      return await _notifications.createNotification(
         content: NotificationContent(
           id: id,
           channelKey: mainChannelKey,
@@ -167,9 +171,8 @@ class NotificationService {
       debugPrint('웹 환경에서는 알림을 예약할 수 없습니다.');
       return false;
     }
-
     try {
-      return await AwesomeNotifications().createNotification(
+      return await _notifications.createNotification(
         content: NotificationContent(
           id: id,
           channelKey: scheduleChannelKey,
@@ -198,7 +201,7 @@ class NotificationService {
     }
 
     try {
-      return await AwesomeNotifications().createNotification(
+      return await _notifications.createNotification(
         content: NotificationContent(
           id: id,
           channelKey: debugChannelKey,
@@ -219,7 +222,7 @@ class NotificationService {
     if (kIsWeb) return;
 
     try {
-      await AwesomeNotifications().cancelAll();
+      await _notifications.cancelAll();
     } catch (e) {
       debugPrint('모든 알림 취소 오류: $e');
     }
@@ -230,7 +233,7 @@ class NotificationService {
     if (kIsWeb) return;
 
     try {
-      await AwesomeNotifications().cancel(id);
+      await _notifications.cancel(id);
     } catch (e) {
       debugPrint('알림 취소 오류: $e');
     }
@@ -244,7 +247,7 @@ class NotificationService {
 
     try {
       // 알림 탭 이벤트 리스너
-      AwesomeNotifications().setListeners(
+      _notifications.setListeners(
         onActionReceivedMethod: onActionReceivedMethod,
       );
       debugPrint('알림 리스너 설정 완료');
@@ -259,7 +262,7 @@ class NotificationService {
     if (kIsWeb) return false;
 
     try {
-      return await AwesomeNotifications().isNotificationAllowed();
+      return await _notifications.isNotificationAllowed();
     } catch (e) {
       debugPrint('알림 권한 상태 확인 오류: $e');
       return false;
@@ -273,17 +276,16 @@ class NotificationService {
   }) async {
     if (kIsWeb) return [];
 
+    final notifications = AwesomeNotifications();
     try {
       // 기본 권한 확인
-      if (!await AwesomeNotifications().isNotificationAllowed()) {
-        await AwesomeNotifications().requestPermissionToSendNotifications();
+      if (!await notifications.isNotificationAllowed()) {
+        await notifications.requestPermissionToSendNotifications();
       }
 
       // 요청된 권한 중 이미 허용된 권한 확인
-      List<NotificationPermission> permissionsAllowed =
-          await AwesomeNotifications().checkPermissionList(
-            permissions: permissionList,
-          );
+      List<NotificationPermission> permissionsAllowed = await notifications
+          .checkPermissionList(permissions: permissionList);
 
       // 모든 권한이 허용되었으면 반환
       if (permissionsAllowed.length == permissionList.length) {
@@ -297,19 +299,17 @@ class NotificationService {
           .toList();
 
       // 사용자 개입이 필요한 권한 확인
-      List<NotificationPermission> lockedPermissions =
-          await AwesomeNotifications().shouldShowRationaleToRequest(
-            permissions: permissionsNeeded,
-          );
+      List<NotificationPermission> lockedPermissions = await notifications
+          .shouldShowRationaleToRequest(permissions: permissionsNeeded);
 
       // 사용자 개입이 필요 없으면 바로 요청
       if (lockedPermissions.isEmpty) {
-        await AwesomeNotifications().requestPermissionToSendNotifications(
+        await notifications.requestPermissionToSendNotifications(
           permissions: permissionsNeeded,
         );
 
         // 권한 요청 후 허용된 권한 확인
-        permissionsAllowed = await AwesomeNotifications().checkPermissionList(
+        permissionsAllowed = await notifications.checkPermissionList(
           permissions: permissionsNeeded,
         );
       } else {
@@ -359,14 +359,14 @@ class NotificationService {
               TextButton(
                 onPressed: () async {
                   // 권한 요청
-                  await AwesomeNotifications()
-                      .requestPermissionToSendNotifications(
-                        permissions: lockedPermissions,
-                      );
+                  await notifications.requestPermissionToSendNotifications(
+                    permissions: lockedPermissions,
+                  );
 
                   // 권한 요청 후 허용된 권한 확인
-                  permissionsAllowed = await AwesomeNotifications()
-                      .checkPermissionList(permissions: lockedPermissions);
+                  permissionsAllowed = await notifications.checkPermissionList(
+                    permissions: lockedPermissions,
+                  );
 
                   Navigator.pop(context);
                 },
